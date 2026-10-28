@@ -102,9 +102,19 @@ connected:
   1. `/discord link <discordname>` in Minecraft → the bot sends a code via **Discord DM**.
   2. The code is valid for **1 hour**. Replying `refresh` in the DM issues a new code.
   3. `/discord confirm <code>` in Minecraft completes the link.
+- The Discord account is identified by its **username** (unique, DMs go there).
+- The DM states which Minecraft player requested the link and contains the hint
+  "If this wasn't you, ignore this message".
 - If the DM cannot be delivered, the player gets an error message in Minecraft
   asking them to enable DMs.
-- Admins can link accounts manually via an admin command.
+- An already linked account cannot be linked again without unlinking first.
+- Alternative flow for players kicked by the Discord whitelist: the kick message
+  contains a code, which is entered in Discord via `/link <code>`.
+- **Unlinking** is possible from both sides (`/discord unlink` in Minecraft,
+  `/unlink` in Discord) and removes the link for both accounts.
+- Admins can link accounts manually via an admin command. There is no admin
+  unlink command; admins can edit the JSON file instead.
+- A player who was whitelisted only via role and unlinks is kicked.
 - Links are stored in a simple **JSON file** in the server directory.
 - Uses: show Minecraft names, mention suggestions in the Minecraft chat
   (custom chat completions, possible server-side since 1.19).
@@ -112,13 +122,12 @@ connected:
 ### Discord slash commands
 
 - `/online`, `/status`, `/whois <player>`, `/playtime <player>`
-- Usable by everyone on the Discord server.
+- `/link <code>`, `/unlink` (account linking).
+- Usable by everyone on the Discord server; responses are **public** in the channel.
 - `/whois` for an unlinked player reports that the account is not linked.
 
 ## Open points
 
-- [ ] Account linking: DM spam protection, which Discord name is matched
-- [ ] Linking flow for players kicked by the Discord whitelist (code entered where?)
-- [ ] Unlinking (Minecraft and/or Discord command, admin command)
-- [ ] Slash commands: visibility of responses (public / ephemeral)
+- [ ] `/link <code>` in Discord also without the Discord whitelist?
+- [ ] Config format
 - [ ] Final list of topic placeholders (spec)
