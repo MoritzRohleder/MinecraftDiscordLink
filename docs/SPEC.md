@@ -10,6 +10,8 @@
 ## 1. Configuration
 
 File: `config/mcdiscordchat.toml`. Created with defaults and comments on first start.
+The generated file documents all available placeholders in its comments
+(the references to section 2 below are only used in this spec).
 Can be reloaded at runtime (see section 3).
 
 ```toml
@@ -20,7 +22,7 @@ token = ""
 [discord.status]
 enabled = true
 # Minutes between status updates
-interval_minutes = 1
+interval_minutes = 5
 # Placeholders: see section 2
 format = "{online}/{max} online"
 
@@ -103,6 +105,8 @@ code_validity_minutes = 60
 | `/discord link <discordname>` | everyone | Send link code via DM |
 | `/discord confirm <code>` | everyone | Complete link |
 | `/discord unlink` | everyone | Remove own link |
+| `/discord whois <player>` | everyone | Linked account or "not linked" |
+| `/discord online` | everyone | Discord members who are currently online |
 | `/discord admin link <player> <discordname>` | admin | Link accounts manually |
 | `/discord reload` | admin | Reload config |
 
