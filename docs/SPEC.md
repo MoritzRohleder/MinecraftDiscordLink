@@ -40,6 +40,8 @@ webhook = "auto"
 minecraft_format = "[Discord] {name}: {message}"
 # Name of linked users in Minecraft. Placeholders: {mc}, {discord}
 linked_name_format = "{mc} ({discord})"
+# Player head used as webhook avatar. Placeholders: {uuid}, {name}
+avatar_url = "https://vzge.me/face/256/{uuid}"
 # Minecraft -> Discord without webhook. Placeholders: {player}, {message}
 discord_format = "**{player}**: {message}"
 
@@ -136,7 +138,7 @@ Administrator = Discord role with the *Administrator* permission. Enforced by
 Discord itself on `/mcadmin` (`default_member_permissions`); server admins can adjust it in
 the server's integration settings.
 
-## 4. Messages (*proposal*)
+## 4. Messages
 
 ### Minecraft → Discord (chat channel)
 
@@ -153,10 +155,15 @@ configurable.
 | Server start | `:white_check_mark: Server started` | green |
 | Server stop | `:octagonal_sign: Server stopped` | red |
 
-Without a webhook (`webhook = ""`) the bot sends the same embeds itself.
+Server start/stop are sent by the bot itself (bot name and avatar).
+Without a webhook (`webhook = ""`) the bot sends all embeds itself.
+
+Webhook name: the player name. For linked players `linked_name_format` is used
+(default `{mc} ({discord})`), for chat messages and events alike.
 
 Webhook avatar: player head from an external service. The URL is configurable
-with the placeholders `{uuid}` and `{name}` (default service to be chosen).
+with the placeholders `{uuid}` and `{name}`. Default:
+`https://vzge.me/face/256/{uuid}`.
 
 ### Discord → Minecraft
 
@@ -206,3 +213,42 @@ You are no longer whitelisted on this server.
 | `status` | Uptime, TPS, MSPT, players, version – one per line |
 | `whois` | `Steve is linked to @steve` / `Steve is not linked` |
 | `playtime` | `Steve has played 12h 34m` |
+
+## 5. Data storage (*proposal*)
+
+All data lives in `mcdiscordchat/` in the server directory. Accounts are stored
+by ID only (Minecraft UUID, Discord user ID); names are resolved at runtime,
+because both can change.
+
+`mcdiscordchat/links.json`:
+
+```json
+{
+  "links": [
+    { "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5", "discord_id": "123456789012345678" }
+  ]
+}
+```
+
+`mcdiscordchat/stats.json` (for the unique player placeholders):
+
+```json
+{
+  "total": ["069a79f4-44e9-4726-a5be-fca90e38aaf5"],
+  "today": { "date": "2026-10-28", "players": ["069a79f4-44e9-4726-a5be-fca90e38aaf5"] }
+}
+```
+
+Pending link codes are kept in memory only and are lost on restart.
+
+## 6. Project structure (*proposal*)
+
+| Item | Value |
+|---|---|
+| Mod name | MCDiscordChat |
+| Mod ID | `mcdiscordchat` |
+| Java package | `de.moritzrohleder.mcdiscordchat` |
+| Java | 21 |
+| Modules | `common`, `fabric`, `neoforge` |
+| NeoForge | 21.1.x |
+| Fabric | Fabric Loader + Fabric API |
