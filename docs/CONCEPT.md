@@ -27,6 +27,7 @@ connected:
 | Build structure | **MultiLoader template** (`common` / `fabric` / `neoforge`), no runtime dependency such as Architectury. Each loader can be updated to a new Minecraft version and released independently; more loaders can be added later. |
 | Discord library | **JDA** (bundled into the mod jar) |
 | Language | **English only** (server-side mod, clients do not have the mod's language files). Configurable language files may be added later. |
+| Config | Own config handling in `common`, format **TOML** via night-config (shipped by NeoForge, bundled into the Fabric jar). Same file on all loaders. |
 | Emoji library | **JEmoji** (shortcode ↔ Unicode conversion incl. Discord aliases) |
 | License | GPL-3.0 |
 
@@ -129,5 +130,4 @@ connected:
 
 ## Open points
 
-- [ ] Config format
 - [ ] Final list of topic placeholders (spec)
