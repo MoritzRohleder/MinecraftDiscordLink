@@ -6,6 +6,7 @@
 ## Conventions
 
 - Placeholders in all configurable texts use curly braces: `{name}`.
+- Dates and times use the server's time zone.
 
 ## 1. Configuration
 
@@ -21,6 +22,8 @@ token = ""
 
 [discord.status]
 enabled = true
+# Activity type: "playing", "watching", "listening", "competing" or "custom"
+type = "custom"
 # Minutes between status updates
 interval_minutes = 5
 # Placeholders: see section 2
@@ -105,8 +108,7 @@ code_validity_minutes = 60
 | `/discord link <discordname>` | everyone | Send link code via DM |
 | `/discord confirm <code>` | everyone | Complete link |
 | `/discord unlink` | everyone | Remove own link |
-| `/discord whois <player>` | everyone | Linked account or "not linked" |
-| `/discord online` | everyone | Discord members who are currently online |
+| `/discord whois <name>` | everyone | Linked account or "not linked" (Minecraft or Discord name) |
 | `/discord admin link <player> <discordname>` | admin | Link accounts manually |
 | `/discord reload` | admin | Reload config |
 
@@ -114,11 +116,14 @@ Admin = OP level 4 **or** permission node `mcdiscordchat.admin`.
 
 ### Discord (slash commands)
 
+All Discord commands use the prefix `mc` (e.g. `/mc online`). Final names of
+the admin commands are not agreed yet.
+
 | Command | Who | Description |
 |---|---|---|
 | `/online` | everyone | List online players |
 | `/status` | everyone | Uptime, TPS/MSPT, player count, version |
-| `/whois <player>` | everyone | Linked account or "not linked" |
+| `/whois <name>` | everyone | Linked account or "not linked" (Minecraft or Discord name) |
 | `/playtime <player>` | everyone | Play time from vanilla statistics |
 | `/link <code>` | everyone | Complete link with a kick code |
 | `/unlink` | everyone | Remove own link |
