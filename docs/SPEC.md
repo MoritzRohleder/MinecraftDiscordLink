@@ -6,13 +6,15 @@
 
 - Placeholders in all configurable texts use curly braces: `{name}`.
 - Dates and times use the server's time zone.
+- The mod only runs on **dedicated servers** (not in singleplayer / LAN worlds).
 
 ## 1. Configuration
 
 File: `config/minecraftdiscordlink.toml`. Created with defaults and comments on first start.
 The generated file documents all available placeholders in its comments
 (the references to section 2 below are only used in this spec).
-Can be reloaded at runtime (see section 3).
+Can be reloaded at runtime (see section 3). Changes to the bot token and channel
+IDs require a server restart; everything else is applied on reload.
 
 ```toml
 [discord]

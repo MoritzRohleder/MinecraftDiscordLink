@@ -11,9 +11,9 @@
         "sources": "https://github.com/MoritzRohleder/MinecraftDiscordLink"
     },
     "license": "${license}",
-    "environment": "*",
+    "environment": "server",
     "entrypoints": {
-        "main": [
+        "server": [
             "de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLinkFabric"
         ]
     },
