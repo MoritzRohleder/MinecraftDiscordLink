@@ -26,7 +26,8 @@ connected:
 | Loaders | **NeoForge** and **Fabric** |
 | Build structure | **MultiLoader template** (`common` / `fabric` / `neoforge`), no runtime dependency such as Architectury. Each loader can be updated to a new Minecraft version and released independently; more loaders can be added later. |
 | Discord library | **JDA** (bundled into the mod jar) |
-| Language | **English only** (server-side mod, clients do not have the mod's language files) |
+| Language | **English only** (server-side mod, clients do not have the mod's language files). Configurable language files may be added later. |
+| Emoji library | **JEmoji** (shortcode ↔ Unicode conversion incl. Discord aliases) |
 | License | GPL-3.0 |
 
 ### Discord connection
@@ -55,6 +56,11 @@ connected:
 - Format: prefix + Discord name + text.
 - Attachments are not shown (recommendation: disable attachments in the channel).
 - Mentions are shown as plain text (`@name`).
+- Emojis are converted in both directions: `:name:` in Minecraft becomes a real
+  emoji in Discord; Unicode emojis from Discord are shown as `:name:` in Minecraft.
+  Custom server emojis are shown as `:name:`.
+- Display name of linked users is configurable with the placeholders `<mc>` and
+  `<discord>`; default: `<mc> (<discord>)`.
 - Replies are shown like normal messages.
 
 **Channel topic**
@@ -73,18 +79,32 @@ connected:
 - Output is batched and sent as **Discord Markdown** formatted messages (no code block).
 - Command execution is authorized by **user IDs and role IDs** in the config.
 - A **whitelist or blacklist** of commands can be configured per role / user ID.
+- Multiple roles: permissions are the **union** of everything the user's roles /
+  user ID allow; an **explicit deny always wins**.
 
 ### Whitelist via Discord
 
 - One or more role IDs can be configured. Members with one of these roles are
   whitelisted on the Minecraft server.
 - If no role is configured, this feature is disabled.
+- When enabled, **account linking becomes mandatory** for players who rely on it.
+  Unlinked players are kicked on join with a link code in the kick message.
+- The **vanilla whitelist stays active in addition**: a player may join if they
+  are on the vanilla whitelist **or** have a whitelisted role.
+- A player who loses the role and is not on the vanilla whitelist is **kicked immediately**.
+- If Discord is unreachable, only the vanilla whitelist applies.
 
 ### Account linking
 
-- Linking Discord ↔ Minecraft accounts is **optional**.
-- Flow: `/discord link` in Minecraft → the bot sends a code via **Discord DM** →
-  the player enters the code in Minecraft. Access to both accounts is required.
+- Linking Discord ↔ Minecraft accounts is **optional** (mandatory only with the
+  Discord whitelist enabled).
+- Flow:
+  1. `/discord link <discordname>` in Minecraft → the bot sends a code via **Discord DM**.
+  2. The code is valid for **1 hour**. Replying `refresh` in the DM issues a new code.
+  3. `/discord confirm <code>` in Minecraft completes the link.
+- If the DM cannot be delivered, the player gets an error message in Minecraft
+  asking them to enable DMs.
+- Admins can link accounts manually via an admin command.
 - Links are stored in a simple **JSON file** in the server directory.
 - Uses: show Minecraft names, mention suggestions in the Minecraft chat
   (custom chat completions, possible server-side since 1.19).
@@ -92,14 +112,13 @@ connected:
 ### Discord slash commands
 
 - `/online`, `/status`, `/whois <player>`, `/playtime <player>`
-- `/link` / `/unlink`: to be discussed together with account linking.
+- Usable by everyone on the Discord server.
+- `/whois` for an unlinked player reports that the account is not linked.
 
 ## Open points
 
-- [ ] Emoji conversion (`:name:` ↔ Unicode) – include if the effort is low
-- [ ] Combining permissions of multiple roles (exact rule)
-- [ ] Account linking: how the bot knows which Discord user to DM, DM failures, code expiry
-- [ ] Display name of linked Discord users in Minecraft
-- [ ] Whitelist via Discord: relation to linking and to the vanilla whitelist
-- [ ] Slash commands: who may use them, visibility of responses
+- [ ] Account linking: DM spam protection, which Discord name is matched
+- [ ] Linking flow for players kicked by the Discord whitelist (code entered where?)
+- [ ] Unlinking (Minecraft and/or Discord command, admin command)
+- [ ] Slash commands: visibility of responses (public / ephemeral)
 - [ ] Final list of topic placeholders (spec)
