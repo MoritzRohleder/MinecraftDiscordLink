@@ -131,3 +131,8 @@ connected:
 ## Open points
 
 - [ ] Final list of topic placeholders (spec)
+
+## Later
+
+- Automatic Modrinth upload when a GitHub release is published (once the
+  first release is out and the Modrinth project exists).

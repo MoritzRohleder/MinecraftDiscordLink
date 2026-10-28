@@ -16,6 +16,10 @@ The generated file documents all available placeholders in its comments
 Can be reloaded at runtime (see section 3). Changes to the bot token and channel
 IDs require a server restart; everything else is applied on reload.
 
+If the token or a channel ID is missing or invalid, the server starts normally,
+the mod logs an **error** and the affected part stays inactive (no token: the
+whole mod; one channel: only that feature).
+
 ```toml
 [discord]
 # Bot token from the Discord Developer Portal. Keep it secret!
