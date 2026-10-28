@@ -109,7 +109,8 @@ connected:
   asking them to enable DMs.
 - An already linked account cannot be linked again without unlinking first.
 - Alternative flow for players kicked by the Discord whitelist: the kick message
-  contains a code, which is entered in Discord via `/link <code>`.
+  contains a code, which is entered in Discord via `/link <code>`. `/link <code>`
+  only accepts such kick codes.
 - **Unlinking** is possible from both sides (`/discord unlink` in Minecraft,
   `/unlink` in Discord) and removes the link for both accounts.
 - Admins can link accounts manually via an admin command. There is no admin
@@ -128,6 +129,5 @@ connected:
 
 ## Open points
 
-- [ ] `/link <code>` in Discord also without the Discord whitelist?
 - [ ] Config format
 - [ ] Final list of topic placeholders (spec)
