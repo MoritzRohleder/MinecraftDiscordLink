@@ -23,7 +23,7 @@ token = ""
 [discord.status]
 enabled = true
 # Activity type: "playing", "watching", "listening", "competing" or "custom"
-type = "custom"
+type = "playing"
 # Minutes between status updates
 interval_minutes = 5
 # Placeholders: see section 2
@@ -99,7 +99,7 @@ code_validity_minutes = 60
 | `{version}` | Minecraft version |
 | `{motd}` | Server MOTD |
 
-## 3. Commands (*proposal*)
+## 3. Commands
 
 ### Minecraft
 
@@ -116,20 +116,88 @@ Admin = OP level 4 **or** permission node `mcdiscordchat.admin`.
 
 ### Discord (slash commands)
 
-All Discord commands use the prefix `mc` (e.g. `/mc online`). Final names of
-the admin commands are not agreed yet.
+Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 
 | Command | Who | Description |
 |---|---|---|
-| `/online` | everyone | List online players |
-| `/status` | everyone | Uptime, TPS/MSPT, player count, version |
-| `/whois <name>` | everyone | Linked account or "not linked" (Minecraft or Discord name) |
-| `/playtime <player>` | everyone | Play time from vanilla statistics |
-| `/link <code>` | everyone | Complete link with a kick code |
-| `/unlink` | everyone | Remove own link |
-| `/admin link <player> <user>` | Administrator | Link accounts manually |
-| `/reload` | Administrator | Reload config |
+| `/mc online` | everyone | List online players |
+| `/mc status` | everyone | Uptime, TPS/MSPT, player count, version |
+| `/mc whois <name>` | everyone | Linked account or "not linked" (Minecraft or Discord name) |
+| `/mc playtime <player>` | everyone | Play time from vanilla statistics |
+| `/mc link <code>` | everyone | Complete link with a kick code |
+| `/mc unlink` | everyone | Remove own link |
+| `/mcadmin link <player> <user>` | Administrator | Link accounts manually |
+| `/mcadmin reload` | Administrator | Reload config |
+
+`whois` searches Minecraft and Discord names. If a name matches different
+people on both sides, both results are shown.
 
 Administrator = Discord role with the *Administrator* permission. Enforced by
-Discord itself (`default_member_permissions`); server admins can adjust it in
+Discord itself on `/mcadmin` (`default_member_permissions`); server admins can adjust it in
 the server's integration settings.
+
+## 4. Messages (*proposal*)
+
+### Minecraft → Discord (chat channel)
+
+| Event | Sender | Text |
+|---|---|---|
+| Chat | Webhook as player | `{message}` |
+| Join | Bot | `**{player}** joined the game` |
+| Leave | Bot | `**{player}** left the game` |
+| Death | Bot | vanilla death message, e.g. `**Steve** was slain by Zombie` |
+| Advancement | Bot | vanilla wording, e.g. `**{player}** has made the advancement **[{advancement}]**` |
+| Server start | Bot | `:white_check_mark: Server started` |
+| Server stop | Bot | `:octagonal_sign: Server stopped` |
+
+Webhook avatar: player head from an external service, e.g.
+`https://mc-heads.net/avatar/{uuid}`.
+
+### Discord → Minecraft
+
+`[Discord] {name}: {message}` – prefix in blue, name in the member's role color,
+message in white.
+
+### Console channel
+
+Lines are batched per `batch_interval_ms`; a batch longer than 2000 characters
+is split into several messages. One line per log entry:
+
+`` `HH:mm:ss` **INFO** message ``
+
+### Account linking
+
+DM:
+
+```
+The Minecraft player **{player}** wants to link their account to yours.
+Your code: **{code}** (valid for {minutes} minutes)
+Enter it in Minecraft with `/discord confirm {code}`.
+Reply `refresh` to get a new code.
+If this wasn't you, ignore this message.
+```
+
+Kick message (Discord whitelist, not linked):
+
+```
+You are not whitelisted on this server.
+Link your Discord account by running /mc link {code} on the Discord server.
+The code is valid for {minutes} minutes.
+```
+
+Repeated join attempts while a code is valid show the same code.
+
+Kick message (role removed or unlinked):
+
+```
+You are no longer whitelisted on this server.
+```
+
+### Command responses
+
+| Command | Response |
+|---|---|
+| `online` | `**{online}/{max}** players online: Steve, Alex` |
+| `status` | Uptime, TPS, MSPT, players, version – one per line |
+| `whois` | `Steve is linked to @steve` / `Steve is not linked` |
+| `playtime` | `Steve has played 12h 34m` |
