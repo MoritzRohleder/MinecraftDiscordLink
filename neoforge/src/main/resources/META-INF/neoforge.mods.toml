@@ -1,0 +1,29 @@
+modLoader = "javafml"
+loaderVersion = "${neoforge_loader_version_range}"
+license = "${license}"
+issueTrackerURL = "https://github.com/MoritzRohleder/MinecraftDiscordLink/issues"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${version}"
+displayName = "${mod_name}"
+displayURL = "https://github.com/MoritzRohleder/MinecraftDiscordLink"
+credits = "${credits}"
+authors = "${mod_author}"
+description = '''${description}'''
+# Server-side only: clients do not need the mod
+displayTest = "IGNORE_SERVER_VERSION"
+
+[[dependencies.${mod_id}]]
+modId = "neoforge"
+type = "required"
+versionRange = "[${neoforge_version},)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "BOTH"

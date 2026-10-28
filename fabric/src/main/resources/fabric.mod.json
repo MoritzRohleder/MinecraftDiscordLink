@@ -1,0 +1,26 @@
+{
+    "schemaVersion": 1,
+    "id": "${mod_id}",
+    "version": "${version}",
+    "name": "${mod_name}",
+    "description": "${description}",
+    "authors": [
+        "${mod_author}"
+    ],
+    "contact": {
+        "sources": "https://github.com/MoritzRohleder/MinecraftDiscordLink"
+    },
+    "license": "${license}",
+    "environment": "*",
+    "entrypoints": {
+        "main": [
+            "de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLinkFabric"
+        ]
+    },
+    "depends": {
+        "fabricloader": ">=${fabric_loader_version}",
+        "fabric-api": "*",
+        "minecraft": "${minecraft_version}",
+        "java": ">=${java_version}"
+    }
+}

@@ -1,0 +1,52 @@
+plugins {
+    id 'multiloader-loader'
+    id 'net.neoforged.moddev'
+}
+
+neoForge {
+    version = neoforge_version
+    // Automatically enable neoforge AccessTransformers if the file exists
+    def at = project(':common').file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformers.from(at.absolutePath)
+    }
+    runs {
+        configureEach {
+            ideName = "NeoForge ${it.name.capitalize()} (${project.path})" // Unify the run config names with fabric
+        }
+        server {
+            server()
+        }
+    }
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+configurations {
+    // Libraries that are shipped inside the mod jar
+    bundle
+    implementation.extendsFrom bundle
+    // Required at runtime in the development environment
+    additionalRuntimeClasspath.extendsFrom bundle
+}
+
+dependencies {
+    bundle("net.dv8tion:JDA:${jda_version}") {
+        // Voice support is not needed
+        exclude module: 'opus-java'
+        exclude module: 'tink'
+        // Provided by Minecraft
+        exclude group: 'org.slf4j'
+    }
+    bundle "net.fellbaum:jemoji:${jemoji_version}"
+}
+
+// jarJar is not transitive, so every resolved library is added explicitly
+configurations.jarJar.withDependencies { deps ->
+    configurations.bundle.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+        deps.add(project.dependencies.create(artifact.moduleVersion.id.toString()))
+    }
+}
