@@ -1,7 +1,6 @@
-# MCDiscordChat – Specification
+# MinecraftDiscordLink – Specification
 
-> Status: **draft**. Based on [CONCEPT.md](CONCEPT.md). Sections marked
-> *proposal* are not agreed yet.
+> Status: **agreed**. Based on [CONCEPT.md](CONCEPT.md).
 
 ## Conventions
 
@@ -10,7 +9,7 @@
 
 ## 1. Configuration
 
-File: `config/mcdiscordchat.toml`. Created with defaults and comments on first start.
+File: `config/minecraftdiscordlink.toml`. Created with defaults and comments on first start.
 The generated file documents all available placeholders in its comments
 (the references to section 2 below are only used in this spec).
 Can be reloaded at runtime (see section 3).
@@ -114,7 +113,7 @@ code_validity_minutes = 60
 | `/discord admin link <player> <discordname>` | admin | Link accounts manually |
 | `/discord reload` | admin | Reload config |
 
-Admin = OP level 4 **or** permission node `mcdiscordchat.admin`.
+Admin = OP level 4 **or** permission node `minecraftdiscordlink.admin`.
 
 ### Discord (slash commands)
 
@@ -214,13 +213,13 @@ You are no longer whitelisted on this server.
 | `whois` | `Steve is linked to @steve` / `Steve is not linked` |
 | `playtime` | `Steve has played 12h 34m` |
 
-## 5. Data storage (*proposal*)
+## 5. Data storage
 
-All data lives in `mcdiscordchat/` in the server directory. Accounts are stored
+All data lives in `minecraftdiscordlink/` in the server directory. Accounts are stored
 by ID only (Minecraft UUID, Discord user ID); names are resolved at runtime,
 because both can change.
 
-`mcdiscordchat/links.json`:
+`minecraftdiscordlink/links.json`:
 
 ```json
 {
@@ -230,7 +229,7 @@ because both can change.
 }
 ```
 
-`mcdiscordchat/stats.json` (for the unique player placeholders):
+`minecraftdiscordlink/stats.json` (for the unique player placeholders):
 
 ```json
 {
@@ -241,13 +240,13 @@ because both can change.
 
 Pending link codes are kept in memory only and are lost on restart.
 
-## 6. Project structure (*proposal*)
+## 6. Project structure
 
 | Item | Value |
 |---|---|
-| Mod name | MCDiscordChat |
-| Mod ID | `mcdiscordchat` |
-| Java package | `de.moritzrohleder.mcdiscordchat` |
+| Mod name | MinecraftDiscordLink |
+| Mod ID | `minecraftdiscordlink` |
+| Java package | `de.moritzrohleder.minecraftdiscordlink` |
 | Java | 21 |
 | Modules | `common`, `fabric`, `neoforge` |
 | NeoForge | 21.1.x |

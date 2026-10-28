@@ -1,6 +1,6 @@
-# MCDiscordChat – Concept
+# MinecraftDiscordLink – Concept
 
-> Status: **work in progress**. This document records what has been decided and
+> Status: **complete**. This document records what has been decided and
 > lists open points. All decisions are made jointly.
 
 ## Idea
