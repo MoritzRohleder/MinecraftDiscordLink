@@ -140,23 +140,28 @@ the server's integration settings.
 
 ### Minecraft → Discord (chat channel)
 
-| Event | Sender | Text |
-|---|---|---|
-| Chat | Webhook as player | `{message}` |
-| Join | Bot | `**{player}** joined the game` |
-| Leave | Bot | `**{player}** left the game` |
-| Death | Bot | vanilla death message, e.g. `**Steve** was slain by Zombie` |
-| Advancement | Bot | vanilla wording, e.g. `**{player}** has made the advancement **[{advancement}]**` |
-| Server start | Bot | `:white_check_mark: Server started` |
-| Server stop | Bot | `:octagonal_sign: Server stopped` |
+Chat messages are sent via webhook as the player (plain text). Events are sent
+via webhook as **embeds** with a colored bar and an emoji. Event texts are not
+configurable.
 
-Webhook avatar: player head from an external service, e.g.
-`https://mc-heads.net/avatar/{uuid}`.
+| Event | Embed | Color |
+|---|---|---|
+| Join | `:inbox_tray: **{player}** joined the game` | green |
+| Leave | `:outbox_tray: **{player}** left the game` | red |
+| Death | `:skull: ` + vanilla death message, e.g. `**Steve** was slain by Zombie` | black |
+| Advancement | `:trophy: ` + vanilla wording, e.g. `**{player}** has made the advancement **[{advancement}]**` | gold |
+| Server start | `:white_check_mark: Server started` | green |
+| Server stop | `:octagonal_sign: Server stopped` | red |
+
+Without a webhook (`webhook = ""`) the bot sends the same embeds itself.
+
+Webhook avatar: player head from an external service. The URL is configurable
+with the placeholders `{uuid}` and `{name}` (default service to be chosen).
 
 ### Discord → Minecraft
 
-`[Discord] {name}: {message}` – prefix in blue, name in the member's role color,
-message in white.
+`[Discord] {name}: {message}` – prefix in blue, name and message in white.
+Role colors are not used (may be added later).
 
 ### Console channel
 
