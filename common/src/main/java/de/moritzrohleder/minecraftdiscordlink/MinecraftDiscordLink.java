@@ -80,7 +80,7 @@ public final class MinecraftDiscordLink {
         startTime = Instant.now();
         Path dataDirectory = server.getServerDirectory().resolve(Constants.MOD_ID);
         stats = new PlayerStats(dataDirectory, Clock.systemDefaultZone());
-        linking = new Linking(server, dataDirectory, MinecraftDiscordLink::accountLinking);
+        linking = new Linking(server, dataDirectory, MinecraftDiscordLink::accountLinking, stats);
         StateStore state = new StateStore(dataDirectory);
         ModConfig config = ConfigManager.get();
         config.discord().token().ifPresent(token -> {
@@ -184,11 +184,14 @@ public final class MinecraftDiscordLink {
     }
 
     /**
-     * Called when a player has left the server.
+     * Called when a player has left the server. Records "last online" and reports the leave.
      *
      * @param player the player
      */
     public static void onPlayerLeave(ServerPlayer player) {
+        if (stats != null) {
+            stats.recordLeave(player.getUUID());
+        }
         if (ConfigManager.get().chat().events().leave()) {
             sendPlayerEvent(player, OUTBOX_TRAY + " **" + DiscordText.escape(playerName(player)) + "** left the game",
                     EmbedColors.RED);

@@ -6,6 +6,7 @@ import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.discord.AccountLinking;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
+import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.Placeholders;
 import net.minecraft.ChatFormatting;
@@ -60,6 +61,7 @@ public final class Linking {
     private final LinkStore links;
     private final LinkCodes codes;
     private final Supplier<Optional<AccountLinking>> discord;
+    private final PlayerStats stats;
 
     /**
      * Creates the account linking and loads the stored links.
@@ -67,14 +69,16 @@ public final class Linking {
      * @param server        the running server
      * @param dataDirectory the mod's data directory with {@code links.json}
      * @param discord       access to Discord, empty while the bot is not connected
+     * @param stats         the player statistics, for "last online"
      */
     public Linking(MinecraftServer server, Path dataDirectory,
-                   Supplier<Optional<AccountLinking>> discord) {
+                   Supplier<Optional<AccountLinking>> discord, PlayerStats stats) {
         this.server = server;
         this.links = new LinkStore(dataDirectory);
         this.codes = new LinkCodes(Clock.systemUTC(),
                 () -> Duration.ofMinutes(ConfigManager.get().linking().codeValidityMinutes()));
         this.discord = discord;
+        this.stats = stats;
     }
 
     /**
@@ -275,7 +279,7 @@ public final class Linking {
             }
             entries.add(new WhoisEntry(Optional.of(profile.getId()), Optional.of(profile.getName()), discordId,
                     discordId.isPresent() ? bot.flatMap(b -> b.username(discordId.getAsLong())) : Optional.empty(),
-                    links.linkedAt(profile.getId())));
+                    links.linkedAt(profile.getId()), lastOnline(profile.getId())));
         });
         bot.ifPresent(b -> {
             for (long discordId : b.findMembersByName(name)) {
@@ -284,7 +288,8 @@ public final class Linking {
                 if (!known) {
                     Optional<UUID> player = links.player(discordId);
                     entries.add(new WhoisEntry(player, player.map(this::playerName), OptionalLong.of(discordId),
-                            b.username(discordId), player.flatMap(links::linkedAt)));
+                            b.username(discordId), player.flatMap(links::linkedAt),
+                            player.map(this::lastOnline).orElse(LastOnline.UNKNOWN)));
                 }
             }
         });
@@ -299,9 +304,10 @@ public final class Linking {
      * @param discordId       the Discord user's ID, empty for an unlinked Minecraft account
      * @param discordUsername the Discord username, empty if unknown
      * @param linkedAt        when the accounts were linked, empty if not linked or unknown
+     * @param lastOnline      when the Minecraft player was last online
      */
     public record WhoisEntry(Optional<UUID> minecraftUuid, Optional<String> minecraftName, OptionalLong discordId,
-                             Optional<String> discordUsername, Optional<Instant> linkedAt) {
+                             Optional<String> discordUsername, Optional<Instant> linkedAt, LastOnline lastOnline) {
 
         /**
          * Checks whether the accounts are linked.
@@ -311,6 +317,31 @@ public final class Linking {
         public boolean linked() {
             return minecraftName.isPresent() && discordId.isPresent();
         }
+    }
+
+    /**
+     * When a Minecraft player was last online.
+     *
+     * @param online whether the player is online now
+     * @param time   when the player last left, empty if online or unknown
+     */
+    public record LastOnline(boolean online, Optional<Instant> time) {
+
+        /** Last online is unknown, e.g. for an unlinked Discord user or old data. */
+        public static final LastOnline UNKNOWN = new LastOnline(false, Optional.empty());
+    }
+
+    /**
+     * Determines when a player was last online.
+     *
+     * @param player the player's UUID
+     * @return online now, the time of the last leave, or unknown
+     */
+    private LastOnline lastOnline(UUID player) {
+        if (server.getPlayerList().getPlayer(player) != null) {
+            return new LastOnline(true, Optional.empty());
+        }
+        return new LastOnline(false, stats.lastSeen(player));
     }
 
     // ---- Whitelist ----

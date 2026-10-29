@@ -247,11 +247,15 @@ Discord answers with embeds (no pings), Minecraft with plain text.
 |---|---|
 | `online` | Title `🟢 2/20 players online`, one player per line, linked players with their Discord account (`Steve · @anedhel`); gray "Nobody is online." if empty |
 | `status` | Fields Uptime, TPS, MSPT, Players, Version; bar green from 19 TPS, yellow from 15, otherwise red |
-| `whois` | One embed per account: player head and name, fields Minecraft, Discord, Linked since; gray "Not linked" otherwise |
+| `whois` | One embed per account: player head and name, fields Minecraft, Discord, Last online, Linked since; gray "Not linked" otherwise |
 | `playtime` | Player head, `Play time: 12h 34m` |
 | `link`, `unlink`, `reload` | Green on success, red on errors |
 
-Minecraft `whois`: `Steve is linked to @steve` / `Steve is not linked`.
+Minecraft `whois`: `Steve is linked to @steve (online now)` /
+`Steve is not linked (last online 2026-10-29 13:10)`.
+
+"Last online" is recorded by the mod when a player leaves (`last_seen` in
+`stats.json`); it is "unknown" for players who have not left since.
 
 ## 5. Data storage
 

@@ -2,6 +2,8 @@ package de.moritzrohleder.minecraftdiscordlink.info;
 
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.WhoisEntry;
 
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -10,6 +12,9 @@ import java.util.stream.Collectors;
  * {@code CommandEmbeds}.
  */
 public final class InfoText {
+
+    /** Format of "last online", in the server's time zone. */
+    private static final DateTimeFormatter LAST_ONLINE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private InfoText() {
     }
@@ -37,9 +42,17 @@ public final class InfoText {
     private static String whoisLine(WhoisEntry entry) {
         String discordUser = entry.discordId().isEmpty() ? null
                 : "@" + entry.discordUsername().orElse(String.valueOf(entry.discordId().getAsLong()));
-        if (entry.linked()) {
-            return entry.minecraftName().orElseThrow() + " is linked to " + discordUser;
+        String line = entry.linked()
+                ? entry.minecraftName().orElseThrow() + " is linked to " + discordUser
+                : entry.minecraftName().orElse(discordUser) + " is not linked";
+        if (entry.minecraftName().isEmpty()) {
+            return line;
         }
-        return entry.minecraftName().orElse(discordUser) + " is not linked";
+        if (entry.lastOnline().online()) {
+            return line + " (online now)";
+        }
+        return line + entry.lastOnline().time()
+                .map(time -> " (last online " + LAST_ONLINE.format(time.atZone(ZoneId.systemDefault())) + ")")
+                .orElse("");
     }
 }

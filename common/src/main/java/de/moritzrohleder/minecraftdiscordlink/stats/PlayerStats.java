@@ -1,20 +1,28 @@
 package de.moritzrohleder.minecraftdiscordlink.stats;
 
+import com.google.gson.annotations.SerializedName;
 import de.moritzrohleder.minecraftdiscordlink.data.JsonFile;
 
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /**
  * Counts the distinct players for the placeholders {@code {unique_session}}, {@code {unique_today}} and
- * {@code {unique_total}}.
+ * {@code {unique_total}}, and remembers when each player was last online.
  * <p>
  * Players since the server start are only kept in memory. Today's and all players ever are stored in
  * {@code minecraftdiscordlink/stats.json} (see {@link JsonFile}) and written on every new player, so nothing is lost
@@ -34,6 +42,8 @@ public final class PlayerStats {
     private final Set<UUID> session = new HashSet<>();
     private final Set<UUID> today = new LinkedHashSet<>();
     private final Set<UUID> total = new LinkedHashSet<>();
+    /** When each player left the server the last time. */
+    private final Map<UUID, Instant> lastSeen = new HashMap<>();
     private LocalDate date;
 
     /**
@@ -63,6 +73,26 @@ public final class PlayerStats {
         if (changed) {
             save();
         }
+    }
+
+    /**
+     * Records a player who left the server, as "last online".
+     *
+     * @param player the player's UUID
+     */
+    public synchronized void recordLeave(UUID player) {
+        lastSeen.put(player, clock.instant().truncatedTo(ChronoUnit.SECONDS));
+        save();
+    }
+
+    /**
+     * Returns when a player was last online.
+     *
+     * @param player the player's UUID
+     * @return the time the player last left, empty if unknown (never left since this was recorded)
+     */
+    public synchronized Optional<Instant> lastSeen(UUID player) {
+        return Optional.ofNullable(lastSeen.get(player));
     }
 
     /**
@@ -128,22 +158,35 @@ public final class PlayerStats {
         if (data.today() != null && date.toString().equals(data.today().date()) && data.today().players() != null) {
             today.addAll(data.today().players());
         }
+        if (data.lastSeen() != null) {
+            data.lastSeen().forEach((player, time) -> {
+                try {
+                    lastSeen.put(UUID.fromString(player), Instant.parse(time));
+                } catch (IllegalArgumentException | DateTimeParseException ignored) {
+                    // An invalid entry is skipped
+                }
+            });
+        }
     }
 
     /**
      * Writes the statistics file.
      */
     private void save() {
-        file.write(new Data(List.copyOf(total), new Today(date.toString(), List.copyOf(today))));
+        Map<String, String> seen = new TreeMap<>();
+        lastSeen.forEach((player, time) -> seen.put(player.toString(), time.toString()));
+        file.write(new Data(List.copyOf(total), new Today(date.toString(), List.copyOf(today)), seen));
     }
 
     /**
      * Content of the statistics file.
      *
-     * @param total all players ever
-     * @param today the players of one day
+     * @param total    all players ever
+     * @param today    the players of one day
+     * @param lastSeen when each player was last online, ISO-8601 by UUID ({@code last_seen})
      */
-    private record Data(List<UUID> total, Today today) {
+    private record Data(List<UUID> total, Today today,
+                        @SerializedName("last_seen") Map<String, String> lastSeen) {
     }
 
     /**

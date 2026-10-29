@@ -152,6 +152,11 @@ final class CommandEmbeds {
         embed.addField("Minecraft", entry.minecraftName().map(DiscordText::escape).orElse("—"), true);
         embed.addField("Discord", entry.discordId().isPresent() ? "<@" + entry.discordId().getAsLong() + ">"
                 : "—", true);
+        if (entry.minecraftName().isPresent()) {
+            embed.addField("Last online", entry.lastOnline().online() ? "Online now"
+                    : entry.lastOnline().time().map(time -> "<t:" + time.getEpochSecond() + ":R>").orElse("unknown"),
+                    true);
+        }
         if (entry.linked()) {
             embed.addField("Linked since", entry.linkedAt()
                     .map(time -> "<t:" + time.getEpochSecond() + ":D>")

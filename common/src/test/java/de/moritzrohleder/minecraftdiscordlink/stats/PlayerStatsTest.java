@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -41,6 +42,17 @@ class PlayerStatsTest {
         assertEquals(0, restarted.sessionCount());
         assertEquals(2, restarted.todayCount(List.of()));
         assertEquals(2, restarted.totalCount());
+    }
+
+    @Test
+    void remembersWhenPlayersWereLastOnline() {
+        PlayerStats stats = new PlayerStats(dir, Clock.fixed(DAY_ONE, ZoneOffset.UTC));
+        stats.recordJoin(STEVE, List.of(STEVE));
+        assertTrue(stats.lastSeen(STEVE).isEmpty());
+
+        stats.recordLeave(STEVE);
+
+        assertEquals(Optional.of(DAY_ONE), new PlayerStats(dir, Clock.systemUTC()).lastSeen(STEVE));
     }
 
     @Test
