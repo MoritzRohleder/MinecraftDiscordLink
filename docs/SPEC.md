@@ -165,8 +165,10 @@ Forwarded: public chat, `/say` and `/me` (vanilla; private messages such as
 | `/say Hello` by the console | bot: `:loudspeaker: **Server**: Hello` |
 | `/me waves` | webhook as the player: `*\* waves*` (italic) |
 
-`webhook = "auto"`: the bot uses a webhook named "MinecraftDiscordLink" in the
-chat channel and creates it only if it does not exist yet.
+`webhook = "auto"`: the bot uses a webhook named "Minecraft Chat Bridge" in the
+chat channel and creates it only if it does not exist yet (Discord does not
+allow "discord" in webhook names; player names containing "discord" or
+"clyde" get a middle dot, e.g. `Disc·ord`).
 
 | Event | Embed | Color |
 |---|---|---|
