@@ -42,7 +42,7 @@ channel_id = ""
 # ""      = no webhook, plain bot messages
 webhook = "auto"
 # Discord -> Minecraft. Placeholders: {name}, {message}
-minecraft_format = "[Discord] {name}: {message}"
+minecraft_format = "&9[Discord]&r {name}: {message}"
 # Name of linked users in Minecraft. Placeholders: {mc}, {discord}
 linked_name_format = "{mc} ({discord})"
 # Player head used as webhook avatar. Placeholders: {uuid}, {name}
@@ -157,7 +157,7 @@ messages is allowed (`**bold**` is shown bold). Events are sent via webhook as
 **embeds** with a colored bar and an emoji. Event texts are not configurable.
 
 Forwarded: public chat, `/say` and `/me` (vanilla; private messages such as
-`/msg` and `/teammsg` are not forwarded). *Proposal* for the display:
+`/msg` and `/teammsg` are not forwarded). Display:
 
 | Source | Discord |
 |---|---|
@@ -189,8 +189,10 @@ with the placeholders `{uuid}` and `{name}`. Default:
 
 ### Discord → Minecraft
 
-`[Discord] {name}: {message}` – prefix in blue, name and message in white.
-Role colors are not used (may be added later).
+Default `&9[Discord]&r {name}: {message}` – prefix in blue, name and message in
+white. The format supports Minecraft formatting codes with `&` (`&0`–`&f`,
+`&k`–`&o`, `&r`); text without a code is white. Role colors are not used (may
+be added later). Discord Markdown is shown as typed.
 
 - `{name}`: server nickname, otherwise global display name, otherwise username.
 - Messages of bots and webhooks are ignored.

@@ -89,8 +89,10 @@ public final class ConfigLoader {
                 "  \"auto\"  the bot creates a webhook itself (needs the \"Manage Webhooks\" permission)",
                 "  URL     use this webhook",
                 "  \"\"      no webhook, plain bot messages"));
-        entry("chat.minecraft_format", "[Discord] {name}: {message}",
-                comment("Discord messages in Minecraft. Placeholders: {name}, {message}"));
+        entry("chat.minecraft_format", "&9[Discord]&r {name}: {message}", comment(
+                "Discord messages in Minecraft. Placeholders: {name}, {message}",
+                "Formatting codes: &0-&9 and &a-&f for colors, &l bold, &o italic, &n underlined,",
+                "&m strikethrough, &k obfuscated, &r reset. Text without a code is white."));
         entry("chat.linked_name_format", "{mc} ({discord})",
                 comment("Name of linked players. Placeholders: {mc}, {discord}"));
         entry("chat.avatar_url", "https://vzge.me/face/256/{uuid}",
