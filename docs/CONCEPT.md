@@ -134,7 +134,23 @@ connected:
 
 - [ ] Final list of topic placeholders (spec)
 
+## Next features (agreed in principle, details open)
+
+- **Monitoring channel** – a third, read-only/admin-only channel with:
+  lag warnings, crash notices, a daily report and a persistent status message.
+- **Role synchronization** – configurable pairs of Discord roles and Minecraft
+  roles that are kept in sync; off without pairs.
+- **Bans across both sides** – opt-in, not default.
+- **Notifications** – per-player settings, e.g. a DM when a friend comes online.
+- **Leaderboards** – slash commands with rankings from the vanilla statistics.
+- **whois** – additionally shows when a player was last online.
+- **Moderation commands** – kick, ban, whitelist etc. as slash commands.
+- **Maintenance mode** – only admins may join, announced in Discord.
+- **Several Minecraft servers in one Discord server.**
+
 ## Later
 
 - Automatic Modrinth upload when a GitHub release is published (once the
   first release is out and the Modrinth project exists).
+- Console filters, translatable texts, more Minecraft versions, Discord replies
+  and attachments in Minecraft, role colors, word filters.
