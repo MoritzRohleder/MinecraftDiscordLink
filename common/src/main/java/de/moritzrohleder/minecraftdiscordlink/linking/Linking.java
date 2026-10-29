@@ -134,7 +134,7 @@ public final class Linking {
             reply.accept(error("One of the accounts has been linked in the meantime."));
             return;
         }
-        onLinked(player.getUUID(), discordId.get());
+        onLinked(player.getGameProfile().getName(), discordId.get());
         reply.accept(success("Your account is now linked to " + discordName(discordId.get()) + "."));
     }
 
@@ -174,7 +174,7 @@ public final class Linking {
         if (!links.link(player, discordId)) {
             return "This Discord account is already linked to another player.";
         }
-        onLinked(player, discordId);
+        onLinked(profile.get().getName(), discordId);
         return profile.get().getName() + " is now linked to " + discordName(discordId) + ".";
     }
 
@@ -191,15 +191,15 @@ public final class Linking {
         if (links.player(discordId).isPresent()) {
             return "Your Discord account is already linked. Use `/mc unlink` first.";
         }
-        Optional<UUID> player = codes.redeemKickCode(code);
+        Optional<LinkCodes.KickedPlayer> player = codes.redeemKickCode(code);
         if (player.isEmpty()) {
             return "This code is invalid or has expired. Join the Minecraft server again to get a new code.";
         }
-        if (!links.link(player.get(), discordId)) {
+        if (!links.link(player.get().uuid(), discordId)) {
             return "This Minecraft account is already linked.";
         }
-        onLinked(player.get(), discordId);
-        return "Your Discord account is now linked to the Minecraft account **" + playerName(player.get())
+        onLinked(player.get().name(), discordId);
+        return "Your Discord account is now linked to the Minecraft account **" + player.get().name()
                 + "**. You can join the server now.";
     }
 
@@ -234,7 +234,7 @@ public final class Linking {
         return switch (whitelistStatus(profile)) {
             case ALLOWED -> null;
             case NOT_LINKED -> Component.literal(Placeholders.resolve(KICK_NOT_LINKED, Map.of(
-                    "code", codes.kickCode(profile.getId()),
+                    "code", codes.kickCode(profile.getId(), profile.getName()),
                     "minutes", String.valueOf(ConfigManager.get().linking().codeValidityMinutes()))));
             case DENIED -> Component.literal(KICK_NOT_WHITELISTED);
         };
@@ -360,11 +360,11 @@ public final class Linking {
     /**
      * Updates Discord after a link was created.
      *
-     * @param player    the Minecraft account
-     * @param discordId the Discord user
+     * @param playerName the Minecraft name
+     * @param discordId  the Discord user
      */
-    private void onLinked(UUID player, long discordId) {
-        Constants.LOG.info("Linked {} with Discord user {}", playerName(player), discordId);
+    private void onLinked(String playerName, long discordId) {
+        Constants.LOG.info("Linked {} with Discord user {}", playerName, discordId);
         discord.get().ifPresent(bot -> bot.onLinksChanged(discordId));
     }
 

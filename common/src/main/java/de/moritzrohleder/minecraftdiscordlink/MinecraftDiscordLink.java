@@ -29,6 +29,7 @@ import java.awt.Color;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -152,7 +153,8 @@ public final class MinecraftDiscordLink {
     }
 
     /**
-     * Called when a player has joined the server. Records the player in the statistics and reports the join.
+     * Called when a player has joined the server. Records the player in the statistics, sends the Discord members
+     * as mention suggestions and reports the join.
      *
      * @param player the player
      */
@@ -161,6 +163,7 @@ public final class MinecraftDiscordLink {
             stats.recordJoin(player.getUUID(),
                     player.server.getPlayerList().getPlayers().stream().map(ServerPlayer::getUUID).toList());
         }
+        accountLinking().ifPresent(accounts -> accounts.sendMentionSuggestions(List.of(player)));
         if (ConfigManager.get().chat().events().join()) {
             sendPlayerEvent(player, INBOX_TRAY + " **" + DiscordText.escape(playerName(player)) + "** joined the game",
                     GREEN);

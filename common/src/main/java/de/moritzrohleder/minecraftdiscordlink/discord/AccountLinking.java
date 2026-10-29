@@ -15,8 +15,11 @@ import net.dv8tion.jda.api.events.guild.member.GuildMemberRoleRemoveEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.events.role.RoleDeleteEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.minecraft.network.protocol.game.ClientboundCustomChatCompletionsPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -104,6 +107,31 @@ public final class AccountLinking extends ListenerAdapter {
     }
 
     /**
+     * Sends the usernames of the Discord members to players as chat suggestions, so typing {@code @} and pressing
+     * Tab in the Minecraft chat completes mentions. Replaces suggestions sent before. Must be called on the server
+     * thread.
+     *
+     * @param players the players
+     */
+    public void sendMentionSuggestions(Collection<ServerPlayer> players) {
+        List<String> mentions = guild.getMemberCache().stream()
+                .filter(member -> !member.getUser().isBot())
+                .map(member -> "@" + member.getUser().getName())
+                .sorted()
+                .toList();
+        ClientboundCustomChatCompletionsPacket packet = new ClientboundCustomChatCompletionsPacket(
+                ClientboundCustomChatCompletionsPacket.Action.SET, mentions);
+        players.forEach(player -> player.connection.send(packet));
+    }
+
+    /**
+     * Sends the current mention suggestions to all online players, e.g. after a member joined or left.
+     */
+    private void updateMentionSuggestions() {
+        server.execute(() -> sendMentionSuggestions(server.getPlayerList().getPlayers()));
+    }
+
+    /**
      * Sends a direct message.
      *
      * @param discordId the recipient's ID
@@ -171,7 +199,8 @@ public final class AccountLinking extends ListenerAdapter {
     }
 
     /**
-     * A member joined the Discord server: linked members get the linked role again.
+     * A member joined the Discord server: linked members get the linked role again, the mention suggestions are
+     * updated.
      *
      * @param event the event
      */
@@ -179,11 +208,13 @@ public final class AccountLinking extends ListenerAdapter {
     public void onGuildMemberJoin(GuildMemberJoinEvent event) {
         if (event.getGuild().getIdLong() == guild.getIdLong()) {
             linkedRoles.sync(event.getMember().getIdLong());
+            updateMentionSuggestions();
         }
     }
 
     /**
-     * A member left the Discord server: the player is no longer whitelisted by role.
+     * A member left the Discord server: the player is no longer whitelisted by role, the mention suggestions are
+     * updated.
      *
      * @param event the event
      */
@@ -191,6 +222,7 @@ public final class AccountLinking extends ListenerAdapter {
     public void onGuildMemberRemove(GuildMemberRemoveEvent event) {
         if (event.getGuild().getIdLong() == guild.getIdLong()) {
             recheck(event.getUser().getIdLong());
+            updateMentionSuggestions();
         }
     }
 

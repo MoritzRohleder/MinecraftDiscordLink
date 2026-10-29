@@ -109,9 +109,10 @@ public final class LinkCodes {
      * Returns the kick code of a player, creating one if the player has no valid kick code yet.
      *
      * @param player the player's UUID
+     * @param name   the player's name, kept with the code as Minecraft only remembers names of players who joined
      * @return the code
      */
-    public synchronized String kickCode(UUID player) {
+    public synchronized String kickCode(UUID player, String name) {
         removeExpired();
         for (Map.Entry<String, KickCode> entry : kickCodes.entrySet()) {
             if (entry.getValue().player().equals(player)) {
@@ -119,7 +120,7 @@ public final class LinkCodes {
             }
         }
         String code = newCode();
-        kickCodes.put(code, new KickCode(player, clock.instant().plus(validity.get())));
+        kickCodes.put(code, new KickCode(player, name, clock.instant().plus(validity.get())));
         return code;
     }
 
@@ -127,12 +128,22 @@ public final class LinkCodes {
      * Redeems a kick code entered in Discord.
      *
      * @param code the entered code, case-insensitive
-     * @return the UUID of the player the code was shown to, empty if the code is invalid or expired
+     * @return the player the code was shown to, empty if the code is invalid or expired
      */
-    public synchronized Optional<UUID> redeemKickCode(String code) {
+    public synchronized Optional<KickedPlayer> redeemKickCode(String code) {
         removeExpired();
         KickCode kickCode = kickCodes.remove(code.strip().toUpperCase(Locale.ROOT));
-        return kickCode != null ? Optional.of(kickCode.player()) : Optional.empty();
+        return kickCode != null ? Optional.of(new KickedPlayer(kickCode.player(), kickCode.name()))
+                : Optional.empty();
+    }
+
+    /**
+     * The player a kick code was shown to.
+     *
+     * @param uuid the player's UUID
+     * @param name the player's name
+     */
+    public record KickedPlayer(UUID uuid, String name) {
     }
 
     /**
@@ -175,8 +186,9 @@ public final class LinkCodes {
      * A code shown in a kick message.
      *
      * @param player  the kicked player
+     * @param name    the kicked player's name
      * @param expires when it expires
      */
-    private record KickCode(UUID player, Instant expires) {
+    private record KickCode(UUID player, String name, Instant expires) {
     }
 }

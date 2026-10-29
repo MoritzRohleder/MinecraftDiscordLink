@@ -78,14 +78,14 @@ class LinkingTest {
     void reusesKickCodesUntilTheyExpire() {
         MutableClock clock = new MutableClock(Instant.parse("2026-10-29T12:00:00Z"));
         LinkCodes codes = new LinkCodes(clock, () -> Duration.ofMinutes(60));
-        String code = codes.kickCode(STEVE);
+        String code = codes.kickCode(STEVE, "Steve");
 
-        assertEquals(code, codes.kickCode(STEVE));
+        assertEquals(code, codes.kickCode(STEVE, "Steve"));
         clock.advance(Duration.ofMinutes(61));
-        String newCode = codes.kickCode(STEVE);
+        String newCode = codes.kickCode(STEVE, "Steve");
         assertNotEquals(code, newCode);
         assertTrue(codes.redeemKickCode(code).isEmpty());
-        assertEquals(Optional.of(STEVE), codes.redeemKickCode(newCode));
+        assertEquals(Optional.of(new LinkCodes.KickedPlayer(STEVE, "Steve")), codes.redeemKickCode(newCode));
     }
 
     /**
