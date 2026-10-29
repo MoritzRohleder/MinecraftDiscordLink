@@ -20,6 +20,15 @@ java {
 
 repositories {
     mavenCentral()
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Fabric'
+                url = 'https://maven.fabricmc.net'
+            }
+        }
+        filter { includeGroupAndSubgroups('net.fabricmc') }
+    }
 }
 
 // Declare capabilities on the outgoing configurations.
@@ -32,6 +41,11 @@ repositories {
     publishing.publications.configureEach {
         suppressPomMetadataWarningsFor(variant)
     }
+}
+
+javadoc {
+    // Mixins are applied to Minecraft classes and are no API; their documentation stays in the sources
+    exclude '**/mixin/**'
 }
 
 sourcesJar {

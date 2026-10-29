@@ -152,9 +152,21 @@ the server's integration settings.
 
 ### Minecraft → Discord (chat channel)
 
-Chat messages are sent via webhook as the player (plain text). Events are sent
-via webhook as **embeds** with a colored bar and an emoji. Event texts are not
-configurable.
+Chat messages are sent via webhook as the player. Discord Markdown in chat
+messages is allowed (`**bold**` is shown bold). Events are sent via webhook as
+**embeds** with a colored bar and an emoji. Event texts are not configurable.
+
+Forwarded: public chat, `/say` and `/me` (vanilla; private messages such as
+`/msg` and `/teammsg` are not forwarded). *Proposal* for the display:
+
+| Source | Discord |
+|---|---|
+| `/say Hello` by a player | webhook as the player: `:loudspeaker: Hello` |
+| `/say Hello` by the console | bot: `:loudspeaker: **Server**: Hello` |
+| `/me waves` | webhook as the player: `*\* waves*` (italic) |
+
+`webhook = "auto"`: the bot uses a webhook named "MinecraftDiscordLink" in the
+chat channel and creates it only if it does not exist yet.
 
 | Event | Embed | Color |
 |---|---|---|
@@ -179,6 +191,10 @@ with the placeholders `{uuid}` and `{name}`. Default:
 
 `[Discord] {name}: {message}` – prefix in blue, name and message in white.
 Role colors are not used (may be added later).
+
+- `{name}`: server nickname, otherwise global display name, otherwise username.
+- Messages of bots and webhooks are ignored.
+- Messages consisting only of attachments are not forwarded.
 
 ### Console channel
 
@@ -258,8 +274,13 @@ Pending link codes are kept in memory only and are lost on restart.
 - On server start and on config reload, all members are synchronized: linked
   members get the role, all others lose it. `linked_role` can be changed by a
   reload.
-- `auto`: the bot creates the role "Linked Account". If it is deleted, it is
-  created again. If `linked_role` is changed from `auto` to something else, the
+- Changes in Discord are corrected immediately: a deleted `auto` role is
+  created again, the role is removed from members without a link and given back
+  to linked members.
+- The ID of the role created for `auto` is stored in
+  `minecraftdiscordlink/state.json`, so the bot never deletes a role it did not
+  create.
+- `auto`: the bot creates the role "Linked Account". If `linked_role` is changed from `auto` to something else, the
   bot deletes the role it created.
 - Requires the bot permission *Manage Roles*; the role must be below the bot's
   highest role.

@@ -13,6 +13,9 @@ import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.CloseCode;
 import net.dv8tion.jda.api.requests.GatewayIntent;
+import net.dv8tion.jda.api.utils.ChunkingFilter;
+import net.dv8tion.jda.api.utils.MemberCachePolicy;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import net.minecraft.server.MinecraftServer;
 
 import java.awt.Color;
@@ -22,6 +25,7 @@ import java.util.EnumSet;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
@@ -37,11 +41,15 @@ import java.util.concurrent.TimeUnit;
  */
 public final class DiscordBot {
 
-    /** Gateway intents needed by the mod. Message Content and Server Members are privileged intents. */
+    /**
+     * Gateway intents needed by the mod. Message Content and Server Members are privileged intents; Guild
+     * Expressions provides the custom emojis.
+     */
     private static final EnumSet<GatewayIntent> INTENTS = EnumSet.of(
             GatewayIntent.GUILD_MESSAGES,
             GatewayIntent.MESSAGE_CONTENT,
             GatewayIntent.GUILD_MEMBERS,
+            GatewayIntent.GUILD_EXPRESSIONS,
             GatewayIntent.DIRECT_MESSAGES);
 
     /** Maximum time the server waits on shutdown for the "Server stopped" message and the disconnect. */
@@ -59,6 +67,8 @@ public final class DiscordBot {
 
     /** The bot, set as soon as it is built. */
     private volatile JDA jda;
+    /** The chat bridge, set once the bot is ready if the chat channel is available. */
+    private volatile ChatBridge chatBridge;
     /** Whether the bot is connected and ready. */
     private boolean ready;
     /** Whether the server has finished starting. */
@@ -92,9 +102,14 @@ public final class DiscordBot {
         executor.execute(() -> {
             try {
                 jda = JDABuilder.createLight(token, INTENTS)
+                        // All members are cached to resolve mentions and roles by name
+                        .setMemberCachePolicy(MemberCachePolicy.ALL)
+                        .setChunkingFilter(ChunkingFilter.ALL)
+                        .enableCache(CacheFlag.EMOJI)
                         .addEventListeners(new ShutdownReasonLogger())
                         .build();
                 jda.awaitReady();
+                setUpFeatures();
                 onReady();
             } catch (InvalidTokenException e) {
                 Constants.LOG.error("Discord rejected the bot token. Check 'discord.token' in the config.");
@@ -117,13 +132,26 @@ public final class DiscordBot {
     }
 
     /**
-     * Called on the bot thread once the bot is connected.
+     * Sets up the features once the bot is connected: checks the channels and starts the chat bridge. Runs on the
+     * bot thread without holding the lock, as it waits for Discord.
      */
-    private synchronized void onReady() {
+    private void setUpFeatures() {
         Constants.LOG.info("Connected to Discord as {}", jda.getSelfUser().getName());
-        ready = true;
         checkChannel(chatChannelId, "chat channel", "chat bridge");
         checkChannel(consoleChannelId, "console channel", "console channel");
+        chatChannel().ifPresent(channel -> {
+            ChatBridge bridge = new ChatBridge(jda, channel, server);
+            bridge.setUpWebhook();
+            jda.addEventListener(bridge);
+            chatBridge = bridge;
+        });
+    }
+
+    /**
+     * Called on the bot thread once the bot is connected and its features are set up.
+     */
+    private synchronized void onReady() {
+        ready = true;
         if (serverStarted) {
             start();
         }
@@ -141,10 +169,39 @@ public final class DiscordBot {
     }
 
     /**
+     * Returns the chat bridge.
+     *
+     * @return the chat bridge, empty while the bot is not ready or if the chat channel is not available
+     */
+    public Optional<ChatBridge> chatBridge() {
+        return Optional.ofNullable(chatBridge);
+    }
+
+    /**
+     * Applies a reloaded config: sets up the chat webhook again, as {@code chat.webhook} may have changed.
+     */
+    public void onConfigReloaded() {
+        ChatBridge bridge = chatBridge;
+        if (bridge == null) {
+            return;
+        }
+        try {
+            executor.execute(bridge::setUpWebhook);
+        } catch (RejectedExecutionException ignored) {
+            // The bot is shutting down
+        }
+    }
+
+    /**
      * Sends the "Server stopped" message and disconnects. Blocks for at most {@link #SHUTDOWN_TIMEOUT}.
      */
     public void shutdown() {
         long deadline = System.nanoTime() + SHUTDOWN_TIMEOUT.toNanos();
+        ChatBridge bridge = chatBridge;
+        if (bridge != null) {
+            // Players leaving while the server stops are not reported anymore
+            bridge.deactivate();
+        }
         // Stops the status updates and an unfinished connection attempt
         executor.shutdownNow();
 

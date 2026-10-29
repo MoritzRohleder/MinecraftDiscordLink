@@ -50,3 +50,10 @@ configurations.jarJar.withDependencies { deps ->
         deps.add(project.dependencies.create(artifact.moduleVersion.id.toString()))
     }
 }
+
+// NeoForge runs with Mojang names and needs no refmap; without the reference Mixin does not warn about it
+processResources {
+    filesMatching("${mod_id}.mixins.json") {
+        filter { line -> line.contains('"refmap"') ? null : line }
+    }
+}

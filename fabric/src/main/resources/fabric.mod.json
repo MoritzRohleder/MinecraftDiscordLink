@@ -17,6 +17,9 @@
             "de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLinkFabric"
         ]
     },
+    "mixins": [
+        "${mod_id}.mixins.json"
+    ],
     "depends": {
         "fabricloader": ">=${fabric_loader_version}",
         "fabric-api": "*",

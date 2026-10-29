@@ -10,9 +10,14 @@ neoForge {
     if (at.exists()) {
         accessTransformers.from(at.absolutePath)
     }
+    // Minecraft classes in unit tests
+    addModdingDependenciesTo(sourceSets.test)
 }
 
 dependencies {
+    // Mixin annotations, the loaders provide Mixin at runtime
+    compileOnly 'net.fabricmc:sponge-mixin:0.17.5+mixin.0.8.7'
+
     // Libraries are bundled by the loader projects
     compileOnly("net.dv8tion:JDA:${jda_version}") {
         exclude module: 'opus-java'
@@ -25,6 +30,12 @@ dependencies {
 
     testImplementation "com.electronwill.night-config:toml:${night_config_version}"
     testRuntimeOnly "org.slf4j:slf4j-simple:2.0.9"
+    testImplementation "net.fellbaum:jemoji:${jemoji_version}"
+    testImplementation("net.dv8tion:JDA:${jda_version}") {
+        exclude module: 'opus-java'
+        exclude module: 'tink'
+        exclude group: 'org.slf4j'
+    }
     testImplementation platform('org.junit:junit-bom:5.13.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
