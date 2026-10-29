@@ -2,6 +2,7 @@ package de.moritzrohleder.minecraftdiscordlink;
 
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import de.moritzrohleder.minecraftdiscordlink.console.ConsoleCapture;
 import de.moritzrohleder.minecraftdiscordlink.discord.ChatBridge;
 import de.moritzrohleder.minecraftdiscordlink.discord.DiscordBot;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
@@ -72,6 +73,10 @@ public final class MinecraftDiscordLink {
         stats = new PlayerStats(server.getServerDirectory().resolve(Constants.MOD_ID), Clock.systemDefaultZone());
         ModConfig config = ConfigManager.get();
         config.discord().token().ifPresent(token -> {
+            if (config.console().channelId().isPresent()) {
+                // Captured from the start, so the console channel also shows the server start
+                ConsoleCapture.install();
+            }
             bot = new DiscordBot(token, config, server, Instant.now(), stats);
             bot.connect();
         });
@@ -247,5 +252,6 @@ public final class MinecraftDiscordLink {
             bot.shutdown();
             bot = null;
         }
+        ConsoleCapture.uninstall();
     }
 }

@@ -155,8 +155,8 @@ public final class DiscordBot {
     }
 
     /**
-     * Sets up the features once the bot is connected: checks the channels and starts the chat bridge. Runs on the
-     * bot thread without holding the lock, as it waits for Discord.
+     * Sets up the features once the bot is connected: checks the channels and starts the chat bridge and the
+     * console channel. Runs on the bot thread without holding the lock, as it waits for Discord.
      */
     private void setUpFeatures() {
         Constants.LOG.info("Connected to Discord as {}", jda.getSelfUser().getName());
@@ -167,6 +167,11 @@ public final class DiscordBot {
             bridge.setUpWebhook();
             jda.addEventListener(bridge);
             chatBridge = bridge;
+        });
+        channel(consoleChannelId).ifPresent(channel -> {
+            ConsoleChannel console = new ConsoleChannel(channel, server, executor);
+            jda.addEventListener(console);
+            console.start();
         });
     }
 
