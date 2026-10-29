@@ -1,5 +1,7 @@
 package de.moritzrohleder.minecraftdiscordlink.platform.services;
 
+import java.nio.file.Path;
+
 public interface IPlatformHelper {
 
     /**
@@ -23,4 +25,11 @@ public interface IPlatformHelper {
      * @return True if in a development environment, false otherwise.
      */
     boolean isDevelopmentEnvironment();
+
+    /**
+     * Gets the directory where config files are stored.
+     *
+     * @return The config directory.
+     */
+    Path getConfigDirectory();
 }
