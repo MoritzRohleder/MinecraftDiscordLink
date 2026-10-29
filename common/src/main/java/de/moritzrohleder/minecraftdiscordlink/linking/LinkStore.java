@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -75,7 +76,7 @@ public final class LinkStore {
         }
         byPlayer.put(player, discordId);
         byDiscord.put(discordId, player);
-        linkedAt.put(player, Instant.now());
+        linkedAt.put(player, Instant.now().truncatedTo(ChronoUnit.SECONDS));
         save();
         return true;
     }
