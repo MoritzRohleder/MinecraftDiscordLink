@@ -15,6 +15,8 @@ connected:
 ## General conventions
 
 - Everything in the repository (code, docs, config, comments) is written in **English**.
+- Code is documented with **JavaDoc** as its technical documentation: every class, record, method and field
+  gets a description of what it does and why, with `@param`, `@return` and `@throws` where applicable.
 
 ## Decisions
 

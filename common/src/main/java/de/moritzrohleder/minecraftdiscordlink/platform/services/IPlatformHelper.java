@@ -2,34 +2,37 @@ package de.moritzrohleder.minecraftdiscordlink.platform.services;
 
 import java.nio.file.Path;
 
+/**
+ * Loader specific functionality needed by the common code. Implemented by each loader project.
+ */
 public interface IPlatformHelper {
 
     /**
-     * Gets the name of the current platform
+     * Gets the name of the mod loader.
      *
-     * @return The name of the current platform.
+     * @return the name of the mod loader, e.g. {@code Fabric}
      */
     String getPlatformName();
 
     /**
-     * Checks if a mod with the given id is loaded.
+     * Checks whether a mod is loaded.
      *
-     * @param modId The mod to check if it is loaded.
-     * @return True if the mod is loaded, false otherwise.
+     * @param modId the ID of the mod
+     * @return whether a mod with the given ID is loaded
      */
     boolean isModLoaded(String modId);
 
     /**
-     * Check if the game is currently in a development environment.
+     * Checks whether the game runs in a development environment.
      *
-     * @return True if in a development environment, false otherwise.
+     * @return whether the game runs in a development environment
      */
     boolean isDevelopmentEnvironment();
 
     /**
      * Gets the directory where config files are stored.
      *
-     * @return The config directory.
+     * @return the directory where config files are stored
      */
     Path getConfigDirectory();
 }

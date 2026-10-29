@@ -5,22 +5,37 @@ import de.moritzrohleder.minecraftdiscordlink.Constants;
 import java.nio.file.Path;
 
 /**
- * Holds the active config. The bot token and the channel IDs are only applied on server start; a reload keeps the
- * values from the start.
+ * Holds the active config of the mod.
+ * <p>
+ * The bot token and the channel IDs are only applied on server start. A {@link #reload()} applies every other change
+ * but keeps the token and channel IDs from the start.
  */
 public final class ConfigManager {
 
+    /** The config file, set by {@link #load(Path)}. */
     private static Path file;
-    private static ModConfig config;
+    /** The active config, set by {@link #load(Path)}. */
+    private static volatile ModConfig config;
 
     private ConfigManager() {
     }
 
+    /**
+     * Loads the config file on mod initialization, creating or completing it if needed.
+     *
+     * @param configDirectory the directory containing the config file
+     */
     public static void load(Path configDirectory) {
         file = configDirectory.resolve(ConfigLoader.FILE_NAME);
         config = ConfigLoader.load(file);
     }
 
+    /**
+     * Returns the active config.
+     *
+     * @return the active config
+     * @throws IllegalStateException if the config has not been loaded yet
+     */
     public static ModConfig get() {
         if (config == null) {
             throw new IllegalStateException("Config has not been loaded yet");
@@ -29,7 +44,8 @@ public final class ConfigManager {
     }
 
     /**
-     * Reloads the config file. Changes to the token or the channel IDs are ignored until the next restart.
+     * Reloads the config file. Changes to the token or the channel IDs are logged and ignored until the next
+     * restart.
      */
     public static void reload() {
         ModConfig current = get();

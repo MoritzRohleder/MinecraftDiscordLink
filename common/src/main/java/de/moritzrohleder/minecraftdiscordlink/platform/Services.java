@@ -5,12 +5,28 @@ import de.moritzrohleder.minecraftdiscordlink.platform.services.IPlatformHelper;
 
 import java.util.ServiceLoader;
 
-// Service loaders are a built-in Java feature that allow us to locate implementations of an interface that vary from one
-// environment to another. The loader projects provide the implementations via META-INF/services.
-public class Services {
+/**
+ * Access to loader specific implementations from the common code.
+ * <p>
+ * The implementations are found with Java's {@link ServiceLoader}: each loader project registers its implementation
+ * in {@code META-INF/services/<fully qualified interface name>}.
+ */
+public final class Services {
 
+    /** Information about and access to the mod loader. */
     public static final IPlatformHelper PLATFORM = load(IPlatformHelper.class);
 
+    private Services() {
+    }
+
+    /**
+     * Loads the implementation of a service for the current loader.
+     *
+     * @param clazz the service interface
+     * @param <T>   type of the service
+     * @return the implementation
+     * @throws NullPointerException if no implementation is registered
+     */
     public static <T> T load(Class<T> clazz) {
         final T loadedService = ServiceLoader.load(clazz)
                 .findFirst()

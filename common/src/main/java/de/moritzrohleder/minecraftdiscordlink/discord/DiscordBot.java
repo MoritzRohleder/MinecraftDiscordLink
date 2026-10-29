@@ -1,0 +1,269 @@
+package de.moritzrohleder.minecraftdiscordlink.discord;
+
+import de.moritzrohleder.minecraftdiscordlink.Constants;
+import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
+import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import net.dv8tion.jda.api.EmbedBuilder;
+import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.entities.MessageEmbed;
+import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
+import net.dv8tion.jda.api.events.session.ShutdownEvent;
+import net.dv8tion.jda.api.exceptions.InvalidTokenException;
+import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.requests.CloseCode;
+import net.dv8tion.jda.api.requests.GatewayIntent;
+import net.minecraft.server.MinecraftServer;
+
+import java.awt.Color;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.EnumSet;
+import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Connection of the mod to Discord.
+ * <p>
+ * The bot connects in the background, so the server starts independently of Discord. Once both the bot is ready
+ * and the server has started, the "Server started" message is sent and the status updates begin, no matter which
+ * of the two happens first.
+ * <p>
+ * All Discord work runs on a single daemon thread owned by this class. The bot token and the channel IDs are taken
+ * from the config at construction and do not change until the next server start.
+ */
+public final class DiscordBot {
+
+    /** Gateway intents needed by the mod. Message Content and Server Members are privileged intents. */
+    private static final EnumSet<GatewayIntent> INTENTS = EnumSet.of(
+            GatewayIntent.GUILD_MESSAGES,
+            GatewayIntent.MESSAGE_CONTENT,
+            GatewayIntent.GUILD_MEMBERS,
+            GatewayIntent.DIRECT_MESSAGES);
+
+    /** Maximum time the server waits on shutdown for the "Server stopped" message and the disconnect. */
+    private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
+
+    private static final Color GREEN = new Color(0x57F287);
+    private static final Color RED = new Color(0xED4245);
+
+    private final String token;
+    private final OptionalLong chatChannelId;
+    private final OptionalLong consoleChannelId;
+    private final MinecraftServer server;
+    private final Instant startTime;
+    private final ScheduledExecutorService executor;
+
+    /** The bot, set as soon as it is built. */
+    private volatile JDA jda;
+    /** Whether the bot is connected and ready. */
+    private boolean ready;
+    /** Whether the server has finished starting. */
+    private boolean serverStarted;
+
+    /**
+     * Creates the bot without connecting yet, see {@link #connect()}.
+     *
+     * @param token     the bot token
+     * @param config    the config at server start, for the channel IDs
+     * @param server    the starting server
+     * @param startTime when the server was started, for {@code {uptime}}
+     */
+    public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime) {
+        this.token = token;
+        this.chatChannelId = config.chat().channelId();
+        this.consoleChannelId = config.console().channelId();
+        this.server = server;
+        this.startTime = startTime;
+        this.executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, Constants.MOD_NAME + " Discord");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    /**
+     * Connects to Discord in the background. Connection errors are logged; the mod stays inactive then.
+     */
+    public void connect() {
+        executor.execute(() -> {
+            try {
+                jda = JDABuilder.createLight(token, INTENTS)
+                        .addEventListeners(new ShutdownReasonLogger())
+                        .build();
+                jda.awaitReady();
+                onReady();
+            } catch (InvalidTokenException e) {
+                Constants.LOG.error("Discord rejected the bot token. Check 'discord.token' in the config.");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (RuntimeException e) {
+                Constants.LOG.error("Could not connect to Discord: {}", e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * Called by the mod when the server has finished starting.
+     */
+    public synchronized void onServerStarted() {
+        serverStarted = true;
+        if (ready) {
+            start();
+        }
+    }
+
+    /**
+     * Called on the bot thread once the bot is connected.
+     */
+    private synchronized void onReady() {
+        Constants.LOG.info("Connected to Discord as {}", jda.getSelfUser().getName());
+        ready = true;
+        checkChannel(chatChannelId, "chat channel", "chat bridge");
+        checkChannel(consoleChannelId, "console channel", "console channel");
+        if (serverStarted) {
+            start();
+        }
+    }
+
+    /**
+     * Starts the features that need both a ready bot and a started server.
+     */
+    private void start() {
+        if (ConfigManager.get().chat().events().serverStart()) {
+            chatChannel().ifPresent(channel -> channel.sendMessageEmbeds(
+                    embed("✅ Server started", GREEN)).queue(null, this::logSendError));
+        }
+        new StatusUpdater(jda, server, startTime, executor).start();
+    }
+
+    /**
+     * Sends the "Server stopped" message and disconnects. Blocks for at most {@link #SHUTDOWN_TIMEOUT}.
+     */
+    public void shutdown() {
+        long deadline = System.nanoTime() + SHUTDOWN_TIMEOUT.toNanos();
+        // Stops the status updates and an unfinished connection attempt
+        executor.shutdownNow();
+
+        JDA bot = jda;
+        if (bot == null) {
+            return;
+        }
+        try {
+            if (isReady() && ConfigManager.get().chat().events().serverStop()) {
+                Optional<GuildMessageChannel> channel = chatChannel();
+                if (channel.isPresent()) {
+                    channel.get().sendMessageEmbeds(embed("🛑 Server stopped", RED))
+                            .submit().get(remaining(deadline), TimeUnit.NANOSECONDS);
+                }
+            }
+            bot.shutdown();
+            if (!bot.awaitShutdown(remaining(deadline), TimeUnit.NANOSECONDS)) {
+                bot.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            bot.shutdownNow();
+        } catch (Exception e) {
+            Constants.LOG.error("Could not send the server stop message to Discord: {}", e.toString());
+            bot.shutdownNow();
+        }
+    }
+
+    /**
+     * Explains why Discord closed the connection if the reason is a configuration problem.
+     */
+    private static final class ShutdownReasonLogger extends ListenerAdapter {
+
+        @Override
+        public void onShutdown(ShutdownEvent event) {
+            CloseCode code = event.getCloseCode();
+            if (code == CloseCode.DISALLOWED_INTENTS) {
+                Constants.LOG.error("Discord refused the connection because of missing privileged intents. Enable "
+                        + "'Server Members Intent' and 'Message Content Intent' for the bot in the Discord "
+                        + "Developer Portal.");
+            } else if (code == CloseCode.AUTHENTICATION_FAILED) {
+                Constants.LOG.error("Discord rejected the bot token. Check 'discord.token' in the config.");
+            }
+        }
+    }
+
+    /**
+     * Checks whether the bot is connected and ready.
+     *
+     * @return whether the bot is connected and ready
+     */
+    private synchronized boolean isReady() {
+        return ready;
+    }
+
+    /**
+     * Looks up the chat channel.
+     *
+     * @return the chat channel, empty if not configured or not accessible
+     */
+    private Optional<GuildMessageChannel> chatChannel() {
+        return channel(chatChannelId);
+    }
+
+    /**
+     * Looks up a channel by its configured ID.
+     *
+     * @param id the channel ID from the config
+     * @return the channel, empty if not configured or not accessible
+     */
+    private Optional<GuildMessageChannel> channel(OptionalLong id) {
+        if (id.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(jda.getChannelById(GuildMessageChannel.class, id.getAsLong()));
+    }
+
+    /**
+     * Logs an error if a configured channel cannot be found, e.g. because the bot is not a member of its server or
+     * cannot see the channel.
+     *
+     * @param id      the channel ID from the config
+     * @param name    name of the channel for the error message
+     * @param feature name of the feature that stays inactive
+     */
+    private void checkChannel(OptionalLong id, String name, String feature) {
+        if (id.isPresent() && channel(id).isEmpty()) {
+            Constants.LOG.error("The {} {} was not found or the bot cannot see it. The {} stays inactive.",
+                    name, id.getAsLong(), feature);
+        }
+    }
+
+    /**
+     * Creates a simple embed.
+     *
+     * @param text  the embed text
+     * @param color the color of the embed bar
+     * @return an embed with only a description and a color
+     */
+    private static MessageEmbed embed(String text, Color color) {
+        return new EmbedBuilder().setDescription(text).setColor(color).build();
+    }
+
+    /**
+     * Logs a message that could not be sent.
+     *
+     * @param error error of a failed message
+     */
+    private void logSendError(Throwable error) {
+        Constants.LOG.error("Could not send a message to Discord: {}", error.getMessage());
+    }
+
+    /**
+     * Calculates the time left until a deadline.
+     *
+     * @param deadline deadline as returned by {@link System#nanoTime()}
+     * @return nanoseconds left until the deadline, at least 0
+     */
+    private static long remaining(long deadline) {
+        return Math.max(0, deadline - System.nanoTime());
+    }
+}

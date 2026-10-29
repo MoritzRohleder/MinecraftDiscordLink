@@ -26,19 +26,33 @@ import java.util.OptionalLong;
 import java.util.regex.Pattern;
 
 /**
- * Reads the TOML config file, adds missing keys with their defaults and validates all values.
+ * Reads, completes and validates the TOML config file.
  * <p>
- * Invalid values are logged as errors. If a sensible default exists it is used, otherwise the value is empty and the
- * affected feature stays disabled.
+ * The structure of the file is defined by the sections and entries registered in the static initializer. Their
+ * order is the order in the generated file, their comments document the options for server admins.
+ * <p>
+ * Loading works in three steps:
+ * <ol>
+ *     <li>The file is parsed, keeping the order of its keys and its comments.</li>
+ *     <li>Missing sections and keys are added with their defaults and comments. Only then the file is written, so
+ *     an up-to-date file is never touched. A file that cannot be parsed is never overwritten.</li>
+ *     <li>All values are validated and converted into a {@link ModConfig}. Invalid values are logged as errors and
+ *     replaced by their default. Values without a sensible default stay empty, which disables the affected
+ *     feature.</li>
+ * </ol>
  */
 public final class ConfigLoader {
 
+    /** Name of the config file inside the config directory. */
     public static final String FILE_NAME = Constants.MOD_ID + ".toml";
 
+    /** Discord IDs ("snowflakes") are 17 to 20 digit numbers. */
     private static final Pattern SNOWFLAKE = Pattern.compile("\\d{17,20}");
+    /** Webhook URLs as copied from Discord, including the PTB and Canary clients. */
     private static final Pattern WEBHOOK_URL =
             Pattern.compile("https://(?:ptb\\.|canary\\.)?discord(?:app)?\\.com/api/webhooks/\\d+/[\\w-]+");
 
+    /** Comment documenting the placeholders of the status and topic formats. */
     private static final String PLACEHOLDERS = comment(
             "Placeholders:",
             "  {online}          players currently online",
@@ -51,7 +65,9 @@ public final class ConfigLoader {
             "  {version}         Minecraft version",
             "  {motd}            server MOTD");
 
+    /** Comments of the config sections (tables), by path. */
     private static final Map<String, String> SECTIONS = new LinkedHashMap<>();
+    /** Config entries with defaults and comments, by path. */
     private static final Map<String, Entry> ENTRIES = new LinkedHashMap<>();
 
     static {
@@ -133,7 +149,13 @@ public final class ConfigLoader {
     }
 
     /**
-     * Loads the config file. A missing file is created with defaults, missing keys are added to an existing file.
+     * Loads the config file.
+     * <p>
+     * A missing file is created with all defaults. Missing keys are added to an existing file, keeping its values and
+     * comments. Problems are logged as errors; this method never throws.
+     *
+     * @param file the config file
+     * @return the validated config
      */
     public static ModConfig load(Path file) {
         CommentedConfig config = newConfig();
@@ -155,6 +177,12 @@ public final class ConfigLoader {
         return new Values(config).read();
     }
 
+    /**
+     * Adds all missing sections and entries with their defaults and comments.
+     *
+     * @param config the parsed config, modified in place
+     * @return whether anything was added
+     */
     private static boolean addMissing(CommentedConfig config) {
         boolean changed = false;
         for (Map.Entry<String, String> section : SECTIONS.entrySet()) {
@@ -176,6 +204,12 @@ public final class ConfigLoader {
         return changed;
     }
 
+    /**
+     * Writes the config to the file, creating missing directories. Errors are logged.
+     *
+     * @param file   the config file
+     * @param config the config to write
+     */
     private static void write(Path file, CommentedConfig config) {
         try {
             Files.createDirectories(file.toAbsolutePath().getParent());
@@ -187,34 +221,68 @@ public final class ConfigLoader {
         }
     }
 
+    /**
+     * Creates an empty config that keeps the insertion order of its keys, so the file keeps its order.
+     *
+     * @return a new, empty config
+     */
     private static CommentedConfig newConfig() {
-        // Keeps the order of the file and of the defaults
         return TomlFormat.newConfig(LinkedHashMap::new);
     }
 
+    /**
+     * Registers a config section (table).
+     *
+     * @param path    dotted path of the section, e.g. {@code chat.topic}
+     * @param comment comment written above the section, see {@link #comment(String...)}
+     */
     private static void section(String path, String comment) {
         SECTIONS.put(path, comment);
     }
 
+    /**
+     * Registers a config entry.
+     *
+     * @param path         dotted path of the entry, e.g. {@code chat.topic.enabled}
+     * @param defaultValue value written for a missing entry and used for an invalid one
+     * @param comment      comment written above the entry, or {@code null} for none
+     */
     private static void entry(String path, Object defaultValue, String comment) {
         ENTRIES.put(path, new Entry(path, defaultValue, comment));
     }
 
     /**
      * Joins lines to a TOML comment. Every line gets a leading space, as the writer only adds {@code #}.
+     *
+     * @param lines the lines of the comment
+     * @return the comment text
      */
     private static String comment(String... lines) {
         return " " + String.join("\n ", lines);
     }
 
+    /**
+     * A registered config entry.
+     *
+     * @param path         dotted path of the entry
+     * @param defaultValue value used for missing and invalid entries
+     * @param comment      comment written above the entry, may be {@code null}
+     */
     private record Entry(String path, Object defaultValue, String comment) {
     }
 
     /**
      * Converts the raw config values into a {@link ModConfig}, logging every invalid value.
+     *
+     * @param config the parsed and completed config
      */
     private record Values(UnmodifiableConfig config) {
 
+        /**
+         * Validates all values.
+         *
+         * @return the validated config
+         */
         ModConfig read() {
             return new ModConfig(
                     new ModConfig.Discord(
@@ -250,6 +318,11 @@ public final class ConfigLoader {
                     new ModConfig.Linking(integer("linking.code_validity_minutes", 1)));
         }
 
+        /**
+         * Reads the bot token. A missing token is logged as an error, as the mod stays inactive.
+         *
+         * @return the bot token, empty if none is configured
+         */
         private Optional<String> token() {
             Object value = config.get("discord.token");
             if (value instanceof String token && !token.isBlank()) {
@@ -259,6 +332,11 @@ public final class ConfigLoader {
             return Optional.empty();
         }
 
+        /**
+         * Reads the activity type of the bot status.
+         *
+         * @return the configured activity type, or the default if invalid
+         */
         private ActivityType activityType() {
             String path = "discord.status.type";
             if (config.get(path) instanceof String type) {
@@ -271,6 +349,11 @@ public final class ConfigLoader {
             return invalid(path, ActivityType.valueOf(((String) defaultValue(path)).toUpperCase(Locale.ROOT)));
         }
 
+        /**
+         * Reads the webhook setting: {@code "auto"}, a Discord webhook URL or an empty string.
+         *
+         * @return the webhook setting, {@link WebhookMode#AUTO} if invalid
+         */
         private ModConfig.Webhook webhook() {
             String path = "chat.webhook";
             if (config.get(path) instanceof String webhook) {
@@ -288,6 +371,13 @@ public final class ConfigLoader {
             return invalid(path, new ModConfig.Webhook(WebhookMode.AUTO, Optional.empty()));
         }
 
+        /**
+         * Reads a channel ID. A missing or invalid ID is logged as an error, as the feature stays inactive.
+         *
+         * @param path    path of the entry
+         * @param feature name of the feature for the error message
+         * @return the channel ID, empty if missing or invalid
+         */
         private OptionalLong channel(String path, String feature) {
             OptionalLong id = snowflake(config.get(path));
             if (id.isEmpty()) {
@@ -297,6 +387,11 @@ public final class ConfigLoader {
             return id;
         }
 
+        /**
+         * Reads the {@code [[console.permissions]]} entries. Invalid entries are logged and ignored.
+         *
+         * @return the valid permission entries
+         */
         private List<ModConfig.Permission> permissions() {
             List<ModConfig.Permission> permissions = new ArrayList<>();
             if (!(config.get("console.permissions") instanceof List<?> entries)) {
@@ -326,6 +421,12 @@ public final class ConfigLoader {
             return List.copyOf(permissions);
         }
 
+        /**
+         * Parses the {@code mode} of a permission entry.
+         *
+         * @param value raw value of a {@code mode} entry
+         * @return the permission mode, or {@code null} if invalid
+         */
         private static PermissionMode permissionMode(Object value) {
             if (value instanceof String mode) {
                 try {
@@ -337,6 +438,12 @@ public final class ConfigLoader {
             return null;
         }
 
+        /**
+         * Parses and normalizes the {@code commands} of a permission entry.
+         *
+         * @param value raw value of a {@code commands} entry
+         * @return the normalized commands, or {@code null} if the list or one of its commands is invalid
+         */
         private static List<String> commands(Object value) {
             if (!(value instanceof List<?> list)) {
                 return null;
@@ -355,6 +462,11 @@ public final class ConfigLoader {
             return List.copyOf(commands);
         }
 
+        /**
+         * Reads the whitelisted role IDs. Invalid IDs are logged and ignored.
+         *
+         * @return the valid role IDs
+         */
         private List<Long> roleIds() {
             String path = "whitelist.role_ids";
             if (!(config.get(path) instanceof List<?> list)) {
@@ -373,6 +485,12 @@ public final class ConfigLoader {
             return List.copyOf(roleIds);
         }
 
+        /**
+         * Reads a boolean value.
+         *
+         * @param path path of the entry
+         * @return the boolean value, or the default if invalid
+         */
         private boolean bool(String path) {
             if (config.get(path) instanceof Boolean value) {
                 return value;
@@ -380,6 +498,13 @@ public final class ConfigLoader {
             return invalid(path, (Boolean) defaultValue(path));
         }
 
+        /**
+         * Reads an integer value with a lower bound.
+         *
+         * @param path path of the entry
+         * @param min  smallest valid value; smaller values are invalid
+         * @return the integer value, or the default if invalid
+         */
         private int integer(String path, int min) {
             if (config.get(path) instanceof Number number) {
                 long value = number.longValue();
@@ -390,6 +515,12 @@ public final class ConfigLoader {
             return invalid(path, (Integer) defaultValue(path));
         }
 
+        /**
+         * Reads a string value.
+         *
+         * @param path path of the entry
+         * @return the string value, or the default if invalid
+         */
         private String string(String path) {
             if (config.get(path) instanceof String value) {
                 return value;
@@ -397,6 +528,12 @@ public final class ConfigLoader {
             return invalid(path, (String) defaultValue(path));
         }
 
+        /**
+         * Parses a Discord ID, given as string or number.
+         *
+         * @param value the raw value
+         * @return the ID, empty if the value is no valid Discord ID
+         */
         private static OptionalLong snowflake(Object value) {
             String id = value instanceof Number number ? String.valueOf(number.longValue())
                     : value instanceof String string ? string.trim() : null;
@@ -410,12 +547,26 @@ public final class ConfigLoader {
             }
         }
 
+        /**
+         * Logs an invalid value and returns the default to use instead.
+         *
+         * @param path         path of the entry
+         * @param defaultValue the value used instead
+         * @param <T>          type of the value
+         * @return {@code defaultValue}
+         */
         private <T> T invalid(String path, T defaultValue) {
             Constants.LOG.error("Invalid value '{}' for '{}' in the config. Using the default '{}'.",
                     config.get(path), path, defaultValue);
             return defaultValue;
         }
 
+        /**
+         * Looks up the default value of an entry.
+         *
+         * @param path path of a registered entry
+         * @return the default value of the entry
+         */
         private static Object defaultValue(String path) {
             return ENTRIES.get(path).defaultValue();
         }
@@ -423,6 +574,9 @@ public final class ConfigLoader {
 
     /**
      * Normalizes a command for permission checks: no leading slash, single spaces, lower case.
+     *
+     * @param command the command as written by a user or in the config
+     * @return the normalized command, empty if {@code command} is blank
      */
     public static String normalizeCommand(String command) {
         String normalized = command.trim().replaceAll("\\s+", " ");

@@ -5,7 +5,16 @@ import net.fabricmc.loader.api.FabricLoader;
 
 import java.nio.file.Path;
 
+/**
+ * {@link IPlatformHelper} implementation for Fabric.
+ */
 public class FabricPlatformHelper implements IPlatformHelper {
+
+    /**
+     * Created by the mod loader.
+     */
+    public FabricPlatformHelper() {
+    }
 
     @Override
     public String getPlatformName() {
