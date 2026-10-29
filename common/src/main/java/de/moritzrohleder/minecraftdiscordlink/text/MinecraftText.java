@@ -48,7 +48,8 @@ public final class MinecraftText {
             switch (matcher.group()) {
                 case "{name}" -> append(result, name, style);
                 case "{message}" -> append(result, message, style);
-                default -> style = applyCode(style, ChatFormatting.getByCode(matcher.group(1).toLowerCase(Locale.ROOT).charAt(0)));
+                default -> style = applyCode(style,
+                        ChatFormatting.getByCode(matcher.group(1).toLowerCase(Locale.ROOT).charAt(0)));
             }
             end = matcher.end();
         }
