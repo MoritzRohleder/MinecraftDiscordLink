@@ -163,8 +163,26 @@ connected:
   temporary whitelist: only operators and linked Discord admins may join.
   Whether it survives a restart is a parameter of the command. Shown in the
   channel topic.
-- **Several Minecraft servers in one Discord server** – one bot, a chat and
-  a console channel per server, one shared monitoring channel.
+- **Maintenance details** – "linked Discord admins" are members with the
+  *Administrator* permission, as for `/mcadmin` (a configurable role may come
+  later). Commands `/mcadmin maintenance on [keep_after_restart]` and
+  `/discord maintenance on [persistent]`, default: ends with the restart.
+  Players without access are kicked when it is switched on.
+- **Notifications** – `/mc subscribe event:<…>`, `/mc subscribe player:<name>`,
+  `/mc unsubscribe …`, `/mc subscriptions`; events at first: server start,
+  server stop, maintenance on/off.
+- **Several Minecraft servers in one Discord server** – one bot (same token on
+  every server), a chat and a console channel per server, one shared
+  monitoring channel.
+  - Every server has a `server.name`, shown in the monitoring channel and in
+    answers.
+  - Slash commands get an optional `server` option; without it the server
+    marked as primary answers.
+  - Links are per server, each server has its own linked role (`auto`:
+    "Linked Account (<server name>)").
+  - The bot status is only set by servers with `discord.status.enabled`; for
+    networks it is enabled on one server only, e.g. "Watching several
+    servers" (no communication between servers).
 
 Postponed: role synchronization (depends on the permission mod used).
 
