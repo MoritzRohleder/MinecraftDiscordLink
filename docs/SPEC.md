@@ -90,6 +90,11 @@ role_ids = []
 [linking]
 # Validity of link codes in minutes
 code_validity_minutes = 60
+# Role for members with a linked account:
+# "auto"  = the bot creates and uses a role named "Linked Account"
+# role ID = use this role
+# ""      = no role
+linked_role = "auto"
 ```
 
 ## 2. Placeholders for topic and bot status
@@ -245,6 +250,19 @@ because both can change.
 ```
 
 Pending link codes are kept in memory only and are lost on restart.
+
+## 5a. Linked role
+
+- Members with a linked account get the linked role, it is removed on unlink.
+  The role always reflects the current links.
+- On server start and on config reload, all members are synchronized: linked
+  members get the role, all others lose it. `linked_role` can be changed by a
+  reload.
+- `auto`: the bot creates the role "Linked Account". If it is deleted, it is
+  created again. If `linked_role` is changed from `auto` to something else, the
+  bot deletes the role it created.
+- Requires the bot permission *Manage Roles*; the role must be below the bot's
+  highest role.
 
 ## 6. Project structure
 
