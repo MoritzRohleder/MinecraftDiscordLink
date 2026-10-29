@@ -41,6 +41,8 @@ class LinkingTest {
 
         LinkStore reloaded = new LinkStore(dir);
         assertEquals(OptionalLong.of(USER), reloaded.discordId(STEVE));
+        assertEquals(links.linkedAt(STEVE), reloaded.linkedAt(STEVE));
+        assertTrue(reloaded.linkedAt(STEVE).isPresent());
         assertEquals(Optional.of(STEVE), reloaded.player(USER));
 
         assertEquals(Optional.of(STEVE), reloaded.unlinkDiscord(USER));

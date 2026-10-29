@@ -2,12 +2,13 @@ package de.moritzrohleder.minecraftdiscordlink.discord;
 
 import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
-import de.moritzrohleder.minecraftdiscordlink.info.InfoText;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
+import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -20,6 +21,7 @@ import net.minecraft.server.MinecraftServer;
 
 import java.time.Instant;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
@@ -28,7 +30,8 @@ import java.util.function.Supplier;
  * <p>
  * The commands are registered for the mod's Discord server only, so they are available immediately. Discord itself
  * restricts {@code /mcadmin} to members with the Administrator permission; server admins can change that in the
- * integration settings of the Discord server. Answers are public in the channel, without mentions.
+ * integration settings of the Discord server. Answers are public embeds in the channel, see {@link CommandEmbeds};
+ * they never ping anyone.
  */
 final class SlashCommands extends ListenerAdapter {
 
@@ -92,30 +95,34 @@ final class SlashCommands extends ListenerAdapter {
         long userId = event.getUser().getIdLong();
         switch (command) {
             case "mc online" -> deferred(event, onServerThread(() ->
-                    InfoText.online(ServerInfo.online(server), true)));
+                    List.of(CommandEmbeds.online(ServerInfo.online(server, linking.links()::discordId)))));
             case "mc status" -> deferred(event, onServerThread(() ->
-                    InfoText.status(ServerInfo.status(server, startTime), true)));
+                    List.of(CommandEmbeds.status(ServerInfo.status(server, startTime)))));
             case "mc whois" -> {
                 String name = option(event, "name");
-                deferred(event, CompletableFuture.supplyAsync(() -> InfoText.whois(name, linking.whois(name), true)));
+                deferred(event, CompletableFuture.supplyAsync(() -> CommandEmbeds.whois(name, linking.whois(name))));
             }
             case "mc playtime" -> {
                 String player = option(event, "player");
                 // Looking up the player may contact Mojang, reading the statistics needs the server thread
                 deferred(event, CompletableFuture.supplyAsync(() -> server.getProfileCache().get(player))
                         .thenCompose(profile -> profile.isEmpty()
-                                ? CompletableFuture.completedFuture(InfoText.unknownPlayer(player, true))
-                                : onServerThread(() -> InfoText.playtime(profile.get().getName(),
-                                        ServerInfo.playtime(server, profile.get()), true))));
+                                ? CompletableFuture.completedFuture(List.of(CommandEmbeds.error(
+                                        "No Minecraft player named **" + DiscordText.escape(player) + "** was found.")))
+                                : onServerThread(() -> List.of(CommandEmbeds.playtime(profile.get().getId(),
+                                        profile.get().getName(), ServerInfo.playtime(server, profile.get()))))));
             }
-            case "mcadmin reload" -> deferred(event, onServerThread(MinecraftDiscordLink::reloadConfig));
-            case "mc link" -> reply(event, linking.linkWithKickCode(userId, option(event, "code")));
-            case "mc unlink" -> reply(event, linking.unlinkDiscord(userId));
+            case "mcadmin reload" -> deferred(event, onServerThread(() ->
+                    List.of(CommandEmbeds.success(MinecraftDiscordLink.reloadConfig()))));
+            case "mc link" -> reply(event, CommandEmbeds.reply(linking.linkWithKickCode(userId, option(event,
+                    "code"))));
+            case "mc unlink" -> reply(event, CommandEmbeds.reply(linking.unlinkDiscord(userId)));
             case "mcadmin link" -> {
                 String player = option(event, "player");
                 User user = event.getOption("user", OptionMapping::getAsUser);
                 // Looking up the player may contact Mojang, so the answer is deferred
-                deferred(event, CompletableFuture.supplyAsync(() -> linking.adminLink(player, user.getIdLong())));
+                deferred(event, CompletableFuture.supplyAsync(() ->
+                        List.of(CommandEmbeds.reply(linking.adminLink(player, user.getIdLong())))));
             }
             default -> {
                 // Not a command of this mod
@@ -128,15 +135,15 @@ final class SlashCommands extends ListenerAdapter {
      * and sent once it is ready.
      *
      * @param event  the command interaction
-     * @param answer the answer, completed later
+     * @param answer the answer embeds, completed later
      */
-    private static void deferred(SlashCommandInteractionEvent event, CompletableFuture<String> answer) {
+    private static void deferred(SlashCommandInteractionEvent event, CompletableFuture<List<MessageEmbed>> answer) {
         event.deferReply().queue();
         answer.exceptionally(error -> {
             Constants.LOG.error("Could not run the Discord command /{}: {}", event.getFullCommandName(),
                     error.toString());
-            return "Something went wrong. See the server log for details.";
-        }).thenAccept(text -> event.getHook().sendMessage(text)
+            return List.of(CommandEmbeds.error("Something went wrong. See the server log for details."));
+        }).thenAccept(embeds -> event.getHook().sendMessageEmbeds(embeds)
                 .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue());
     }
 
@@ -146,7 +153,7 @@ final class SlashCommands extends ListenerAdapter {
      * @param answer computes the answer
      * @return the answer, completed on the server thread
      */
-    private CompletableFuture<String> onServerThread(Supplier<String> answer) {
+    private CompletableFuture<List<MessageEmbed>> onServerThread(Supplier<List<MessageEmbed>> answer) {
         return server.submit(answer);
     }
 
@@ -154,10 +161,10 @@ final class SlashCommands extends ListenerAdapter {
      * Answers a command publicly, without mentions.
      *
      * @param event the command interaction
-     * @param text  the answer
+     * @param embed the answer
      */
-    private static void reply(SlashCommandInteractionEvent event, String text) {
-        event.reply(text).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue();
+    private static void reply(SlashCommandInteractionEvent event, MessageEmbed embed) {
+        event.replyEmbeds(embed).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue();
     }
 
     /**

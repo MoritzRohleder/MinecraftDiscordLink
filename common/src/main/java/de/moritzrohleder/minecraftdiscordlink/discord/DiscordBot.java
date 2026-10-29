@@ -61,8 +61,6 @@ public final class DiscordBot {
     /** Maximum time the server waits on shutdown for the "Server stopped" message and the disconnect. */
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
 
-    private static final Color GREEN = new Color(0x57F287);
-    private static final Color RED = new Color(0xED4245);
 
     private final String token;
     private final OptionalLong chatChannelId;
@@ -222,7 +220,7 @@ public final class DiscordBot {
     private void start() {
         if (ConfigManager.get().chat().events().serverStart()) {
             chatChannel().ifPresent(channel -> channel.sendMessageEmbeds(
-                    embed("✅ Server started", GREEN)).queue(null, this::logSendError));
+                    embed("✅ Server started", EmbedColors.GREEN)).queue(null, this::logSendError));
         }
         new StatusUpdater(jda, server, startTime, stats, executor).start();
         chatChannel().ifPresent(channel -> {
@@ -292,7 +290,7 @@ public final class DiscordBot {
             if (isReady() && ConfigManager.get().chat().events().serverStop()) {
                 Optional<GuildMessageChannel> channel = chatChannel();
                 if (channel.isPresent()) {
-                    channel.get().sendMessageEmbeds(embed("🛑 Server stopped", RED))
+                    channel.get().sendMessageEmbeds(embed("🛑 Server stopped", EmbedColors.RED))
                             .submit().get(remaining(deadline), TimeUnit.NANOSECONDS);
                 }
             }

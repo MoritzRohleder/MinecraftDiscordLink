@@ -8,6 +8,7 @@ import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
 import de.moritzrohleder.minecraftdiscordlink.discord.AccountLinking;
 import de.moritzrohleder.minecraftdiscordlink.discord.ChatBridge;
 import de.moritzrohleder.minecraftdiscordlink.discord.DiscordBot;
+import de.moritzrohleder.minecraftdiscordlink.discord.EmbedColors;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
@@ -42,12 +43,6 @@ import java.util.UUID;
  * mixins in the {@code mixin} package. All methods are called on the server thread.
  */
 public final class MinecraftDiscordLink {
-
-    private static final Color GREEN = new Color(0x57F287);
-    private static final Color RED = new Color(0xED4245);
-    /** Almost black: Discord shows an embed with color 0 without a color bar. */
-    private static final Color BLACK = new Color(0x010101);
-    private static final Color GOLD = new Color(0xF1C40F);
 
     private static final String LOUDSPEAKER = "\uD83D\uDCE2";
     private static final String INBOX_TRAY = "\uD83D\uDCE5";
@@ -184,7 +179,7 @@ public final class MinecraftDiscordLink {
         accountLinking().ifPresent(accounts -> accounts.sendMentionSuggestions(List.of(player)));
         if (ConfigManager.get().chat().events().join()) {
             sendPlayerEvent(player, INBOX_TRAY + " **" + DiscordText.escape(playerName(player)) + "** joined the game",
-                    GREEN);
+                    EmbedColors.GREEN);
         }
     }
 
@@ -196,7 +191,7 @@ public final class MinecraftDiscordLink {
     public static void onPlayerLeave(ServerPlayer player) {
         if (ConfigManager.get().chat().events().leave()) {
             sendPlayerEvent(player, OUTBOX_TRAY + " **" + DiscordText.escape(playerName(player)) + "** left the game",
-                    RED);
+                    EmbedColors.RED);
         }
     }
 
@@ -216,7 +211,7 @@ public final class MinecraftDiscordLink {
             return;
         }
         String message = player.getCombatTracker().getDeathMessage().getString();
-        sendPlayerEvent(player, SKULL + " " + DiscordText.boldName(message, playerName(player)), BLACK);
+        sendPlayerEvent(player, SKULL + " " + DiscordText.boldName(message, playerName(player)), EmbedColors.BLACK);
     }
 
     /**
@@ -239,7 +234,7 @@ public final class MinecraftDiscordLink {
         String text = String.format(format,
                 "**" + DiscordText.escape(playerName(player)) + "**",
                 "**[" + DiscordText.escape(display.get().getTitle().getString()) + "]**");
-        sendPlayerEvent(player, TROPHY + " " + text, GOLD);
+        sendPlayerEvent(player, TROPHY + " " + text, EmbedColors.GOLD);
     }
 
     /**

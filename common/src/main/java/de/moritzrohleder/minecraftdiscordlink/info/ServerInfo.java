@@ -13,11 +13,15 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Comparator;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
- * Information about the running server for the commands {@code online}, {@code status} and {@code playtime}.
+ * Information about the running server for the commands {@code online}, {@code status}, {@code whois} and
+ * {@code playtime}.
  * <p>
  * All methods must be called on the server thread, as they read the player list and the statistics.
  */
@@ -32,15 +36,17 @@ public final class ServerInfo {
     /**
      * Collects the online players.
      *
-     * @param server the running server
-     * @return the online players and the player limit
+     * @param server  the running server
+     * @param discord returns the Discord account linked to a player, empty if not linked
+     * @return the online players, sorted by name, and the player limit
      */
-    public static Online online(MinecraftServer server) {
-        List<String> names = server.getPlayerList().getPlayers().stream()
-                .map(player -> player.getGameProfile().getName())
-                .sorted(String.CASE_INSENSITIVE_ORDER)
+    public static Online online(MinecraftServer server, Function<UUID, OptionalLong> discord) {
+        List<OnlinePlayer> players = server.getPlayerList().getPlayers().stream()
+                .map(player -> new OnlinePlayer(player.getGameProfile().getName(), player.getUUID(),
+                        discord.apply(player.getUUID())))
+                .sorted(Comparator.comparing(OnlinePlayer::name, String.CASE_INSENSITIVE_ORDER))
                 .toList();
-        return new Online(names, server.getMaxPlayers());
+        return new Online(players, server.getMaxPlayers());
     }
 
     /**
@@ -97,10 +103,20 @@ public final class ServerInfo {
     /**
      * The online players.
      *
-     * @param names the names of the online players, sorted
-     * @param max   the player limit
+     * @param players the online players, sorted by name
+     * @param max     the player limit
      */
-    public record Online(List<String> names, int max) {
+    public record Online(List<OnlinePlayer> players, int max) {
+    }
+
+    /**
+     * An online player.
+     *
+     * @param name      the player's name
+     * @param uuid      the player's UUID
+     * @param discordId the linked Discord account, empty if not linked
+     */
+    public record OnlinePlayer(String name, UUID uuid, OptionalLong discordId) {
     }
 
     /**

@@ -10,6 +10,8 @@ import de.moritzrohleder.minecraftdiscordlink.data.JsonFile;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,9 +38,12 @@ public final class LinkStore {
     private final JsonFile<Data> file;
     private final Map<UUID, Long> byPlayer = new HashMap<>();
     private final Map<Long, UUID> byDiscord = new HashMap<>();
+    /** When each link was created, by Minecraft account; missing for links created before this was stored. */
+    private final Map<UUID, Instant> linkedAt = new HashMap<>();
 
     /**
-     * Loads the links from the data directory. Entries with missing IDs and duplicates are ignored.
+     * Loads the links from the data directory. Entries with missing IDs and duplicates are ignored, as are invalid
+     * link dates.
      *
      * @param dataDirectory the mod's data directory
      */
@@ -51,6 +56,7 @@ public final class LinkStore {
                         && !byPlayer.containsKey(link.uuid()) && !byDiscord.containsKey(link.discordId())) {
                     byPlayer.put(link.uuid(), link.discordId());
                     byDiscord.put(link.discordId(), link.uuid());
+                    parseInstant(link.linkedAt()).ifPresent(time -> linkedAt.put(link.uuid(), time));
                 }
             }
         }
@@ -69,6 +75,7 @@ public final class LinkStore {
         }
         byPlayer.put(player, discordId);
         byDiscord.put(discordId, player);
+        linkedAt.put(player, Instant.now());
         save();
         return true;
     }
@@ -85,6 +92,7 @@ public final class LinkStore {
             return OptionalLong.empty();
         }
         byDiscord.remove(discordId);
+        linkedAt.remove(player);
         save();
         return OptionalLong.of(discordId);
     }
@@ -101,6 +109,7 @@ public final class LinkStore {
             return Optional.empty();
         }
         byPlayer.remove(player);
+        linkedAt.remove(player);
         save();
         return Optional.of(player);
     }
@@ -140,8 +149,38 @@ public final class LinkStore {
      */
     private void save() {
         List<Link> links = new ArrayList<>();
-        byPlayer.forEach((player, discordId) -> links.add(new Link(player, discordId)));
+        byPlayer.forEach((player, discordId) -> {
+            Instant time = linkedAt.get(player);
+            links.add(new Link(player, discordId, time != null ? time.toString() : null));
+        });
         file.write(new Data(links));
+    }
+
+    /**
+     * Returns when a Minecraft account was linked.
+     *
+     * @param player the Minecraft account's UUID
+     * @return the time of linking, empty if not linked or linked before the time was stored
+     */
+    public synchronized Optional<Instant> linkedAt(UUID player) {
+        return Optional.ofNullable(linkedAt.get(player));
+    }
+
+    /**
+     * Parses a stored link date.
+     *
+     * @param value the ISO-8601 instant, may be {@code null}
+     * @return the instant, empty if missing or invalid
+     */
+    private static Optional<Instant> parseInstant(String value) {
+        if (value == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(Instant.parse(value));
+        } catch (DateTimeParseException e) {
+            return Optional.empty();
+        }
     }
 
     /**
@@ -158,9 +197,11 @@ public final class LinkStore {
      * @param uuid      the Minecraft account's UUID
      * @param discordId the Discord user's ID, stored as {@code discord_id} string as Discord IDs exceed the range of
      *                  JSON numbers in many tools
+     * @param linkedAt  when the link was created, ISO-8601 ({@code linked_at}), may be {@code null}
      */
     private record Link(UUID uuid,
-                        @SerializedName("discord_id") @JsonAdapter(LongAsString.class) Long discordId) {
+                        @SerializedName("discord_id") @JsonAdapter(LongAsString.class) Long discordId,
+                        @SerializedName("linked_at") String linkedAt) {
     }
 
     /**

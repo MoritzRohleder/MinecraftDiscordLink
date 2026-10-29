@@ -119,7 +119,7 @@ public final class DiscordCommand {
         CommandSourceStack source = context.getSource();
         MinecraftServer server = source.getServer();
         withLinking(context, linking -> CompletableFuture
-                .supplyAsync(() -> InfoText.whois(name, linking.whois(name), false))
+                .supplyAsync(() -> InfoText.whois(name, linking.whois(name)))
                 .thenAccept(text -> server.execute(() -> source.sendSystemMessage(Component.literal(text)))));
         return 1;
     }
@@ -157,8 +157,9 @@ public final class DiscordCommand {
                         + " was found on the Discord server."));
             } else {
                 long id = discordId.get().getAsLong();
-                CompletableFuture.supplyAsync(() -> linking.adminLink(playerName, id)).thenAccept(text ->
-                        server.execute(() -> source.sendSystemMessage(Component.literal(text))));
+                CompletableFuture.supplyAsync(() -> linking.adminLink(playerName, id)).thenAccept(reply ->
+                        server.execute(() -> source.sendSystemMessage(Component.literal(reply.message())
+                                .withStyle(reply.success() ? ChatFormatting.GREEN : ChatFormatting.RED))));
             }
         });
         return 1;

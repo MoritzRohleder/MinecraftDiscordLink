@@ -287,7 +287,7 @@ public final class ChatBridge extends ListenerAdapter {
      * @param name   the player's name
      * @return the avatar URL
      */
-    private static String avatarUrl(ModConfig.Chat config, UUID uuid, String name) {
+    static String avatarUrl(ModConfig.Chat config, UUID uuid, String name) {
         return Placeholders.resolve(config.avatarUrl(),
                 Map.of("uuid", uuid.toString().replace("-", ""), "name", name));
     }

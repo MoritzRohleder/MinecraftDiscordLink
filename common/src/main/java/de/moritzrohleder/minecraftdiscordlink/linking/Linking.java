@@ -6,6 +6,7 @@ import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.discord.AccountLinking;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
+import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.Placeholders;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -16,6 +17,7 @@ import net.minecraft.server.players.PlayerList;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -163,22 +165,22 @@ public final class Linking {
      *
      * @param playerName the Minecraft name, the player may be offline
      * @param discordId  the Discord user's ID
-     * @return the result text for the admin
+     * @return the result for the admin
      */
-    public String adminLink(String playerName, long discordId) {
+    public Reply adminLink(String playerName, long discordId) {
         Optional<GameProfile> profile = server.getProfileCache().get(playerName);
         if (profile.isEmpty()) {
-            return "No Minecraft player named " + playerName + " was found.";
+            return Reply.error("No Minecraft player named " + playerName + " was found.");
         }
         UUID player = profile.get().getId();
         if (links.discordId(player).isPresent()) {
-            return profile.get().getName() + " is already linked. The link has to be removed first.";
+            return Reply.error(profile.get().getName() + " is already linked. The link has to be removed first.");
         }
         if (!links.link(player, discordId)) {
-            return "This Discord account is already linked to another player.";
+            return Reply.error("This Discord account is already linked to another player.");
         }
         onLinked(profile.get().getName(), discordId);
-        return profile.get().getName() + " is now linked to " + discordName(discordId) + ".";
+        return Reply.success(profile.get().getName() + " is now linked to " + discordName(discordId) + ".");
     }
 
     // ---- Linking from Discord ----
@@ -188,37 +190,68 @@ public final class Linking {
      *
      * @param discordId the Discord user's ID
      * @param code      the code from the kick message
-     * @return the result text for the Discord user
+     * @return the result for the Discord user, with Discord Markdown
      */
-    public String linkWithKickCode(long discordId, String code) {
+    public Reply linkWithKickCode(long discordId, String code) {
         if (links.player(discordId).isPresent()) {
-            return "Your Discord account is already linked. Use `/mc unlink` first.";
+            return Reply.error("Your Discord account is already linked. Use `/mc unlink` first.");
         }
         Optional<LinkCodes.KickedPlayer> player = codes.redeemKickCode(code);
         if (player.isEmpty()) {
-            return "This code is invalid or has expired. Join the Minecraft server again to get a new code.";
+            return Reply.error("This code is invalid or has expired. Join the Minecraft server again to get a new "
+                    + "code.");
         }
         if (!links.link(player.get().uuid(), discordId)) {
-            return "This Minecraft account is already linked.";
+            return Reply.error("This Minecraft account is already linked.");
         }
         onLinked(player.get().name(), discordId);
-        return "Your Discord account is now linked to the Minecraft account **" + player.get().name()
-                + "**. You can join the server now.";
+        return Reply.success("Your Discord account is now linked to the Minecraft account **"
+                + DiscordText.escape(player.get().name()) + "**. You can join the server now.");
     }
 
     /**
      * Removes the link of a Discord user ({@code /mc unlink}).
      *
      * @param discordId the Discord user's ID
-     * @return the result text for the Discord user
+     * @return the result for the Discord user, with Discord Markdown
      */
-    public String unlinkDiscord(long discordId) {
+    public Reply unlinkDiscord(long discordId) {
         Optional<UUID> player = links.unlinkDiscord(discordId);
         if (player.isEmpty()) {
-            return "Your Discord account is not linked.";
+            return Reply.error("Your Discord account is not linked.");
         }
         onUnlinked(player.get(), discordId);
-        return "Your Discord account is no longer linked to **" + playerName(player.get()) + "**.";
+        return Reply.success("Your Discord account is no longer linked to **"
+                + DiscordText.escape(playerName(player.get())) + "**.");
+    }
+
+    /**
+     * Result of a linking action, for the answer in Discord or Minecraft.
+     *
+     * @param success whether the action succeeded
+     * @param message the message for the user
+     */
+    public record Reply(boolean success, String message) {
+
+        /**
+         * Creates a successful result.
+         *
+         * @param message the message
+         * @return the result
+         */
+        public static Reply success(String message) {
+            return new Reply(true, message);
+        }
+
+        /**
+         * Creates a failed result.
+         *
+         * @param message the message
+         * @return the result
+         */
+        public static Reply error(String message) {
+            return new Reply(false, message);
+        }
     }
 
     // ---- Whois ----
@@ -226,8 +259,7 @@ public final class Linking {
     /**
      * Looks up a name as Minecraft name and as Discord name ({@code whois}). Minecraft names only count if the player
      * has played on this server or is linked. If the name matches different people on both sides, all of them are
-     * returned. Looking up the Minecraft name may contact Mojang, so this must not run on
-     * the server thread.
+     * returned. Looking up the Minecraft name may contact Mojang, so this must not run on the server thread.
      *
      * @param name the Minecraft or Discord name
      * @return the matching accounts with their links, empty if nothing matches
@@ -241,16 +273,18 @@ public final class Linking {
                 // Any Minecraft account exists for Mojang, but only players of this server are of interest
                 return;
             }
-            entries.add(new WhoisEntry(Optional.of(profile.getName()), discordId,
-                    discordId.isPresent() ? bot.flatMap(b -> b.username(discordId.getAsLong())) : Optional.empty()));
+            entries.add(new WhoisEntry(Optional.of(profile.getId()), Optional.of(profile.getName()), discordId,
+                    discordId.isPresent() ? bot.flatMap(b -> b.username(discordId.getAsLong())) : Optional.empty(),
+                    links.linkedAt(profile.getId())));
         });
         bot.ifPresent(b -> {
             for (long discordId : b.findMembersByName(name)) {
                 boolean known = entries.stream()
                         .anyMatch(entry -> entry.discordId().equals(OptionalLong.of(discordId)));
                 if (!known) {
-                    Optional<String> minecraftName = links.player(discordId).map(this::playerName);
-                    entries.add(new WhoisEntry(minecraftName, OptionalLong.of(discordId), b.username(discordId)));
+                    Optional<UUID> player = links.player(discordId);
+                    entries.add(new WhoisEntry(player, player.map(this::playerName), OptionalLong.of(discordId),
+                            b.username(discordId), player.flatMap(links::linkedAt)));
                 }
             }
         });
@@ -260,12 +294,14 @@ public final class Linking {
     /**
      * An account found by {@link #whois(String)}, with the linked account on the other side if any.
      *
+     * @param minecraftUuid   the Minecraft account's UUID, empty for an unlinked Discord user
      * @param minecraftName   the Minecraft name, empty for an unlinked Discord user
      * @param discordId       the Discord user's ID, empty for an unlinked Minecraft account
      * @param discordUsername the Discord username, empty if unknown
+     * @param linkedAt        when the accounts were linked, empty if not linked or unknown
      */
-    public record WhoisEntry(Optional<String> minecraftName, OptionalLong discordId,
-                             Optional<String> discordUsername) {
+    public record WhoisEntry(Optional<UUID> minecraftUuid, Optional<String> minecraftName, OptionalLong discordId,
+                             Optional<String> discordUsername, Optional<Instant> linkedAt) {
 
         /**
          * Checks whether the accounts are linked.
