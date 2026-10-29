@@ -3,6 +3,7 @@ package de.moritzrohleder.minecraftdiscordlink.discord;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.MinecraftText;
 import de.moritzrohleder.minecraftdiscordlink.text.Placeholders;
@@ -64,6 +65,7 @@ public final class ChatBridge extends ListenerAdapter {
     private final JDA jda;
     private final GuildMessageChannel channel;
     private final MinecraftServer server;
+    private final Linking linking;
 
     /** The webhook used to send messages, {@code null} for plain bot messages. */
     private volatile WebhookClient<Message> webhook;
@@ -76,11 +78,13 @@ public final class ChatBridge extends ListenerAdapter {
      * @param jda     the connected bot
      * @param channel the chat channel
      * @param server  the running server
+     * @param linking the account linking, for the names of linked users
      */
-    ChatBridge(JDA jda, GuildMessageChannel channel, MinecraftServer server) {
+    ChatBridge(JDA jda, GuildMessageChannel channel, MinecraftServer server, Linking linking) {
         this.jda = jda;
         this.channel = channel;
         this.server = server;
+        this.linking = linking;
     }
 
     /**
@@ -227,7 +231,8 @@ public final class ChatBridge extends ListenerAdapter {
             return;
         }
         Member member = event.getMember();
-        String name = member != null ? member.getEffectiveName() : event.getAuthor().getEffectiveName();
+        String discordName = member != null ? member.getEffectiveName() : event.getAuthor().getEffectiveName();
+        String name = linking.displayName(event.getAuthor().getIdLong(), discordName);
         Component component = MinecraftText.discordMessage(ConfigManager.get().chat().minecraftFormat(), name, text);
         server.execute(() -> server.getPlayerList().broadcastSystemMessage(component, false));
     }

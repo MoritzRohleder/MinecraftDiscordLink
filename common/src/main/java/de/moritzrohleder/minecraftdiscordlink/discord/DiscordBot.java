@@ -3,11 +3,14 @@ package de.moritzrohleder.minecraftdiscordlink.discord;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
+import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import net.dv8tion.jda.api.EmbedBuilder;
 import com.neovisionaries.ws.client.WebSocketFactory;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
+import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import net.dv8tion.jda.api.entities.channel.middleman.StandardGuildMessageChannel;
@@ -67,12 +70,16 @@ public final class DiscordBot {
     private final MinecraftServer server;
     private final Instant startTime;
     private final PlayerStats stats;
+    private final Linking linking;
+    private final StateStore state;
     private final ScheduledExecutorService executor;
 
     /** The bot, set as soon as it is built. */
     private volatile JDA jda;
     /** The chat bridge, set once the bot is ready if the chat channel is available. */
     private volatile ChatBridge chatBridge;
+    /** The Discord side of the linking, set once the bot is ready if one of the channels is available. */
+    private volatile AccountLinking accountLinking;
     /** Whether the bot is connected and ready. */
     private boolean ready;
     /** Whether the server has finished starting. */
@@ -86,14 +93,19 @@ public final class DiscordBot {
      * @param server    the starting server
      * @param startTime when the server was started, for {@code {uptime}}
      * @param stats     the player statistics, for the unique player placeholders
+     * @param linking   the account linking
+     * @param state     the stored state of the mod
      */
-    public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime, PlayerStats stats) {
+    public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime, PlayerStats stats,
+                      Linking linking, StateStore state) {
         this.token = token;
         this.chatChannelId = config.chat().channelId();
         this.consoleChannelId = config.console().channelId();
         this.server = server;
         this.startTime = startTime;
         this.stats = stats;
+        this.linking = linking;
+        this.state = state;
         this.executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, Constants.MOD_NAME + " Discord");
             thread.setDaemon(true);
@@ -155,15 +167,16 @@ public final class DiscordBot {
     }
 
     /**
-     * Sets up the features once the bot is connected: checks the channels and starts the chat bridge and the
-     * console channel. Runs on the bot thread without holding the lock, as it waits for Discord.
+     * Sets up the features once the bot is connected: checks the channels and starts the chat bridge, the console
+     * channel, the account linking and the slash commands. Runs on the bot thread without holding the lock, as it
+     * waits for Discord.
      */
     private void setUpFeatures() {
         Constants.LOG.info("Connected to Discord as {}", jda.getSelfUser().getName());
         checkChannel(chatChannelId, "chat channel", "chat bridge");
         checkChannel(consoleChannelId, "console channel", "console channel");
         chatChannel().ifPresent(channel -> {
-            ChatBridge bridge = new ChatBridge(jda, channel, server);
+            ChatBridge bridge = new ChatBridge(jda, channel, server, linking);
             bridge.setUpWebhook();
             jda.addEventListener(bridge);
             chatBridge = bridge;
@@ -173,6 +186,23 @@ public final class DiscordBot {
             jda.addEventListener(console);
             console.start();
         });
+        guild().ifPresent(guild -> {
+            AccountLinking accounts = new AccountLinking(jda, guild, server, linking, state, executor);
+            SlashCommands commands = new SlashCommands(guild, linking);
+            jda.addEventListener(accounts, commands);
+            commands.register();
+            accountLinking = accounts;
+            accounts.apply();
+        });
+    }
+
+    /**
+     * Returns the Discord server of the mod: the server of the chat channel, otherwise of the console channel.
+     *
+     * @return the Discord server, empty if neither channel is available
+     */
+    private Optional<Guild> guild() {
+        return chatChannel().or(() -> channel(consoleChannelId)).map(GuildMessageChannel::getGuild);
     }
 
     /**
@@ -214,17 +244,30 @@ public final class DiscordBot {
     }
 
     /**
-     * Applies a reloaded config: sets up the chat webhook again, as {@code chat.webhook} may have changed.
+     * Returns the Discord side of the account linking.
+     *
+     * @return the account linking, empty while the bot is not ready or if no channel is available
+     */
+    public Optional<AccountLinking> accountLinking() {
+        return Optional.ofNullable(accountLinking);
+    }
+
+    /**
+     * Applies a reloaded config: sets up the chat webhook again, as {@code chat.webhook} may have changed, and
+     * applies the linked role and the whitelist roles.
      */
     public void onConfigReloaded() {
         ChatBridge bridge = chatBridge;
-        if (bridge == null) {
-            return;
+        if (bridge != null) {
+            try {
+                executor.execute(bridge::setUpWebhook);
+            } catch (RejectedExecutionException ignored) {
+                // The bot is shutting down
+            }
         }
-        try {
-            executor.execute(bridge::setUpWebhook);
-        } catch (RejectedExecutionException ignored) {
-            // The bot is shutting down
+        AccountLinking accounts = accountLinking;
+        if (accounts != null) {
+            accounts.apply();
         }
     }
 

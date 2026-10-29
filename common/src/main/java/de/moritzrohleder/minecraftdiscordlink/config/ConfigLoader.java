@@ -145,6 +145,11 @@ public final class ConfigLoader {
 
         section("linking", comment("Linking of Minecraft and Discord accounts."));
         entry("linking.code_validity_minutes", 60, comment("Validity of link codes in minutes. Minimum: 1."));
+        entry("linking.linked_role", "auto", comment(
+                "Discord role of members with a linked account:",
+                "  \"auto\"  the bot creates and uses a role named \"Linked Account\" (needs \"Manage Roles\")",
+                "  role ID use this role (it must be below the bot's highest role)",
+                "  \"\"      no role"));
     }
 
     private ConfigLoader() {
@@ -317,7 +322,7 @@ public final class ConfigLoader {
                             integer("console.batch_interval_ms", 1000),
                             permissions()),
                     new ModConfig.Whitelist(roleIds()),
-                    new ModConfig.Linking(integer("linking.code_validity_minutes", 1)));
+                    new ModConfig.Linking(integer("linking.code_validity_minutes", 1), linkedRole()));
         }
 
         /**
@@ -371,6 +376,32 @@ public final class ConfigLoader {
                 }
             }
             return invalid(path, new ModConfig.Webhook(WebhookMode.AUTO, Optional.empty()));
+        }
+
+        /**
+         * Reads the linked role setting: {@code "auto"}, a role ID or an empty string. An invalid value disables the
+         * role, as falling back to {@code "auto"} would create a role nobody asked for.
+         *
+         * @return the linked role setting
+         */
+        private ModConfig.LinkedRole linkedRole() {
+            String path = "linking.linked_role";
+            Object value = config.get(path);
+            if (value instanceof String text) {
+                if (text.isBlank()) {
+                    return new ModConfig.LinkedRole(ModConfig.LinkedRoleMode.NONE, OptionalLong.empty());
+                }
+                if (text.strip().equalsIgnoreCase("auto")) {
+                    return new ModConfig.LinkedRole(ModConfig.LinkedRoleMode.AUTO, OptionalLong.empty());
+                }
+            }
+            OptionalLong id = snowflake(value);
+            if (id.isPresent()) {
+                return new ModConfig.LinkedRole(ModConfig.LinkedRoleMode.ROLE, id);
+            }
+            Constants.LOG.error("Invalid value '{}' for '{}' in the config. The linked role stays inactive.",
+                    value, path);
+            return new ModConfig.LinkedRole(ModConfig.LinkedRoleMode.NONE, OptionalLong.empty());
         }
 
         /**

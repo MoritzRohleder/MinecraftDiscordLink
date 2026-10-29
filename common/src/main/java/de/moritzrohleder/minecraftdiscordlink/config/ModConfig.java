@@ -169,7 +169,29 @@ public record ModConfig(Discord discord, Chat chat, Console console, Whitelist w
      * Settings of the account linking.
      *
      * @param codeValidityMinutes how long a link code stays valid, at least 1 minute
+     * @param linkedRole          the Discord role of members with a linked account
      */
-    public record Linking(int codeValidityMinutes) {
+    public record Linking(int codeValidityMinutes, LinkedRole linkedRole) {
+    }
+
+    /**
+     * The Discord role of members with a linked account.
+     *
+     * @param mode   which role is used
+     * @param roleId the configured role, only present for {@link LinkedRoleMode#ROLE}
+     */
+    public record LinkedRole(LinkedRoleMode mode, OptionalLong roleId) {
+    }
+
+    /**
+     * Which linked role is used.
+     */
+    public enum LinkedRoleMode {
+        /** The bot creates and uses its own role "Linked Account". Requires the "Manage Roles" permission. */
+        AUTO,
+        /** The configured role is used. It must be below the bot's highest role. */
+        ROLE,
+        /** No linked role. */
+        NONE
     }
 }

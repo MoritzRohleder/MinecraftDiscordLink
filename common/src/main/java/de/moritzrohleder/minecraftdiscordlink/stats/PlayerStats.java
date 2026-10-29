@@ -1,17 +1,8 @@
 package de.moritzrohleder.minecraftdiscordlink.stats;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonParseException;
-import de.moritzrohleder.minecraftdiscordlink.Constants;
+import de.moritzrohleder.minecraftdiscordlink.data.JsonFile;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Collection;
@@ -26,11 +17,9 @@ import java.util.UUID;
  * {@code {unique_total}}.
  * <p>
  * Players since the server start are only kept in memory. Today's and all players ever are stored in
- * {@code minecraftdiscordlink/stats.json} and written on every new player, so nothing is lost on a crash. "Today"
- * starts at midnight in the server's time zone; players online at midnight count for the new day.
- * <p>
- * If the file exists but cannot be read, an error is logged and the file is never overwritten, so the stored players
- * are not lost; the counts start from zero until the file is fixed.
+ * {@code minecraftdiscordlink/stats.json} (see {@link JsonFile}) and written on every new player, so nothing is lost
+ * on a crash. "Today" starts at midnight in the server's time zone; players online at midnight count for the new
+ * day.
  * <p>
  * All methods are thread-safe.
  */
@@ -39,12 +28,8 @@ public final class PlayerStats {
     /** Name of the statistics file inside the data directory. */
     public static final String FILE_NAME = "stats.json";
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-
-    private final Path file;
+    private final JsonFile<Data> file;
     private final Clock clock;
-    /** Whether the file may be written; {@code false} if it exists but could not be read. */
-    private final boolean writable;
 
     private final Set<UUID> session = new HashSet<>();
     private final Set<UUID> today = new LinkedHashSet<>();
@@ -58,10 +43,10 @@ public final class PlayerStats {
      * @param clock         the clock defining "today", normally {@link Clock#systemDefaultZone()}
      */
     public PlayerStats(Path dataDirectory, Clock clock) {
-        this.file = dataDirectory.resolve(FILE_NAME);
+        this.file = new JsonFile<>(dataDirectory.resolve(FILE_NAME), Data.class);
         this.clock = clock;
         this.date = LocalDate.now(clock);
-        this.writable = load();
+        load();
     }
 
     /**
@@ -130,51 +115,26 @@ public final class PlayerStats {
     }
 
     /**
-     * Reads the statistics file. A missing file is fine; a broken one is logged.
-     *
-     * @return whether the file may be written
+     * Reads the statistics file. Today's players are only taken if the file is from today.
      */
-    private boolean load() {
-        if (!Files.exists(file)) {
-            return true;
+    private void load() {
+        Data data = file.read();
+        if (data == null) {
+            return;
         }
-        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-            Data data = GSON.fromJson(reader, Data.class);
-            if (data == null) {
-                return true;
-            }
-            if (data.total() != null) {
-                total.addAll(data.total());
-            }
-            if (data.today() != null && date.toString().equals(data.today().date()) && data.today().players() != null) {
-                today.addAll(data.today().players());
-            }
-            return true;
-        } catch (IOException | JsonParseException | IllegalArgumentException e) {
-            Constants.LOG.error("Could not read {}: {}. The player statistics start from zero and the file is not "
-                    + "changed until it is fixed or removed.", file, e.getMessage());
-            return false;
+        if (data.total() != null) {
+            total.addAll(data.total());
+        }
+        if (data.today() != null && date.toString().equals(data.today().date()) && data.today().players() != null) {
+            today.addAll(data.today().players());
         }
     }
 
     /**
-     * Writes the statistics file atomically, so a crash never leaves a half-written file. Errors are logged.
+     * Writes the statistics file.
      */
     private void save() {
-        if (!writable) {
-            return;
-        }
-        Data data = new Data(List.copyOf(total), new Today(date.toString(), List.copyOf(today)));
-        try {
-            Files.createDirectories(file.toAbsolutePath().getParent());
-            Path temp = file.resolveSibling(FILE_NAME + ".tmp");
-            try (Writer writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
-                GSON.toJson(data, writer);
-            }
-            Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (IOException e) {
-            Constants.LOG.error("Could not write {}: {}", file, e.getMessage());
-        }
+        file.write(new Data(List.copyOf(total), new Today(date.toString(), List.copyOf(today))));
     }
 
     /**

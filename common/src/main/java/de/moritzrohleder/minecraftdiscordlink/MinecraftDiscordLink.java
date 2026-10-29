@@ -1,10 +1,14 @@
 package de.moritzrohleder.minecraftdiscordlink;
 
+import com.mojang.authlib.GameProfile;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.console.ConsoleCapture;
+import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
+import de.moritzrohleder.minecraftdiscordlink.discord.AccountLinking;
 import de.moritzrohleder.minecraftdiscordlink.discord.ChatBridge;
 import de.moritzrohleder.minecraftdiscordlink.discord.DiscordBot;
+import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
@@ -12,6 +16,7 @@ import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.DisplayInfo;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.ChatType;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.PlayerChatMessage;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -21,9 +26,11 @@ import net.minecraft.world.scores.Team;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.Color;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 
 /**
@@ -51,6 +58,8 @@ public final class MinecraftDiscordLink {
     private static DiscordBot bot;
     /** The player statistics, {@code null} while the server is not running. */
     private static PlayerStats stats;
+    /** The account linking, {@code null} while the server is not running. */
+    private static Linking linking;
 
     private MinecraftDiscordLink() {
     }
@@ -70,14 +79,17 @@ public final class MinecraftDiscordLink {
      * @param server the starting server
      */
     public static void onServerStarting(MinecraftServer server) {
-        stats = new PlayerStats(server.getServerDirectory().resolve(Constants.MOD_ID), Clock.systemDefaultZone());
+        Path dataDirectory = server.getServerDirectory().resolve(Constants.MOD_ID);
+        stats = new PlayerStats(dataDirectory, Clock.systemDefaultZone());
+        linking = new Linking(server, dataDirectory, MinecraftDiscordLink::accountLinking);
+        StateStore state = new StateStore(dataDirectory);
         ModConfig config = ConfigManager.get();
         config.discord().token().ifPresent(token -> {
             if (config.console().channelId().isPresent()) {
                 // Captured from the start, so the console channel also shows the server start
                 ConsoleCapture.install();
             }
-            bot = new DiscordBot(token, config, server, Instant.now(), stats);
+            bot = new DiscordBot(token, config, server, Instant.now(), stats, linking, state);
             bot.connect();
         });
     }
@@ -123,16 +135,16 @@ public final class MinecraftDiscordLink {
         String senderName = bound.name().getString();
 
         if (type.get().equals(ChatType.CHAT) && sender != null) {
-            bridge.get().sendPlayerMessage(sender.getUUID(), playerName(sender), text);
+            bridge.get().sendPlayerMessage(sender.getUUID(), webhookName(sender), text);
         } else if (type.get().equals(ChatType.SAY_COMMAND)) {
             if (sender != null) {
-                bridge.get().sendPlayerMessage(sender.getUUID(), playerName(sender), LOUDSPEAKER + " " + text);
+                bridge.get().sendPlayerMessage(sender.getUUID(), webhookName(sender), LOUDSPEAKER + " " + text);
             } else {
                 bridge.get().sendBotMessage(LOUDSPEAKER + " **" + DiscordText.escape(senderName) + "**: " + text);
             }
         } else if (type.get().equals(ChatType.EMOTE_COMMAND)) {
             if (sender != null) {
-                bridge.get().sendPlayerMessage(sender.getUUID(), playerName(sender), "*\\* " + text + "*");
+                bridge.get().sendPlayerMessage(sender.getUUID(), webhookName(sender), "*\\* " + text + "*");
             } else {
                 bridge.get().sendBotMessage("*\\* " + DiscordText.escape(senderName) + " " + text + "*");
             }
@@ -218,18 +230,81 @@ public final class MinecraftDiscordLink {
      */
     private static void sendPlayerEvent(ServerPlayer player, String description, Color color) {
         UUID uuid = player.getUUID();
-        String name = playerName(player);
+        String name = webhookName(player);
         chatBridge().ifPresent(bridge -> bridge.sendPlayerEvent(uuid, name, description, color));
     }
 
     /**
-     * Returns the name of a player shown in Discord.
+     * Returns the Minecraft name of a player.
      *
      * @param player the player
      * @return the player's name
      */
     private static String playerName(ServerPlayer player) {
         return player.getGameProfile().getName();
+    }
+
+    /**
+     * Returns the name of a player used as webhook name in Discord: {@code linked_name_format} for linked players.
+     *
+     * @param player the player
+     * @return the name
+     */
+    private static String webhookName(ServerPlayer player) {
+        return linking != null ? linking.displayName(player) : playerName(player);
+    }
+
+    /**
+     * Returns the account linking.
+     *
+     * @return the account linking, empty while the server is not running
+     */
+    public static Optional<Linking> linking() {
+        return Optional.ofNullable(linking);
+    }
+
+    /**
+     * Checks a joining player against the Discord whitelist. Called by a mixin during login.
+     *
+     * @param profile the joining player
+     * @return the kick message, or {@code null} if the player may join
+     */
+    public static Component checkLogin(GameProfile profile) {
+        return linking != null ? linking.checkLogin(profile) : null;
+    }
+
+    /**
+     * Checks whether the Discord whitelist lets a player join, ignoring bans and the player limit. Called by a mixin
+     * in place of the vanilla whitelist check.
+     *
+     * @param profile         the joining player
+     * @param vanillaAllowed  whether the vanilla whitelist lets the player join
+     * @return whether the player may join
+     */
+    public static boolean isWhitelisted(GameProfile profile, boolean vanillaAllowed) {
+        if (linking == null || !ConfigManager.get().whitelist().enabled()) {
+            return vanillaAllowed;
+        }
+        return linking.isWhitelisted(profile);
+    }
+
+    /**
+     * Finds a member of the Discord server by username.
+     *
+     * @param username the Discord username
+     * @return empty if Discord is not available, otherwise the member's ID or empty if there is no such member
+     */
+    public static Optional<OptionalLong> findDiscordMember(String username) {
+        return accountLinking().map(accounts -> accounts.findMember(username));
+    }
+
+    /**
+     * Returns the Discord side of the account linking.
+     *
+     * @return the account linking, empty while the bot is not connected
+     */
+    private static Optional<AccountLinking> accountLinking() {
+        return bot != null ? bot.accountLinking() : Optional.empty();
     }
 
     /**

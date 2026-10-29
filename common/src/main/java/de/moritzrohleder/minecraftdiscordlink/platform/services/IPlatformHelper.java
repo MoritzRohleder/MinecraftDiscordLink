@@ -1,5 +1,7 @@
 package de.moritzrohleder.minecraftdiscordlink.platform.services;
 
+import net.minecraft.commands.CommandSourceStack;
+
 import java.nio.file.Path;
 
 /**
@@ -35,4 +37,14 @@ public interface IPlatformHelper {
      * @return the directory where config files are stored
      */
     Path getConfigDirectory();
+
+    /**
+     * Checks whether a command source has the admin permission of the mod: the permission node
+     * {@code minecraftdiscordlink.admin} if a permissions mod is installed, otherwise OP level 4. The console always
+     * has it.
+     *
+     * @param source the command source
+     * @return whether the source is an admin
+     */
+    boolean isAdmin(CommandSourceStack source);
 }

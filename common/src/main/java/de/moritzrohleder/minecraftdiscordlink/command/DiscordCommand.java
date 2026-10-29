@@ -1,0 +1,151 @@
+package de.moritzrohleder.minecraftdiscordlink.command;
+
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
+import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.platform.Services;
+import net.minecraft.ChatFormatting;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+
+import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+
+/**
+ * The Minecraft command {@code /discord}.
+ * <ul>
+ *     <li>{@code /discord link <discordname>}: sends a link code to the Discord user by DM</li>
+ *     <li>{@code /discord confirm <code>}: completes the link with the code</li>
+ *     <li>{@code /discord unlink}: removes the own link</li>
+ *     <li>{@code /discord admin link <player> <discordname>}: links accounts manually (admins only)</li>
+ * </ul>
+ * Admins are operators of level 4 or players with the permission node {@code minecraftdiscordlink.admin}.
+ */
+public final class DiscordCommand {
+
+    private DiscordCommand() {
+    }
+
+    /**
+     * Registers the command.
+     *
+     * @param dispatcher the server's command dispatcher
+     */
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("discord")
+                .then(Commands.literal("link")
+                        .then(Commands.argument("discordname", StringArgumentType.word())
+                                .executes(DiscordCommand::link)))
+                .then(Commands.literal("confirm")
+                        .then(Commands.argument("code", StringArgumentType.word())
+                                .executes(DiscordCommand::confirm)))
+                .then(Commands.literal("unlink")
+                        .executes(DiscordCommand::unlink))
+                .then(Commands.literal("admin")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.literal("link")
+                                .then(Commands.argument("player", StringArgumentType.word())
+                                        .then(Commands.argument("discordname", StringArgumentType.word())
+                                                .executes(DiscordCommand::adminLink))))));
+    }
+
+    /**
+     * Runs {@code /discord link <discordname>}.
+     *
+     * @param context the command context
+     * @return the command result
+     * @throws CommandSyntaxException if the source is not a player
+     */
+    private static int link(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        withLinking(context, linking -> linking.requestLink(player,
+                StringArgumentType.getString(context, "discordname"), reply(context)));
+        return 1;
+    }
+
+    /**
+     * Runs {@code /discord confirm <code>}.
+     *
+     * @param context the command context
+     * @return the command result
+     * @throws CommandSyntaxException if the source is not a player
+     */
+    private static int confirm(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        withLinking(context, linking -> linking.confirm(player, StringArgumentType.getString(context, "code"),
+                reply(context)));
+        return 1;
+    }
+
+    /**
+     * Runs {@code /discord unlink}.
+     *
+     * @param context the command context
+     * @return the command result
+     * @throws CommandSyntaxException if the source is not a player
+     */
+    private static int unlink(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ServerPlayer player = context.getSource().getPlayerOrException();
+        withLinking(context, linking -> linking.unlink(player, reply(context)));
+        return 1;
+    }
+
+    /**
+     * Runs {@code /discord admin link <player> <discordname>}. Looking up the player may contact Mojang, so this
+     * runs in the background and answers on the server thread.
+     *
+     * @param context the command context
+     * @return the command result
+     */
+    private static int adminLink(CommandContext<CommandSourceStack> context) {
+        String playerName = StringArgumentType.getString(context, "player");
+        String discordName = StringArgumentType.getString(context, "discordname");
+        CommandSourceStack source = context.getSource();
+        MinecraftServer server = source.getServer();
+        withLinking(context, linking -> {
+            Optional<OptionalLong> discordId = MinecraftDiscordLink.findDiscordMember(discordName);
+            if (discordId.isEmpty()) {
+                source.sendFailure(Component.literal("Discord is not available right now. Please try again later."));
+            } else if (discordId.get().isEmpty()) {
+                source.sendFailure(Component.literal("No member with the username " + discordName
+                        + " was found on the Discord server."));
+            } else {
+                long id = discordId.get().getAsLong();
+                CompletableFuture.supplyAsync(() -> linking.adminLink(playerName, id)).thenAccept(text ->
+                        server.execute(() -> source.sendSystemMessage(Component.literal(text))));
+            }
+        });
+        return 1;
+    }
+
+    /**
+     * Runs an action with the account linking, or reports that the server is not ready.
+     *
+     * @param context the command context
+     * @param action  the action
+     */
+    private static void withLinking(CommandContext<CommandSourceStack> context, Consumer<Linking> action) {
+        MinecraftDiscordLink.linking().ifPresentOrElse(action, () -> context.getSource()
+                .sendFailure(Component.literal("The account linking is not available right now.")));
+    }
+
+    /**
+     * Creates the receiver of the messages for the command source.
+     *
+     * @param context the command context
+     * @return a receiver sending each message to the command source
+     */
+    private static Consumer<Component> reply(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        return message -> source.sendSystemMessage(message.copy().withStyle(style ->
+                style.getColor() == null ? style.withColor(ChatFormatting.WHITE) : style));
+    }
+}
