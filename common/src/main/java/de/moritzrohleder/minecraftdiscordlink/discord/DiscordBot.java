@@ -4,6 +4,7 @@ import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import net.dv8tion.jda.api.EmbedBuilder;
+import com.neovisionaries.ws.client.WebSocketFactory;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -107,6 +108,7 @@ public final class DiscordBot {
                         .setChunkingFilter(ChunkingFilter.ALL)
                         .enableCache(CacheFlag.EMOJI)
                         .addEventListeners(new ShutdownReasonLogger())
+                        .setWebsocketFactory(webSocketFactory())
                         .build();
                 jda.awaitReady();
                 setUpFeatures();
@@ -119,6 +121,22 @@ public final class DiscordBot {
                 Constants.LOG.error("Could not connect to Discord: {}", e.getMessage());
             }
         });
+    }
+
+    /**
+     * Creates the factory for the gateway connection. HTTP requests of JDA use the JVM's proxy settings
+     * automatically, the WebSocket library does not; so an HTTPS proxy configured with the system properties
+     * {@code https.proxyHost} and {@code https.proxyPort} is applied to it as well.
+     *
+     * @return the WebSocket factory
+     */
+    private static WebSocketFactory webSocketFactory() {
+        WebSocketFactory factory = new WebSocketFactory();
+        String proxyHost = System.getProperty("https.proxyHost");
+        if (proxyHost != null && !proxyHost.isBlank()) {
+            factory.getProxySettings().setHost(proxyHost).setPort(Integer.getInteger("https.proxyPort", 443));
+        }
+        return factory;
     }
 
     /**

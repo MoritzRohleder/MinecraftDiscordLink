@@ -33,9 +33,8 @@ class DiscordTextTest {
 
     @Test
     void sanitizesWebhookNames() {
-        String name = DiscordText.webhookName("Steve (DiscordFan)");
-
-        assertEquals("Steve (D\u200BiscordFan)", name);
+        assertEquals("Steve (Disc\u00B7ordFan)", DiscordText.webhookName("Steve (DiscordFan)"));
+        assertEquals("CLY\u00B7DE", DiscordText.webhookName("CLYDE"));
         assertTrue(DiscordText.webhookName("x".repeat(100)).length() <= 80);
     }
 

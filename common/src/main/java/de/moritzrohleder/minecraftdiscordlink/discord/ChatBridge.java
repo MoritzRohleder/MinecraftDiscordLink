@@ -17,6 +17,7 @@ import net.dv8tion.jda.api.entities.channel.attribute.IWebhookContainer;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import net.dv8tion.jda.api.entities.emoji.RichCustomEmoji;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
+import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -47,8 +48,11 @@ import static net.dv8tion.jda.api.entities.Message.MentionType;
  */
 public final class ChatBridge extends ListenerAdapter {
 
-    /** Name of the webhook the bot creates for {@code webhook = "auto"}. */
-    static final String WEBHOOK_NAME = Constants.MOD_NAME;
+    /**
+     * Name of the webhook the bot creates for {@code webhook = "auto"}. Discord does not allow "discord" in webhook
+     * names; the name is not shown in messages, as each message sets its own name.
+     */
+    static final String WEBHOOK_NAME = "Minecraft Chat Bridge";
 
     /** Mentions that may ping: only users. */
     private static final EnumSet<MentionType> ALLOWED_MENTIONS = EnumSet.of(MentionType.USER);
@@ -112,9 +116,13 @@ public final class ChatBridge extends ListenerAdapter {
                 }
             }
             return container.createWebhook(WEBHOOK_NAME).complete();
+        } catch (InsufficientPermissionException e) {
+            Constants.LOG.error("Could not set up the chat webhook: the bot needs the 'Manage Webhooks' permission "
+                    + "in the chat channel. Plain bot messages are used.");
+            return null;
         } catch (RuntimeException e) {
-            Constants.LOG.error("Could not set up the chat webhook ({}). The bot needs the 'Manage Webhooks' "
-                    + "permission in the chat channel. Plain bot messages are used.", e.getMessage());
+            Constants.LOG.error("Could not set up the chat webhook ({}). Plain bot messages are used.",
+                    e.getMessage());
             return null;
         }
     }
@@ -152,20 +160,26 @@ public final class ChatBridge extends ListenerAdapter {
         } else {
             String formatted = Placeholders.resolve(config.discordFormat(),
                     Map.of("player", DiscordText.escape(name), "message", text));
-            sendBotMessage(formatted);
+            channel.sendMessage(limit(formatted)).setAllowedMentions(ALLOWED_MENTIONS)
+                    .queue(null, this::logSendError);
         }
     }
 
     /**
-     * Sends a message as the bot itself, e.g. for {@code /say} from the console.
+     * Sends a message as the bot itself, e.g. for {@code /say} from the console. Emojis and mentions are converted
+     * like in player messages.
      *
-     * @param text the message, already in Discord format
+     * @param text the message; Discord Markdown is kept
      */
     public void sendBotMessage(String text) {
-        if (!active || text.isBlank()) {
+        if (!active) {
             return;
         }
-        channel.sendMessage(limit(text)).setAllowedMentions(ALLOWED_MENTIONS).queue(null, this::logSendError);
+        String converted = limit(toDiscord(text));
+        if (converted.isBlank()) {
+            return;
+        }
+        channel.sendMessage(converted).setAllowedMentions(ALLOWED_MENTIONS).queue(null, this::logSendError);
     }
 
     /**

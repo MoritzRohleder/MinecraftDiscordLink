@@ -26,10 +26,13 @@ public final class DiscordText {
     private static final Pattern SHORTCODE = Pattern.compile(":([A-Za-z0-9_]{2,32}):");
     /** A mention such as {@code @steve}, not preceded by a word character (e.g. in e-mail addresses). */
     private static final Pattern MENTION = Pattern.compile("(?<![\\w@<])@([\\w.]{2,32})");
-    /** Words Discord does not allow in webhook names. */
-    private static final Pattern FORBIDDEN_WEBHOOK_WORDS = Pattern.compile("(?i)(d)(iscord)|(c)(lyde)");
-    /** A zero-width space, used to break up forbidden words in webhook names. */
-    private static final String ZERO_WIDTH_SPACE = "​";
+    /** Words Discord does not allow in webhook names, split where a separator is inserted. */
+    private static final Pattern FORBIDDEN_WEBHOOK_WORDS = Pattern.compile("(?i)(disc)(ord)|(cly)(de)");
+    /**
+     * A middle dot, used to break up forbidden words in webhook names. Discord also detects invisible characters and
+     * look-alike letters, but accepts a visible separator.
+     */
+    private static final String SEPARATOR = "\u00B7";
     /** Discord's maximum length of a webhook name. */
     private static final int MAX_WEBHOOK_NAME_LENGTH = 80;
 
@@ -92,16 +95,16 @@ public final class DiscordText {
 
     /**
      * Makes a name usable as webhook name: Discord rejects names containing "discord" or "clyde" and names longer
-     * than 80 characters.
+     * than 80 characters. Forbidden words get a middle dot, e.g. {@code Disc·ord}.
      *
      * @param name the wanted name
-     * @return a name Discord accepts, looking the same as {@code name}
+     * @return a name Discord accepts, as close to {@code name} as possible
      */
     public static String webhookName(String name) {
         String sanitized = FORBIDDEN_WEBHOOK_WORDS.matcher(name)
                 .replaceAll(match -> Matcher.quoteReplacement(match.group(1) != null
-                        ? match.group(1) + ZERO_WIDTH_SPACE + match.group(2)
-                        : match.group(3) + ZERO_WIDTH_SPACE + match.group(4)));
+                        ? match.group(1) + SEPARATOR + match.group(2)
+                        : match.group(3) + SEPARATOR + match.group(4)));
         return sanitized.length() > MAX_WEBHOOK_NAME_LENGTH
                 ? sanitized.substring(0, MAX_WEBHOOK_NAME_LENGTH)
                 : sanitized;
