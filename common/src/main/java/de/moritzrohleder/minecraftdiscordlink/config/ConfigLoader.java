@@ -113,7 +113,8 @@ public final class ConfigLoader {
         entry("chat.topic.interval_minutes", 10, comment(
                 "Minutes between topic updates. Minimum: 5 (Discord allows about 2 changes per 10 minutes)."));
         entry("chat.topic.format",
-                "{online}/{max} online | {unique_today} players today | Uptime: {uptime} | Last updated: {last_updated}",
+                "{online}/{max} online | {unique_today} players today | Uptime: {uptime} "
+                        + "| Last updated: {last_updated}",
                 PLACEHOLDERS);
 
         section("console", comment(

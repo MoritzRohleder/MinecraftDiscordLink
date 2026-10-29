@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
+import de.moritzrohleder.minecraftdiscordlink.info.InfoText;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
 import net.minecraft.ChatFormatting;
@@ -25,6 +26,8 @@ import java.util.function.Consumer;
  *     <li>{@code /discord link <discordname>}: sends a link code to the Discord user by DM</li>
  *     <li>{@code /discord confirm <code>}: completes the link with the code</li>
  *     <li>{@code /discord unlink}: removes the own link</li>
+ *     <li>{@code /discord whois <name>}: shows the account linked to a Minecraft or Discord name</li>
+ *     <li>{@code /discord reload}: reloads the config (admins only)</li>
  *     <li>{@code /discord admin link <player> <discordname>}: links accounts manually (admins only)</li>
  * </ul>
  * Admins are operators of level 4 or players with the permission node {@code minecraftdiscordlink.admin}.
@@ -49,6 +52,12 @@ public final class DiscordCommand {
                                 .executes(DiscordCommand::confirm)))
                 .then(Commands.literal("unlink")
                         .executes(DiscordCommand::unlink))
+                .then(Commands.literal("whois")
+                        .then(Commands.argument("name", StringArgumentType.word())
+                                .executes(DiscordCommand::whois)))
+                .then(Commands.literal("reload")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .executes(DiscordCommand::reload))
                 .then(Commands.literal("admin")
                         .requires(Services.PLATFORM::isAdmin)
                         .then(Commands.literal("link")
@@ -95,6 +104,35 @@ public final class DiscordCommand {
     private static int unlink(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         ServerPlayer player = context.getSource().getPlayerOrException();
         withLinking(context, linking -> linking.unlink(player, reply(context)));
+        return 1;
+    }
+
+    /**
+     * Runs {@code /discord whois <name>}. Looking up the name may contact Mojang, so this runs in the background
+     * and answers on the server thread.
+     *
+     * @param context the command context
+     * @return the command result
+     */
+    private static int whois(CommandContext<CommandSourceStack> context) {
+        String name = StringArgumentType.getString(context, "name");
+        CommandSourceStack source = context.getSource();
+        MinecraftServer server = source.getServer();
+        withLinking(context, linking -> CompletableFuture
+                .supplyAsync(() -> InfoText.whois(name, linking.whois(name), false))
+                .thenAccept(text -> server.execute(() -> source.sendSystemMessage(Component.literal(text)))));
+        return 1;
+    }
+
+    /**
+     * Runs {@code /discord reload}.
+     *
+     * @param context the command context
+     * @return the command result
+     */
+    private static int reload(CommandContext<CommandSourceStack> context) {
+        String result = MinecraftDiscordLink.reloadConfig();
+        context.getSource().sendSuccess(() -> Component.literal(result), true);
         return 1;
     }
 

@@ -5,6 +5,7 @@ import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.discord.AccountLinking;
+import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
 import de.moritzrohleder.minecraftdiscordlink.text.Placeholders;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -15,6 +16,8 @@ import net.minecraft.server.players.PlayerList;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -216,6 +219,62 @@ public final class Linking {
         }
         onUnlinked(player.get(), discordId);
         return "Your Discord account is no longer linked to **" + playerName(player.get()) + "**.";
+    }
+
+    // ---- Whois ----
+
+    /**
+     * Looks up a name as Minecraft name and as Discord name ({@code whois}). Minecraft names only count if the player
+     * has played on this server or is linked. If the name matches different people on both sides, all of them are
+     * returned. Looking up the Minecraft name may contact Mojang, so this must not run on
+     * the server thread.
+     *
+     * @param name the Minecraft or Discord name
+     * @return the matching accounts with their links, empty if nothing matches
+     */
+    public List<WhoisEntry> whois(String name) {
+        List<WhoisEntry> entries = new ArrayList<>();
+        Optional<AccountLinking> bot = discord.get();
+        server.getProfileCache().get(name).ifPresent(profile -> {
+            OptionalLong discordId = links.discordId(profile.getId());
+            if (discordId.isEmpty() && !ServerInfo.hasPlayed(server, profile.getId())) {
+                // Any Minecraft account exists for Mojang, but only players of this server are of interest
+                return;
+            }
+            entries.add(new WhoisEntry(Optional.of(profile.getName()), discordId,
+                    discordId.isPresent() ? bot.flatMap(b -> b.username(discordId.getAsLong())) : Optional.empty()));
+        });
+        bot.ifPresent(b -> {
+            for (long discordId : b.findMembersByName(name)) {
+                boolean known = entries.stream()
+                        .anyMatch(entry -> entry.discordId().equals(OptionalLong.of(discordId)));
+                if (!known) {
+                    Optional<String> minecraftName = links.player(discordId).map(this::playerName);
+                    entries.add(new WhoisEntry(minecraftName, OptionalLong.of(discordId), b.username(discordId)));
+                }
+            }
+        });
+        return entries;
+    }
+
+    /**
+     * An account found by {@link #whois(String)}, with the linked account on the other side if any.
+     *
+     * @param minecraftName   the Minecraft name, empty for an unlinked Discord user
+     * @param discordId       the Discord user's ID, empty for an unlinked Minecraft account
+     * @param discordUsername the Discord username, empty if unknown
+     */
+    public record WhoisEntry(Optional<String> minecraftName, OptionalLong discordId,
+                             Optional<String> discordUsername) {
+
+        /**
+         * Checks whether the accounts are linked.
+         *
+         * @return whether both sides are known
+         */
+        public boolean linked() {
+            return minecraftName.isPresent() && discordId.isPresent();
+        }
     }
 
     // ---- Whitelist ----

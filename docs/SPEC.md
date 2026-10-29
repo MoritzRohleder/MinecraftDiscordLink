@@ -141,8 +141,12 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mcadmin link <player> <user>` | Administrator | Link accounts manually |
 | `/mcadmin reload` | Administrator | Reload config |
 
-`whois` searches Minecraft and Discord names. If a name matches different
-people on both sides, both results are shown.
+`whois` searches Minecraft and Discord names. Minecraft names only count for
+players who have played on the server or are linked. If a name matches
+different people on both sides, both results are shown.
+
+`reload` reloads everything except the bot token and the channel IDs; the
+answer says so if one of them changed.
 
 Administrator = Discord role with the *Administrator* permission. Enforced by
 Discord itself on `/mcadmin` (`default_member_permissions`); server admins can adjust it in

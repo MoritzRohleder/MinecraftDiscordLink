@@ -85,6 +85,35 @@ public final class AccountLinking extends ListenerAdapter {
     }
 
     /**
+     * Finds members by name: by username first, otherwise by display name (nickname or global display name), both
+     * ignoring case.
+     *
+     * @param name the name, with or without leading {@code @}
+     * @return the IDs of the matching members, empty if none
+     */
+    public List<Long> findMembersByName(String name) {
+        String search = name.startsWith("@") ? name.substring(1) : name;
+        OptionalLong byUsername = findMember(search);
+        if (byUsername.isPresent()) {
+            return List.of(byUsername.getAsLong());
+        }
+        return guild.getMemberCache().stream()
+                .filter(member -> member.getEffectiveName().equalsIgnoreCase(search))
+                .map(Member::getIdLong)
+                .toList();
+    }
+
+    /**
+     * Returns the username of a member.
+     *
+     * @param discordId the member's ID
+     * @return the username, empty if the user is not a member of the Discord server
+     */
+    public Optional<String> username(long discordId) {
+        return Optional.ofNullable(guild.getMemberById(discordId)).map(member -> member.getUser().getName());
+    }
+
+    /**
      * Returns the roles of a member.
      *
      * @param discordId the member's ID

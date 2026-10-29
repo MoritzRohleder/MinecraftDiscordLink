@@ -61,6 +61,8 @@ public final class MinecraftDiscordLink {
     private static PlayerStats stats;
     /** The account linking, {@code null} while the server is not running. */
     private static Linking linking;
+    /** When the server was started, {@code null} while the server is not running. */
+    private static Instant startTime;
 
     private MinecraftDiscordLink() {
     }
@@ -80,6 +82,7 @@ public final class MinecraftDiscordLink {
      * @param server the starting server
      */
     public static void onServerStarting(MinecraftServer server) {
+        startTime = Instant.now();
         Path dataDirectory = server.getServerDirectory().resolve(Constants.MOD_ID);
         stats = new PlayerStats(dataDirectory, Clock.systemDefaultZone());
         linking = new Linking(server, dataDirectory, MinecraftDiscordLink::accountLinking);
@@ -90,7 +93,7 @@ public final class MinecraftDiscordLink {
                 // Captured from the start, so the console channel also shows the server start
                 ConsoleCapture.install();
             }
-            bot = new DiscordBot(token, config, server, Instant.now(), stats, linking, state);
+            bot = new DiscordBot(token, config, server, startTime, stats, linking, state);
             bot.connect();
         });
     }
@@ -108,12 +111,27 @@ public final class MinecraftDiscordLink {
 
     /**
      * Reloads the config and applies it to the running bot. Token and channel IDs stay unchanged until a restart.
+     * Must be called on the server thread.
+     *
+     * @return the result message for the user who reloaded
      */
-    public static void reloadConfig() {
-        ConfigManager.reload();
+    public static String reloadConfig() {
+        boolean restartNeeded = ConfigManager.reload();
         if (bot != null) {
             bot.onConfigReloaded();
         }
+        return restartNeeded
+                ? "Config reloaded. Changes to the bot token and the channel IDs need a server restart."
+                : "Config reloaded.";
+    }
+
+    /**
+     * Returns when the server was started.
+     *
+     * @return the start time, the current time while the server is not running
+     */
+    public static Instant startTime() {
+        return startTime != null ? startTime : Instant.now();
     }
 
     /**

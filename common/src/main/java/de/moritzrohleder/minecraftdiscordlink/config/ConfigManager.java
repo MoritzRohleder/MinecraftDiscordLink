@@ -46,14 +46,17 @@ public final class ConfigManager {
     /**
      * Reloads the config file. Changes to the token or the channel IDs are logged and ignored until the next
      * restart.
+     *
+     * @return whether the token or a channel ID changed, which needs a restart
      */
-    public static void reload() {
+    public static boolean reload() {
         ModConfig current = get();
         ModConfig loaded = ConfigLoader.load(file);
 
-        if (!loaded.discord().token().equals(current.discord().token())
+        boolean restartNeeded = !loaded.discord().token().equals(current.discord().token())
                 || !loaded.chat().channelId().equals(current.chat().channelId())
-                || !loaded.console().channelId().equals(current.console().channelId())) {
+                || !loaded.console().channelId().equals(current.console().channelId());
+        if (restartNeeded) {
             Constants.LOG.warn("The bot token and the channel IDs are only applied after a server restart.");
         }
 
@@ -75,5 +78,6 @@ public final class ConfigManager {
                 loaded.whitelist(),
                 loaded.linking());
         Constants.LOG.info("Config reloaded");
+        return restartNeeded;
     }
 }
