@@ -5,6 +5,7 @@ import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.discord.ChatBridge;
 import de.moritzrohleder.minecraftdiscordlink.discord.DiscordBot;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
+import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.DisplayInfo;
@@ -19,6 +20,7 @@ import net.minecraft.world.scores.Team;
 import org.jetbrains.annotations.Nullable;
 
 import java.awt.Color;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,6 +48,8 @@ public final class MinecraftDiscordLink {
 
     /** The Discord bot, {@code null} while the server is not running or the mod is inactive. */
     private static DiscordBot bot;
+    /** The player statistics, {@code null} while the server is not running. */
+    private static PlayerStats stats;
 
     private MinecraftDiscordLink() {
     }
@@ -59,14 +63,16 @@ public final class MinecraftDiscordLink {
     }
 
     /**
-     * Called when the server is starting. Starts connecting to Discord in the background if a token is configured.
+     * Called when the server is starting. Loads the player statistics and starts connecting to Discord in the
+     * background if a token is configured.
      *
      * @param server the starting server
      */
     public static void onServerStarting(MinecraftServer server) {
+        stats = new PlayerStats(server.getServerDirectory().resolve(Constants.MOD_ID), Clock.systemDefaultZone());
         ModConfig config = ConfigManager.get();
         config.discord().token().ifPresent(token -> {
-            bot = new DiscordBot(token, config, server, Instant.now());
+            bot = new DiscordBot(token, config, server, Instant.now(), stats);
             bot.connect();
         });
     }
@@ -129,11 +135,15 @@ public final class MinecraftDiscordLink {
     }
 
     /**
-     * Called when a player has joined the server.
+     * Called when a player has joined the server. Records the player in the statistics and reports the join.
      *
      * @param player the player
      */
     public static void onPlayerJoin(ServerPlayer player) {
+        if (stats != null) {
+            stats.recordJoin(player.getUUID(),
+                    player.server.getPlayerList().getPlayers().stream().map(ServerPlayer::getUUID).toList());
+        }
         if (ConfigManager.get().chat().events().join()) {
             sendPlayerEvent(player, INBOX_TRAY + " **" + DiscordText.escape(playerName(player)) + "** joined the game",
                     GREEN);

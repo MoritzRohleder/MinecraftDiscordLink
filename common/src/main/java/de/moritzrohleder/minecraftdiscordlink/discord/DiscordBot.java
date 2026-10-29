@@ -3,12 +3,14 @@ package de.moritzrohleder.minecraftdiscordlink.discord;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import net.dv8tion.jda.api.EmbedBuilder;
 import com.neovisionaries.ws.client.WebSocketFactory;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
+import net.dv8tion.jda.api.entities.channel.middleman.StandardGuildMessageChannel;
 import net.dv8tion.jda.api.events.session.ShutdownEvent;
 import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -64,6 +66,7 @@ public final class DiscordBot {
     private final OptionalLong consoleChannelId;
     private final MinecraftServer server;
     private final Instant startTime;
+    private final PlayerStats stats;
     private final ScheduledExecutorService executor;
 
     /** The bot, set as soon as it is built. */
@@ -82,13 +85,15 @@ public final class DiscordBot {
      * @param config    the config at server start, for the channel IDs
      * @param server    the starting server
      * @param startTime when the server was started, for {@code {uptime}}
+     * @param stats     the player statistics, for the unique player placeholders
      */
-    public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime) {
+    public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime, PlayerStats stats) {
         this.token = token;
         this.chatChannelId = config.chat().channelId();
         this.consoleChannelId = config.console().channelId();
         this.server = server;
         this.startTime = startTime;
+        this.stats = stats;
         this.executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, Constants.MOD_NAME + " Discord");
             thread.setDaemon(true);
@@ -176,14 +181,22 @@ public final class DiscordBot {
     }
 
     /**
-     * Starts the features that need both a ready bot and a started server.
+     * Starts the features that need both a ready bot and a started server: the start message, the bot status and
+     * the channel topic.
      */
     private void start() {
         if (ConfigManager.get().chat().events().serverStart()) {
             chatChannel().ifPresent(channel -> channel.sendMessageEmbeds(
                     embed("✅ Server started", GREEN)).queue(null, this::logSendError));
         }
-        new StatusUpdater(jda, server, startTime, executor).start();
+        new StatusUpdater(jda, server, startTime, stats, executor).start();
+        chatChannel().ifPresent(channel -> {
+            if (channel instanceof StandardGuildMessageChannel topicChannel) {
+                new TopicUpdater(topicChannel, server, startTime, stats, executor).start();
+            } else {
+                Constants.LOG.error("The chat channel has no topic. The topic updates stay inactive.");
+            }
+        });
     }
 
     /**

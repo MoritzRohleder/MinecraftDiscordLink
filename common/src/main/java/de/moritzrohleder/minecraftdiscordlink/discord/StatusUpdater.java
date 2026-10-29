@@ -1,34 +1,27 @@
 package de.moritzrohleder.minecraftdiscordlink.discord;
 
-import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.Placeholders;
-import de.moritzrohleder.minecraftdiscordlink.text.ServerPlaceholders;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.Activity;
 import net.minecraft.server.MinecraftServer;
 
 import java.time.Instant;
-import java.util.concurrent.RejectedExecutionException;
+import java.util.Map;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
- * Periodically updates the bot's activity ("status") from {@code [discord.status]}.
- * <p>
- * The config is read again before every update, so changes from a reload apply from the next update on, including
- * the interval. A disabled status removes the activity.
+ * Periodically updates the bot's activity ("status") from {@code [discord.status]}. A disabled status removes the
+ * activity.
  */
-final class StatusUpdater {
+final class StatusUpdater extends PeriodicUpdater {
 
     /** Discord's maximum length of an activity text. */
     private static final int MAX_LENGTH = 128;
 
     private final JDA jda;
-    private final MinecraftServer server;
-    private final Instant startTime;
-    private final ScheduledExecutorService executor;
 
     /**
      * Creates a status updater; call {@link #start()} to begin.
@@ -36,48 +29,35 @@ final class StatusUpdater {
      * @param jda       the connected bot
      * @param server    the running server, for the placeholders
      * @param startTime when the server was started, for {@code {uptime}}
+     * @param stats     the player statistics, for the unique player placeholders
      * @param executor  executor running the updates
      */
-    StatusUpdater(JDA jda, MinecraftServer server, Instant startTime, ScheduledExecutorService executor) {
+    StatusUpdater(JDA jda, MinecraftServer server, Instant startTime, PlayerStats stats,
+                  ScheduledExecutorService executor) {
+        super(server, startTime, stats, executor);
         this.jda = jda;
-        this.server = server;
-        this.startTime = startTime;
-        this.executor = executor;
     }
 
-    /**
-     * Updates the status now and schedules the following updates.
-     */
-    void start() {
-        update();
+    @Override
+    protected int intervalMinutes() {
+        return ConfigManager.get().discord().status().intervalMinutes();
     }
 
-    /**
-     * Updates the status and schedules the next update. Stops silently once the executor is shut down.
-     */
-    private void update() {
+    @Override
+    protected void update(Map<String, String> placeholders) {
         ModConfig.Status config = ConfigManager.get().discord().status();
-        try {
-            jda.getPresence().setActivity(config.enabled() ? activity(config) : null);
-        } catch (RuntimeException e) {
-            Constants.LOG.error("Could not update the bot status: {}", e.getMessage());
-        }
-
-        try {
-            executor.schedule(this::update, config.intervalMinutes(), TimeUnit.MINUTES);
-        } catch (RejectedExecutionException ignored) {
-            // The bot is shutting down
-        }
+        jda.getPresence().setActivity(config.enabled() ? activity(config, placeholders) : null);
     }
 
     /**
      * Creates the activity from the configured type and format.
      *
-     * @param config the status settings
+     * @param config       the status settings
+     * @param placeholders the current placeholder values
      * @return the activity, or {@code null} if the resolved text is blank
      */
-    private Activity activity(ModConfig.Status config) {
-        String text = Placeholders.resolve(config.format(), ServerPlaceholders.values(server, startTime)).strip();
+    private static Activity activity(ModConfig.Status config, Map<String, String> placeholders) {
+        String text = Placeholders.resolve(config.format(), placeholders).strip();
         if (text.isEmpty()) {
             return null;
         }
