@@ -14,7 +14,13 @@ class ConsoleFormatTest {
         String line = ConsoleFormat.line(0, "INFO", "\u001B[32m<_Steve_> **hi**\u001B[0m \u00A7aGreen");
 
         assertTrue(line.matches("`\\d\\d:\\d\\d:\\d\\d` \\*\\*INFO\\*\\* .*"), line);
-        assertTrue(line.endsWith("<\\_Steve\\_> \\*\\*hi\\*\\* Green"), line);
+        assertTrue(line.endsWith("\\<\\_Steve\\_\\> \\*\\*hi\\*\\* Green"), line);
+    }
+
+    @Test
+    void escapesUnpairedMarkdown() {
+        assertEquals("\\*\\*\\*\\* SERVER IS RUNNING", ConsoleFormat.escape("**** SERVER IS RUNNING"));
+        assertEquals("\\# not a heading \\<@123\\> a\\\\b", ConsoleFormat.escape("# not a heading <@123> a\\b"));
     }
 
     @Test

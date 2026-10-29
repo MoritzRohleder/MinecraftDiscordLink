@@ -1,7 +1,5 @@
 package de.moritzrohleder.minecraftdiscordlink.console;
 
-import net.dv8tion.jda.api.utils.MarkdownSanitizer;
-
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -21,6 +19,11 @@ public final class ConsoleFormat {
     public static final int MAX_MESSAGE_LENGTH = 2000;
 
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
+    /**
+     * Characters with a meaning in Discord Markdown or mentions. Each one is escaped with a backslash, which Discord
+     * hides; escaping only matching pairs is not enough, e.g. {@code ****} would still start bold text.
+     */
+    private static final Pattern MARKDOWN = Pattern.compile("[\\\\*_~`|>#\\-\\[\\]()<:]");
     /** ANSI escape sequences (terminal colors) and Minecraft formatting codes ({@code §a}). */
     private static final Pattern COLOR_CODES = Pattern.compile("\u001B\\[[0-9;]*[A-Za-z]|§[0-9a-fk-orA-FK-OR]");
 
@@ -38,7 +41,17 @@ public final class ConsoleFormat {
     public static String line(long timeMillis, String level, String message) {
         String time = TIME.format(Instant.ofEpochMilli(timeMillis).atZone(ZoneId.systemDefault()));
         String clean = COLOR_CODES.matcher(message).replaceAll("");
-        return "`" + time + "` **" + level + "** " + MarkdownSanitizer.escape(clean);
+        return "`" + time + "` **" + level + "** " + escape(clean);
+    }
+
+    /**
+     * Escapes all Markdown characters, so Discord shows a text exactly as written.
+     *
+     * @param text the text
+     * @return the escaped text
+     */
+    static String escape(String text) {
+        return MARKDOWN.matcher(text).replaceAll("\\\\$0");
     }
 
     /**
