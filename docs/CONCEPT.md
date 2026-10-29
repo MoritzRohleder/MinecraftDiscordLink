@@ -134,19 +134,39 @@ connected:
 
 - [ ] Final list of topic placeholders (spec)
 
-## Next features (agreed in principle, details open)
+## Next features
 
-- **Monitoring channel** – a third, read-only/admin-only channel with:
-  lag warnings, crash notices, a daily report and a persistent status message.
-- **Role synchronization** – configurable pairs of Discord roles and Minecraft
-  roles that are kept in sync; off without pairs.
-- **Bans across both sides** – opt-in, not default.
-- **Notifications** – per-player settings, e.g. a DM when a friend comes online.
-- **Leaderboards** – slash commands with rankings from the vanilla statistics.
-- **whois** – additionally shows when a player was last online.
-- **Moderation commands** – kick, ban, whitelist etc. as slash commands.
-- **Maintenance mode** – only admins may join, announced in Discord.
-- **Several Minecraft servers in one Discord server.**
+- **Monitoring channel** – a third, read-only/admin-only channel
+  (`monitoring.channel_id`), shared by all servers:
+  - Lag warning below a TPS threshold for a duration (default 15 TPS for
+    60 s), all-clear when the lag is over, cooldown between warnings
+    (default 5 minutes); all configurable.
+  - Crash notice with the reason and the last log lines (a killed process
+    cannot be reported).
+  - Daily report with placeholders (default: distinct players, new players,
+    peak players, total play time, top 3), default at midnight, time
+    configurable.
+  - Persistent status message, edited at a configurable interval, content
+    configurable with placeholders (default: status and player list).
+- **Bans across both sides** – opt-in, bidirectional; configurable whether a
+  Minecraft ban bans or only kicks from Discord.
+- **Notifications** – subscription system: Discord users subscribe to events
+  (server start, server stop, …) or to players coming online and get a DM.
+- **Leaderboards** – configurable rankings from the vanilla statistics,
+  default play time and deaths.
+- **whois** – additionally shows "last online", recorded by the mod on every
+  leave ("online now" for online players, "unknown" for older data).
+- **Moderation commands** – `/mcadmin kick <player> [reason]`,
+  `/mcadmin ban <player> [reason]`, `/mcadmin unban <player>`,
+  `/mcadmin whitelist add|remove <player>`.
+- **Maintenance mode** – bidirectional commands (Discord and Minecraft), a
+  temporary whitelist: only operators and linked Discord admins may join.
+  Whether it survives a restart is a parameter of the command. Shown in the
+  channel topic.
+- **Several Minecraft servers in one Discord server** – one bot, a chat and
+  a console channel per server, one shared monitoring channel.
+
+Postponed: role synchronization (depends on the permission mod used).
 
 ## Later
 
