@@ -271,7 +271,19 @@ because both can change.
 
 Pending link codes are kept in memory only and are lost on restart.
 
-## 5a. Linked role
+## 5a. Account linking and whitelist details
+
+- Codes: six characters without easily confused ones, case-insensitive.
+- One Discord account is linked to at most one Minecraft account and vice versa.
+- Discord whitelist on login: operators and players on the vanilla whitelist
+  may always join. Bans take priority and keep their message.
+- Kick messages: unlinked players get the message with a link code; linked
+  players without a whitelisted role, and everyone while Discord is
+  unavailable, get "You are not whitelisted on this server."
+- Mention suggestions: players get the usernames of all Discord members as
+  chat suggestions (`@` + Tab), updated when members join or leave.
+
+## 5b. Linked role
 
 - Members with a linked account get the linked role, it is removed on unlink.
   The role always reflects the current links.
