@@ -17,6 +17,8 @@ public final class EmbedColors {
     public static final Color GOLD = new Color(0xF1C40F);
     /** Neutral information, e.g. an account that is not linked. */
     public static final Color GRAY = new Color(0x99AAB5);
+    /** Whitelist changes in the moderation log. */
+    public static final Color BLUE = new Color(0x3498DB);
     /** Informational answers. */
     public static final Color BLURPLE = new Color(0x5865F2);
     /** Deaths. Almost black: Discord shows an embed with color 0 without a color bar. */

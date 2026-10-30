@@ -10,6 +10,9 @@ import de.moritzrohleder.minecraftdiscordlink.discord.ChatBridge;
 import de.moritzrohleder.minecraftdiscordlink.discord.DiscordBot;
 import de.moritzrohleder.minecraftdiscordlink.discord.EmbedColors;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.moderation.DiscordModeration;
+import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
+import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationLog;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
@@ -22,6 +25,8 @@ import net.minecraft.network.chat.PlayerChatMessage;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.StoredUserEntry;
+import net.minecraft.server.players.StoredUserList;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.scores.Team;
 import org.jetbrains.annotations.Nullable;
@@ -30,10 +35,14 @@ import java.awt.Color;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Loader independent entry point, lifecycle and game events of the mod.
@@ -58,6 +67,12 @@ public final class MinecraftDiscordLink {
     private static Linking linking;
     /** When the server was started, {@code null} while the server is not running. */
     private static Instant startTime;
+    /** The moderation, {@code null} while the server is not running. */
+    private static Moderation moderation;
+    /** Whether the server has finished starting; list changes before are loading, not moderation. */
+    private static volatile boolean started;
+    /** Removes expired bans every minute while the server runs. */
+    private static ScheduledExecutorService moderationTimer;
 
     private MinecraftDiscordLink() {
     }
@@ -82,13 +97,15 @@ public final class MinecraftDiscordLink {
         stats = new PlayerStats(dataDirectory, Clock.systemDefaultZone());
         linking = new Linking(server, dataDirectory, MinecraftDiscordLink::accountLinking, stats);
         StateStore state = new StateStore(dataDirectory);
+        moderation = new Moderation(server, new ModerationLog(dataDirectory, ZoneId.systemDefault()), linking,
+                MinecraftDiscordLink::discordModeration);
         ModConfig config = ConfigManager.get();
         config.discord().token().ifPresent(token -> {
             if (config.console().channelId().isPresent()) {
                 // Captured from the start, so the console channel also shows the server start
                 ConsoleCapture.install();
             }
-            bot = new DiscordBot(token, config, server, startTime, stats, linking, state);
+            bot = new DiscordBot(token, config, server, startTime, stats, linking, state, moderation);
             bot.connect();
         });
     }
@@ -99,6 +116,15 @@ public final class MinecraftDiscordLink {
      * @param server the started server
      */
     public static void onServerStarted(MinecraftServer server) {
+        started = true;
+        moderation.removeExpiredBans();
+        moderationTimer = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, Constants.MOD_NAME + " Moderation");
+            thread.setDaemon(true);
+            return thread;
+        });
+        moderationTimer.scheduleAtFixedRate(() -> server.execute(MinecraftDiscordLink::removeExpiredBans),
+                1, 1, TimeUnit.MINUTES);
         if (bot != null) {
             bot.onServerStarted();
         }
@@ -301,10 +327,86 @@ public final class MinecraftDiscordLink {
      * @return whether the player may join
      */
     public static boolean isWhitelisted(GameProfile profile, boolean vanillaAllowed) {
-        if (linking == null || !ConfigManager.get().whitelist().enabled()) {
+        if (linking == null || !ConfigManager.get().whitelist().active()) {
             return vanillaAllowed;
         }
         return linking.isWhitelisted(profile);
+    }
+
+    /**
+     * Returns the moderation.
+     *
+     * @return the moderation, empty while the server is not running
+     */
+    public static Optional<Moderation> moderation() {
+        return Optional.ofNullable(moderation);
+    }
+
+    /**
+     * Removes expired temporary bans, logging them and lifting the Discord bans. Called every minute and by a mixin
+     * before the login checks, as Minecraft itself would remove them silently.
+     */
+    public static void removeExpiredBans() {
+        if (started && moderation != null) {
+            moderation.removeExpiredBans();
+        }
+    }
+
+    /**
+     * Called by a mixin after an entry was added to a vanilla ban or whitelist list.
+     *
+     * @param list  the list
+     * @param entry the new entry
+     */
+    public static void onUserListAdded(StoredUserList<?, ?> list, StoredUserEntry<?> entry) {
+        if (started && moderation != null) {
+            moderation.onAdded(list, entry);
+        }
+    }
+
+    /**
+     * Called by a mixin before an entry is removed from a vanilla ban or whitelist list.
+     *
+     * @param list  the list
+     * @param entry the entry being removed
+     */
+    public static void onUserListRemoved(StoredUserList<?, ?> list, StoredUserEntry<?> entry) {
+        if (started && moderation != null) {
+            moderation.onRemoved(list, entry);
+        }
+    }
+
+    /**
+     * Called by a mixin when the vanilla whitelist is switched on or off.
+     *
+     * @param on whether it is switched on
+     */
+    public static void onWhitelistSwitched(boolean on) {
+        if (started && moderation != null) {
+            moderation.onWhitelistSwitched(on);
+        }
+    }
+
+    /**
+     * Called by a mixin when the vanilla {@code /kick} command kicks a player.
+     *
+     * @param moderator who ran the command
+     * @param player    the kicked player
+     * @param reason    the reason
+     */
+    public static void onVanillaKick(String moderator, ServerPlayer player, String reason) {
+        if (started && moderation != null) {
+            moderation.onVanillaKick(moderator, player, reason);
+        }
+    }
+
+    /**
+     * Returns the Discord side of the moderation.
+     *
+     * @return the ban sync, empty while the bot is not ready
+     */
+    private static Optional<DiscordModeration> discordModeration() {
+        return bot != null ? bot.moderation() : Optional.empty();
     }
 
     /**
@@ -342,6 +444,11 @@ public final class MinecraftDiscordLink {
      * @param server the stopping server
      */
     public static void onServerStopping(MinecraftServer server) {
+        started = false;
+        if (moderationTimer != null) {
+            moderationTimer.shutdownNow();
+            moderationTimer = null;
+        }
         if (bot != null) {
             bot.shutdown();
             bot = null;

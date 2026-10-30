@@ -1,11 +1,13 @@
 package de.moritzrohleder.minecraftdiscordlink.discord;
 
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
+import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Leaderboards.Category;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Ranking;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.Reply;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.WhoisEntry;
+import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -165,6 +167,77 @@ final class CommandEmbeds {
                 .setFooter("Ranked among " + players(players))
                 .setColor(EmbedColors.BLURPLE)
                 .build();
+    }
+
+    /**
+     * Builds the answer of {@code /mcadmin banlist}: one ban per line with source, end and reason.
+     *
+     * @param bans the bans
+     * @return the embed
+     */
+    static MessageEmbed banlist(List<Moderation.Ban> bans) {
+        EmbedBuilder embed = new EmbedBuilder().setTitle("🔨 " + players(bans.size()) + " banned");
+        if (bans.isEmpty()) {
+            return embed.setDescription("Nobody is banned.").setColor(EmbedColors.GRAY).build();
+        }
+        List<String> lines = bans.stream()
+                .map(ban -> "**" + DiscordText.escape(ban.player()) + "** · by " + DiscordText.escape(ban.source())
+                        + " · " + ban.until().map(end -> "until <t:" + end.getEpochSecond() + ":f>")
+                        .orElse("permanent")
+                        + " · " + DiscordText.escape(ban.reason()))
+                .toList();
+        return embed.setDescription(limitLines(lines)).setColor(EmbedColors.RED).build();
+    }
+
+    /**
+     * Builds the answer of {@code /mcadmin whitelist list}.
+     *
+     * @param players the whitelisted players
+     * @param on      whether the whitelist is on
+     * @return the embed
+     */
+    static MessageEmbed whitelist(List<String> players, boolean on) {
+        EmbedBuilder embed = new EmbedBuilder()
+                .setTitle("📋 Whitelist " + (on ? "on" : "off") + " · " + players(players.size()));
+        if (players.isEmpty()) {
+            return embed.setDescription("Nobody is whitelisted.").setColor(EmbedColors.GRAY).build();
+        }
+        return embed.setDescription(limitLines(players.stream().map(DiscordText::escape).toList()))
+                .setColor(EmbedColors.BLUE).build();
+    }
+
+    /**
+     * Builds the answer of {@code /mcadmin rolewhitelist status}.
+     *
+     * @param whitelist the role whitelist settings
+     * @return the embed
+     */
+    static MessageEmbed roleWhitelist(ModConfig.Whitelist whitelist) {
+        String state = whitelist.active() ? "on"
+                : whitelist.enabled() ? "on, but inactive without roles"
+                : "off";
+        String roles = whitelist.roleIds().isEmpty() ? "No roles configured."
+                : whitelist.roleIds().stream().map(id -> "<@&" + id + ">").collect(Collectors.joining("\n"));
+        return new EmbedBuilder().setTitle("🛡️ Role whitelist " + state).setDescription(roles)
+                .setColor(whitelist.active() ? EmbedColors.BLUE : EmbedColors.GRAY).build();
+    }
+
+    /**
+     * Joins lines for an embed description, leaving out lines beyond Discord's limit of 4096 characters.
+     *
+     * @param lines the lines
+     * @return the description, ending with "… and N more" if lines were left out
+     */
+    private static String limitLines(List<String> lines) {
+        StringBuilder text = new StringBuilder();
+        for (int i = 0; i < lines.size(); i++) {
+            String more = "\n… and " + (lines.size() - i) + " more";
+            if (text.length() + lines.get(i).length() + 1 + more.length() > MessageEmbed.DESCRIPTION_MAX_LENGTH) {
+                return text.append(more).toString().strip();
+            }
+            text.append(i == 0 ? "" : "\n").append(lines.get(i));
+        }
+        return text.toString();
     }
 
     /**

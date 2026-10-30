@@ -21,6 +21,10 @@ installed on the dedicated server – players don't need it.
 - **Whitelist via Discord** – members with configured roles may join, in
   addition to the vanilla whitelist. Unlinked players get a link code when
   they try to join.
+- **Moderation** – kick, (temporary) ban, unban and whitelist from Discord,
+  temporary bans also in Minecraft. Every moderation action, also from
+  vanilla commands, goes to a moderation log file and optionally a Discord
+  channel. Optional ban sync between Minecraft and linked Discord accounts.
 - **Leaderboards** – rankings from the vanilla statistics (default: play time
   and deaths) and every player's ranks.
 - **Slash commands** – `/mc online`, `/mc status`, `/mc whois`,
@@ -52,7 +56,7 @@ installed on the dedicated server – players don't need it.
 4. Invite the bot with this link (replace `APPLICATION_ID`):
 
    ```
-   https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot+applications.commands&permissions=805391440
+   https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot+applications.commands&permissions=805391574
    ```
 
    | Permission | Used for |
@@ -62,6 +66,7 @@ installed on the dedicated server – players don't need it.
    | Manage Webhooks | Chat messages as the player (`chat.webhook = "auto"`) |
    | Manage Channels | Channel topic of the chat channel |
    | Manage Roles | Linked role (`linking.linked_role`) |
+   | Ban Members, Kick Members, View Audit Log | Ban sync (`moderation.ban_sync`) |
 
    Manage Webhooks and Manage Channels can also be granted on the chat channel
    only. The bot's role must be above the linked role.
@@ -88,6 +93,10 @@ All options are documented in the generated
 | `[[console.permissions]]` | none | Who may run which commands (see below) |
 | `whitelist.role_ids` | `[]` | Roles whitelisted on the server; empty = off |
 | `linking.linked_role` | `"auto"` | Role for linked members: `"auto"`, a role ID or `""` |
+| `whitelist.enabled` | `true` | Role whitelist on/off, also switched by `/mcadmin rolewhitelist` |
+| `moderation.channel_id` | – | Channel for the moderation log (optional) |
+| `moderation.ban_sync.enabled` | `false` | Bans across Minecraft and linked Discord accounts |
+| `moderation.ban_sync.discord_action` | `"ban"` | What a Minecraft ban does in Discord: `"ban"` or `"kick"` |
 | `leaderboard.size` | `10` | Players shown by `/mc top` |
 | `[[leaderboard.categories]]` | play time, deaths | Ranked statistics (see below) |
 
@@ -133,6 +142,8 @@ default.
 | `/discord unlink` | everyone |
 | `/discord whois <name>` | everyone |
 | `/discord admin link <player> <discordname>` | admins |
+| `/discord tempban <player> <duration> <reason>` – e.g. `7d`, `12h`, `1d12h` | admins |
+| `/discord rolewhitelist on <reason>`, `off [reason]`, `status` | admins |
 | `/discord reload` | admins |
 
 Admins are operators of level 4 or players with the permission node
@@ -146,6 +157,8 @@ Admins are operators of level 4 or players with the permission node
 | `/mc top <category>`, `/mc stats <player>` – leaderboards | everyone |
 | `/mc link <code>` – link with the code from the kick message | everyone |
 | `/mc unlink` | everyone |
+| `/mcadmin kick`, `ban [duration]`, `unban`, `banlist` – reason required except for `banlist` | members with *Administrator* |
+| `/mcadmin whitelist add\|remove\|list\|on\|off`, `/mcadmin rolewhitelist on\|off\|add\|remove\|status` | members with *Administrator* |
 | `/mcadmin link <player> <user>`, `/mcadmin reload` | members with *Administrator* (adjustable in the server's integration settings) |
 
 ## Data files

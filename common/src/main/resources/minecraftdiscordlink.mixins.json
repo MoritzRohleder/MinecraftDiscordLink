@@ -6,11 +6,17 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
   "server": [
+    "CommandsMixin",
+    "KickCommandMixin",
+    "MinecraftServerMixin",
     "PlayerAdvancementsMixin",
     "PlayerListLoginMixin",
     "PlayerListMixin",
+    "PlayerListWhitelistMixin",
     "ServerPlayerMixin",
-    "StatAccessor"
+    "StatAccessor",
+    "StoredUserEntryAccessor",
+    "StoredUserListMixin"
   ],
   "injectors": {
     "defaultRequire": 1

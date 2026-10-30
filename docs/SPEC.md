@@ -84,6 +84,8 @@ mode = "blacklist"
 commands = ["stop"]
 
 [whitelist]
+# Whitelist via Discord roles on or off; also switched by /mcadmin rolewhitelist
+enabled = true
 # Members with one of these roles are whitelisted. Empty = feature disabled.
 role_ids = []
 
@@ -151,6 +153,9 @@ order = "lowest"
 | `/discord whois <name>` | everyone | Linked account or "not linked" (Minecraft or Discord name) |
 | `/discord admin link <player> <discordname>` | admin | Link accounts manually |
 | `/discord tempban <player> <duration> <reason>` | admin | Temporary ban, e.g. `/discord tempban Steve 7d Griefing` |
+| `/discord rolewhitelist on <reason>` | admin | Switch the whitelist via Discord roles on |
+| `/discord rolewhitelist off [reason]` | admin | Switch the whitelist via Discord roles off |
+| `/discord rolewhitelist status` | admin | Show whether it is on and its roles |
 | `/discord reload` | admin | Reload config |
 
 Admin = OP level 4 **or** permission node `minecraftdiscordlink.admin`.
@@ -180,6 +185,11 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mcadmin whitelist list` | Administrator | List the whitelisted players |
 | `/mcadmin whitelist on <reason>` | Administrator | Switch the vanilla whitelist on (not the role whitelist) |
 | `/mcadmin whitelist off [reason]` | Administrator | Switch the vanilla whitelist off |
+| `/mcadmin rolewhitelist on <reason>` | Administrator | Switch the whitelist via Discord roles on |
+| `/mcadmin rolewhitelist off [reason]` | Administrator | Switch the whitelist via Discord roles off |
+| `/mcadmin rolewhitelist add <role> [reason]` | Administrator | Add a whitelisted role |
+| `/mcadmin rolewhitelist remove <role> [reason]` | Administrator | Remove a whitelisted role |
+| `/mcadmin rolewhitelist status` | Administrator | Show whether it is on and its roles |
 
 `whois` searches Minecraft and Discord names. Minecraft names only count for
 players who have played on the server or are linked. If a name matches
@@ -320,24 +330,47 @@ Minecraft `whois`: `Steve is linked to @steve (online now)` /
 
 - Players are given by Minecraft name; players who never joined are looked
   up like in vanilla (Mojang).
-- A reason is required for `kick`, `ban`, `tempban`, `unban` and
-  `whitelist on`; optional for `whitelist add|remove|off`. Vanilla commands
-  (`/kick`, `/ban`, `/pardon`, …) stay unchanged: without a reason the log
-  says `no reason given`.
+- A reason is required for `kick`, `ban`, `tempban`, `unban`,
+  `whitelist on` and `rolewhitelist on`; optional for the other whitelist
+  commands. Vanilla commands (`/kick`, `/ban`, `/pardon`, …) stay unchanged:
+  without a reason the log shows the vanilla default (`Banned by an
+  operator.`) or `no reason given`.
 - Durations: `30m`, `12h`, `7d`, `2w` and combinations such as `1d12h`.
   Without a duration a ban is permanent.
 - Bans are vanilla bans in `banned-players.json`: the source is the
-  moderator (`Discord: @anedhel` for Discord, the player name or `Server`
+  moderator (`Discord @anedhel` for Discord, the player name or `Server`
   for Minecraft), the end of a temporary ban is the vanilla `expires` field.
 - Banned online players are kicked with the vanilla ban message.
 - `whitelist add` while the vanilla whitelist is off adds the player
   anyway; the answer says that the whitelist is off.
+- Expired temporary bans are removed by the mod within a minute (and on
+  login attempts and server start), logged as `ban expired`
+  (`2026-11-06 15:40:30 | BAN EXPIRED | Steve`).
+- Commands from the Discord console channel are logged with the Discord user
+  as moderator (`Discord @anedhel (console)`).
+- `moderation.channel_id` can be changed by a reload.
+
+### Whitelist via Discord roles
+
+- Active when `whitelist.enabled = true` and at least one role is in
+  `whitelist.role_ids`. `rolewhitelist on` fails without roles.
+- `rolewhitelist on|off|add|remove` write `whitelist.enabled` and
+  `whitelist.role_ids` into the config file: the file is read again, only
+  these values are changed, values and comments are kept (the file is
+  rewritten in the generated format: comments at the end of a line move
+  above the line, indentation and blank lines are unified). Other changes
+  in the file are not applied until `reload`. A file that cannot be read is
+  not touched; the command fails then.
+- Switching it on and removing a role kick online players who no longer
+  have access (operators and players on the vanilla whitelist keep access).
 
 ### Moderation log
 
 Every moderation action is logged, from Discord commands as well as from
-vanilla commands and other mods: kick, ban, temporary ban, unban, ban
-expired, IP ban and IP unban (log only), whitelist add/remove/on/off.
+vanilla commands: kick, ban, temporary ban, unban, ban expired, IP ban and
+IP unban (log only), whitelist add/remove/on/off, role whitelist
+on/off/add/remove. Bans and whitelist changes by other mods are logged too;
+the moderator is then unknown.
 
 - Server console (INFO).
 - `minecraftdiscordlink/moderation.log`, one line per action:
@@ -361,10 +394,9 @@ Opt-in, only for linked accounts:
 | Discord unban | the Minecraft ban is lifted |
 | Kick (either side) | only logged, never synchronized |
 
-- Discord has no temporary bans. The mod notices when Minecraft removes an
-  expired ban (Minecraft does that on the next login attempt or server
-  start) and lifts the Discord ban then. If Discord is unavailable, the mod
-  retries while the server runs.
+- Discord has no temporary bans. The mod removes expired Minecraft bans
+  itself (see above) and lifts the Discord ban then. If Discord is
+  unavailable, the mod retries every minute while the server runs.
 - An action caused by the sync does not trigger the sync again and is
   logged once.
 - The Discord ban reason (audit log) is `Minecraft ban: <reason>`; no

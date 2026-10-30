@@ -5,6 +5,8 @@ import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.moderation.DiscordModeration;
+import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import net.dv8tion.jda.api.EmbedBuilder;
 import com.neovisionaries.ws.client.WebSocketFactory;
@@ -49,14 +51,15 @@ public final class DiscordBot {
 
     /**
      * Gateway intents needed by the mod. Message Content and Server Members are privileged intents; Guild
-     * Expressions provides the custom emojis.
+     * Expressions provides the custom emojis, Guild Moderation the bans for the ban sync.
      */
     private static final EnumSet<GatewayIntent> INTENTS = EnumSet.of(
             GatewayIntent.GUILD_MESSAGES,
             GatewayIntent.MESSAGE_CONTENT,
             GatewayIntent.GUILD_MEMBERS,
             GatewayIntent.GUILD_EXPRESSIONS,
-            GatewayIntent.DIRECT_MESSAGES);
+            GatewayIntent.DIRECT_MESSAGES,
+            GatewayIntent.GUILD_MODERATION);
 
     /** Maximum time the server waits on shutdown for the "Server stopped" message and the disconnect. */
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
@@ -70,6 +73,7 @@ public final class DiscordBot {
     private final PlayerStats stats;
     private final Linking linking;
     private final StateStore state;
+    private final Moderation moderation;
     private final ScheduledExecutorService executor;
 
     /** The bot, set as soon as it is built. */
@@ -80,6 +84,8 @@ public final class DiscordBot {
     private volatile AccountLinking accountLinking;
     /** The slash commands, set once the bot is ready if one of the channels is available. */
     private volatile SlashCommands slashCommands;
+    /** The ban sync, set once the bot is ready if one of the channels is available. */
+    private volatile BanSync banSync;
     /** Whether the bot is connected and ready. */
     private boolean ready;
     /** Whether the server has finished starting. */
@@ -88,16 +94,17 @@ public final class DiscordBot {
     /**
      * Creates the bot without connecting yet, see {@link #connect()}.
      *
-     * @param token     the bot token
-     * @param config    the config at server start, for the channel IDs
-     * @param server    the starting server
-     * @param startTime when the server was started, for {@code {uptime}}
-     * @param stats     the player statistics, for the unique player placeholders
-     * @param linking   the account linking
-     * @param state     the stored state of the mod
+     * @param token      the bot token
+     * @param config     the config at server start, for the channel IDs
+     * @param server     the starting server
+     * @param startTime  when the server was started, for {@code {uptime}}
+     * @param stats      the player statistics, for the unique player placeholders
+     * @param linking    the account linking
+     * @param state      the stored state of the mod
+     * @param moderation the moderation, for the moderation commands and the moderation channel
      */
     public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime, PlayerStats stats,
-                      Linking linking, StateStore state) {
+                      Linking linking, StateStore state, Moderation moderation) {
         this.token = token;
         this.chatChannelId = config.chat().channelId();
         this.consoleChannelId = config.console().channelId();
@@ -106,6 +113,7 @@ public final class DiscordBot {
         this.stats = stats;
         this.linking = linking;
         this.state = state;
+        this.moderation = moderation;
         this.executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, Constants.MOD_NAME + " Discord");
             thread.setDaemon(true);
@@ -186,10 +194,15 @@ public final class DiscordBot {
             jda.addEventListener(console);
             console.start();
         });
+        ModerationChannel moderationChannel = new ModerationChannel(jda);
+        moderation.log().setListener(moderationChannel::send);
         guild().ifPresent(guild -> {
             AccountLinking accounts = new AccountLinking(jda, guild, server, linking, state, executor);
-            SlashCommands commands = new SlashCommands(guild, linking, server, startTime, stats);
-            jda.addEventListener(accounts, commands);
+            SlashCommands commands = new SlashCommands(guild, linking, server, startTime, stats, moderation);
+            BanSync sync = new BanSync(guild, server, linking.links(), executor);
+            jda.addEventListener(accounts, commands, sync);
+            sync.start();
+            banSync = sync;
             commands.register();
             slashCommands = commands;
             accountLinking = accounts;
@@ -245,6 +258,15 @@ public final class DiscordBot {
     }
 
     /**
+     * Returns the Discord side of the moderation.
+     *
+     * @return the ban sync, empty while the bot is not ready or if no channel is available
+     */
+    public Optional<DiscordModeration> moderation() {
+        return Optional.ofNullable(banSync);
+    }
+
+    /**
      * Returns the Discord side of the account linking.
      *
      * @return the account linking, empty while the bot is not ready or if no channel is available
@@ -289,6 +311,7 @@ public final class DiscordBot {
         }
         // Stops the status updates and an unfinished connection attempt
         executor.shutdownNow();
+        moderation.log().setListener(entry -> { });
 
         JDA bot = jda;
         if (bot == null) {

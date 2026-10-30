@@ -407,7 +407,7 @@ public final class Linking {
      */
     private WhitelistStatus whitelistStatus(GameProfile profile) {
         ModConfig.Whitelist config = ConfigManager.get().whitelist();
-        if (!config.enabled()) {
+        if (!config.active()) {
             return WhitelistStatus.ALLOWED;
         }
         PlayerList playerList = server.getPlayerList();

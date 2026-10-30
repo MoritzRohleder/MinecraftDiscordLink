@@ -147,7 +147,9 @@ public final class ConfigLoader {
         entry("console.batch_interval_ms", 2000,
                 comment("Milliseconds between batched console messages. Minimum: 1000."));
 
-        section("whitelist", comment("Whitelist via Discord roles. Works in addition to the vanilla whitelist."));
+        section("whitelist", comment("Whitelist via Discord roles. Works in addition to the vanilla whitelist.",
+                "Also changed by the commands /mcadmin rolewhitelist and /discord rolewhitelist."));
+        entry("whitelist.enabled", true, comment("Switch the whitelist via Discord roles on or off."));
         entry("whitelist.role_ids", List.of(),
                 comment("Members with one of these roles are whitelisted. Empty = feature disabled."));
 
@@ -158,6 +160,18 @@ public final class ConfigLoader {
                 "  \"auto\"  the bot creates and uses a role named \"Linked Account\" (needs \"Manage Roles\")",
                 "  role ID use this role (it must be below the bot's highest role)",
                 "  \"\"      no role"));
+
+        section("moderation", comment("Moderation: every kick, ban and whitelist change is logged to the console and",
+                "to minecraftdiscordlink/moderation.log."));
+        entry("moderation.channel_id", "", comment(
+                "ID of a channel the moderation log is also sent to. \"\" = only the log file."));
+
+        section("moderation.ban_sync", comment("Bans across Minecraft and Discord for linked accounts.",
+                "Needs the bot permissions \"Ban Members\", \"Kick Members\" and \"View Audit Log\"."));
+        entry("moderation.ban_sync.enabled", false, comment(
+                "A Minecraft ban also bans the linked Discord account and vice versa, same for unbans."));
+        entry("moderation.ban_sync.discord_action", "ban", comment(
+                "What a Minecraft ban does to the linked Discord account: \"ban\" or \"kick\"."));
 
         section("leaderboard", comment(
                 "Leaderboards from the vanilla statistics: /mc top <category> and /mc stats <player>.",
@@ -222,6 +236,39 @@ public final class ConfigLoader {
             write(file, config);
         }
         return new Values(config).read();
+    }
+
+    /**
+     * Changes values in the config file, keeping all other values, the order and the comments. The file is read
+     * again first, so changes made to it since the last load are kept (but not applied). The file is not touched if
+     * it cannot be read.
+     *
+     * @param file   the config file
+     * @param values the new values, by dotted path
+     * @return whether the file was written
+     */
+    public static boolean update(Path file, Map<String, Object> values) {
+        CommentedConfig config = newConfig();
+        if (Files.exists(file)) {
+            try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                TomlFormat.instance().createParser().parse(reader, config, ParsingMode.REPLACE);
+            } catch (IOException | ParsingException e) {
+                Constants.LOG.error("Could not read config file {}, so it was not changed: {}", file, e.getMessage());
+                return false;
+            }
+        }
+        addMissing(config);
+        values.forEach(config::set);
+        try {
+            Files.createDirectories(file.toAbsolutePath().getParent());
+            try (Writer writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+                TomlFormat.instance().createWriter().write(config, writer);
+            }
+            return true;
+        } catch (IOException e) {
+            Constants.LOG.error("Could not write config file {}: {}", file, e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -361,8 +408,11 @@ public final class ConfigLoader {
                             channel("console.channel_id", "console channel"),
                             integer("console.batch_interval_ms", 1000),
                             permissions()),
-                    new ModConfig.Whitelist(roleIds()),
+                    new ModConfig.Whitelist(bool("whitelist.enabled"), roleIds()),
                     new ModConfig.Linking(integer("linking.code_validity_minutes", 1), linkedRole()),
+                    new ModConfig.Moderation(
+                            optionalChannel("moderation.channel_id", "moderation channel"),
+                            new ModConfig.BanSync(bool("moderation.ban_sync.enabled"), discordAction())),
                     new ModConfig.Leaderboard(integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()));
         }
 
@@ -459,6 +509,38 @@ public final class ConfigLoader {
                         path, feature);
             }
             return id;
+        }
+
+        /**
+         * Reads an optional channel ID: an empty value means no channel, an invalid one is logged as an error.
+         *
+         * @param path    path of the entry
+         * @param feature name of the feature for the error message
+         * @return the channel ID, empty if not configured or invalid
+         */
+        private OptionalLong optionalChannel(String path, String feature) {
+            Object value = config.get(path);
+            if (value instanceof String text && text.isBlank()) {
+                return OptionalLong.empty();
+            }
+            return channel(path, feature);
+        }
+
+        /**
+         * Reads what a Minecraft ban does to the linked Discord account.
+         *
+         * @return the configured action, or the default if invalid
+         */
+        private ModConfig.DiscordAction discordAction() {
+            String path = "moderation.ban_sync.discord_action";
+            if (config.get(path) instanceof String action) {
+                try {
+                    return ModConfig.DiscordAction.valueOf(action.trim().toUpperCase(Locale.ROOT));
+                } catch (IllegalArgumentException ignored) {
+                    // Falls through to the default
+                }
+            }
+            return invalid(path, ModConfig.DiscordAction.BAN);
         }
 
         /**

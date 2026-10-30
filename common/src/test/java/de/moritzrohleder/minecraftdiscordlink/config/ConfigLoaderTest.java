@@ -43,7 +43,11 @@ class ConfigLoaderTest {
         assertEquals(10, config.chat().topic().intervalMinutes());
         assertEquals(2000, config.console().batchIntervalMs());
         assertTrue(config.console().permissions().isEmpty());
-        assertFalse(config.whitelist().enabled());
+        assertFalse(config.whitelist().active());
+        assertTrue(config.whitelist().enabled());
+        assertTrue(config.moderation().channelId().isEmpty());
+        assertFalse(config.moderation().banSync().enabled());
+        assertEquals(ModConfig.DiscordAction.BAN, config.moderation().banSync().discordAction());
         assertEquals(60, config.linking().codeValidityMinutes());
         assertTrue(content.contains("[[leaderboard.categories]]"));
         assertEquals(10, config.leaderboard().size());
@@ -52,6 +56,32 @@ class ConfigLoaderTest {
                 new ModConfig.Category("minecraft.custom:minecraft.deaths", Optional.of("Deaths"), true)),
                 config.leaderboard().categories());
         assertEquals(config, ConfigLoader.load(file));
+    }
+
+    @Test
+    void updatesValuesKeepingTheRestOfTheFile() throws IOException {
+        Path file = dir.resolve("config.toml");
+        ConfigLoader.load(file);
+        String original = Files.readString(file);
+        Files.writeString(file, original.replace("code_validity_minutes = 60", "code_validity_minutes = 30"));
+
+        assertTrue(ConfigLoader.update(file, java.util.Map.of("whitelist.enabled", false,
+                "whitelist.role_ids", List.of("123456789012345678"))));
+
+        ModConfig config = ConfigLoader.load(file);
+        assertFalse(config.whitelist().enabled());
+        assertEquals(List.of(123456789012345678L), config.whitelist().roleIds());
+        assertEquals(30, config.linking().codeValidityMinutes());
+        assertTrue(Files.readString(file).contains("# Bot token from the Discord Developer Portal. Keep it secret!"));
+    }
+
+    @Test
+    void doesNotUpdateBrokenFile() throws IOException {
+        Path file = dir.resolve("config.toml");
+        Files.writeString(file, "[discord\ntoken = ");
+
+        assertFalse(ConfigLoader.update(file, java.util.Map.of("whitelist.enabled", false)));
+        assertEquals("[discord\ntoken = ", Files.readString(file));
     }
 
     @Test

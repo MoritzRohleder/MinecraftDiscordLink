@@ -33,6 +33,8 @@ public abstract class PlayerListLoginMixin {
     private void minecraftdiscordlink$checkDiscordWhitelist(SocketAddress address, GameProfile profile,
                                                             CallbackInfoReturnable<Component> cir) {
         PlayerList playerList = (PlayerList) (Object) this;
+        // Expired bans are removed here, so they are logged; Minecraft would remove them silently
+        MinecraftDiscordLink.removeExpiredBans();
         if (playerList.getBans().isBanned(profile) || playerList.getIpBans().isBanned(address)) {
             return;
         }

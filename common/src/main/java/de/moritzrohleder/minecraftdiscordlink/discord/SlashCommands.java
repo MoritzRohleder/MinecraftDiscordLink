@@ -1,13 +1,17 @@
 package de.moritzrohleder.minecraftdiscordlink.discord;
 
+import com.mojang.authlib.GameProfile;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Leaderboards;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
+import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
+import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
@@ -21,13 +25,17 @@ import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
+import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
 import net.minecraft.server.MinecraftServer;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -48,6 +56,7 @@ final class SlashCommands extends ListenerAdapter {
     private final MinecraftServer server;
     private final Instant startTime;
     private final PlayerStats stats;
+    private final Moderation moderation;
     /** The leaderboard categories of the registered commands. */
     private volatile List<Leaderboards.Category> categories = List.of();
 
@@ -58,14 +67,17 @@ final class SlashCommands extends ListenerAdapter {
      * @param linking   the account linking
      * @param server    the running server
      * @param startTime when the server was started, for the uptime
-     * @param stats     the player statistics, for "online since"
+     * @param stats      the player statistics, for "online since"
+     * @param moderation the moderation, for the moderation commands
      */
-    SlashCommands(Guild guild, Linking linking, MinecraftServer server, Instant startTime, PlayerStats stats) {
+    SlashCommands(Guild guild, Linking linking, MinecraftServer server, Instant startTime, PlayerStats stats,
+                  Moderation moderation) {
         this.guild = guild;
         this.linking = linking;
         this.server = server;
         this.startTime = startTime;
         this.stats = stats;
+        this.moderation = moderation;
     }
 
     /**
@@ -100,7 +112,45 @@ final class SlashCommands extends ListenerAdapter {
                                 new SubcommandData("link", "Link a Minecraft account with a Discord account")
                                         .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                         .addOption(OptionType.USER, "user", "The Discord user", true),
-                                new SubcommandData("reload", "Reload the config of the Minecraft mod"))
+                                new SubcommandData("reload", "Reload the config of the Minecraft mod"),
+                                new SubcommandData("kick", "Kick a player from the Minecraft server")
+                                        .addOption(OptionType.STRING, "player", "The Minecraft name", true)
+                                        .addOption(OptionType.STRING, "reason", "Why the player is kicked", true),
+                                new SubcommandData("ban", "Ban a player, permanently or for a time")
+                                        .addOption(OptionType.STRING, "player", "The Minecraft name", true)
+                                        .addOption(OptionType.STRING, "reason", "Why the player is banned", true)
+                                        .addOption(OptionType.STRING, "duration",
+                                                "e.g. 30m, 12h, 7d, 2w or 1d12h; permanent without", false),
+                                new SubcommandData("unban", "Lift the ban of a player")
+                                        .addOption(OptionType.STRING, "player", "The Minecraft name", true)
+                                        .addOption(OptionType.STRING, "reason", "Why the ban is lifted", true),
+                                new SubcommandData("banlist", "List the banned players"))
+                        .addSubcommandGroups(
+                                new SubcommandGroupData("whitelist", "The vanilla whitelist").addSubcommands(
+                                        new SubcommandData("add", "Add a player to the whitelist")
+                                                .addOption(OptionType.STRING, "player", "The Minecraft name", true)
+                                                .addOption(OptionType.STRING, "reason", "Why", false),
+                                        new SubcommandData("remove", "Remove a player from the whitelist")
+                                                .addOption(OptionType.STRING, "player", "The Minecraft name", true)
+                                                .addOption(OptionType.STRING, "reason", "Why", false),
+                                        new SubcommandData("list", "List the whitelisted players"),
+                                        new SubcommandData("on", "Switch the whitelist on")
+                                                .addOption(OptionType.STRING, "reason", "Why", true),
+                                        new SubcommandData("off", "Switch the whitelist off")
+                                                .addOption(OptionType.STRING, "reason", "Why", false)),
+                                new SubcommandGroupData("rolewhitelist", "The whitelist via Discord roles")
+                                        .addSubcommands(
+                                        new SubcommandData("on", "Switch the role whitelist on")
+                                                .addOption(OptionType.STRING, "reason", "Why", true),
+                                        new SubcommandData("off", "Switch the role whitelist off")
+                                                .addOption(OptionType.STRING, "reason", "Why", false),
+                                        new SubcommandData("add", "Whitelist the members of a role")
+                                                .addOption(OptionType.ROLE, "role", "The role", true)
+                                                .addOption(OptionType.STRING, "reason", "Why", false),
+                                        new SubcommandData("remove", "Remove a role from the role whitelist")
+                                                .addOption(OptionType.ROLE, "role", "The role", true)
+                                                .addOption(OptionType.STRING, "reason", "Why", false),
+                                        new SubcommandData("status", "Show whether the role whitelist is on")))
         ).queue(null, error -> Constants.LOG.error("Could not register the Discord slash commands: {}",
                 error.getMessage()));
     }
@@ -115,7 +165,7 @@ final class SlashCommands extends ListenerAdapter {
         if (event.getGuild() == null || event.getGuild().getIdLong() != guild.getIdLong()) {
             return;
         }
-        String command = event.getName() + " " + event.getSubcommandName();
+        String command = event.getFullCommandName();
         long userId = event.getUser().getIdLong();
         switch (command) {
             case "mc online" -> deferred(event, onServerThread(() ->
@@ -137,6 +187,11 @@ final class SlashCommands extends ListenerAdapter {
                                         profile.get().getName(), ServerInfo.playtime(server, profile.get()),
                                         stats.onlineSince(profile.get().getId()))))));
             }
+            case "mcadmin kick", "mcadmin ban", "mcadmin unban", "mcadmin banlist", "mcadmin whitelist add",
+                 "mcadmin whitelist remove", "mcadmin whitelist list", "mcadmin whitelist on",
+                 "mcadmin whitelist off", "mcadmin rolewhitelist on", "mcadmin rolewhitelist off",
+                 "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove", "mcadmin rolewhitelist status" ->
+                    moderate(event, command);
             case "mc top" -> top(event);
             case "mc stats" -> stats(event);
             case "mcadmin reload" -> deferred(event, onServerThread(() ->
@@ -155,6 +210,83 @@ final class SlashCommands extends ListenerAdapter {
                 // Not a command of this mod
             }
         }
+    }
+
+    /**
+     * Runs a moderation command of {@code /mcadmin}. Players are looked up first, as that may contact Mojang; the
+     * action itself runs on the server thread.
+     *
+     * @param event   the command interaction
+     * @param command the full command name, e.g. {@code mcadmin whitelist add}
+     */
+    private void moderate(SlashCommandInteractionEvent event, String command) {
+        String reason = event.getOption("reason", OptionMapping::getAsString);
+        ModerationContext.Scope scope = ModerationContext.Scope.of(
+                Moderation.DISCORD_PREFIX + "@" + event.getUser().getName(), reason);
+        switch (command) {
+            case "mcadmin kick" -> {
+                String player = option(event, "player");
+                deferred(event, onServerThread(() -> answer(moderation.kick(player, reason, scope))));
+            }
+            case "mcadmin ban" -> {
+                String input = event.getOption("duration", OptionMapping::getAsString);
+                Optional<Duration> duration = input == null ? Optional.empty() : Durations.parse(input);
+                if (input != null && duration.isEmpty()) {
+                    reply(event, CommandEmbeds.error("Invalid duration **" + DiscordText.escape(input)
+                            + "**. Use e.g. 30m, 12h, 7d, 2w or 1d12h."));
+                    return;
+                }
+                withPlayer(event, profile -> moderation.ban(profile, reason, duration, scope));
+            }
+            case "mcadmin unban" -> withPlayer(event, profile -> moderation.unban(profile, reason, scope));
+            case "mcadmin whitelist add" -> withPlayer(event, profile -> moderation.whitelistAdd(profile, scope));
+            case "mcadmin whitelist remove" ->
+                    withPlayer(event, profile -> moderation.whitelistRemove(profile, scope));
+            case "mcadmin whitelist on", "mcadmin whitelist off" -> deferred(event, onServerThread(() ->
+                    answer(moderation.whitelistSwitch(command.endsWith("on"), scope))));
+            case "mcadmin rolewhitelist on", "mcadmin rolewhitelist off" -> deferred(event, onServerThread(() ->
+                    answer(moderation.roleWhitelistSwitch(command.endsWith("on"), scope))));
+            case "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove" -> {
+                long roleId = event.getOption("role", OptionMapping::getAsRole).getIdLong();
+                boolean add = command.endsWith("add");
+                deferred(event, onServerThread(() -> answer(add ? moderation.roleWhitelistAdd(roleId, scope)
+                        : moderation.roleWhitelistRemove(roleId, scope))));
+            }
+            case "mcadmin banlist" -> deferred(event, onServerThread(() ->
+                    List.of(CommandEmbeds.banlist(moderation.bans()))));
+            case "mcadmin whitelist list" -> deferred(event, onServerThread(() ->
+                    List.of(CommandEmbeds.whitelist(moderation.whitelisted(), moderation.whitelistOn()))));
+            case "mcadmin rolewhitelist status" -> reply(event,
+                    CommandEmbeds.roleWhitelist(ConfigManager.get().whitelist()));
+            default -> {
+                // Not a moderation command
+            }
+        }
+    }
+
+    /**
+     * Looks up the player of the {@code player} option and runs an action with it on the server thread.
+     *
+     * @param event  the command interaction
+     * @param action the action
+     */
+    private void withPlayer(SlashCommandInteractionEvent event, Function<GameProfile, Linking.Reply> action) {
+        String player = option(event, "player");
+        deferred(event, CompletableFuture.supplyAsync(() -> server.getProfileCache().get(player))
+                .thenCompose(profile -> profile.isEmpty()
+                        ? CompletableFuture.completedFuture(List.of(CommandEmbeds.error(
+                                "No Minecraft player named **" + DiscordText.escape(player) + "** was found.")))
+                        : onServerThread(() -> answer(action.apply(profile.get())))));
+    }
+
+    /**
+     * Converts the plain text result of a moderation action into the answer.
+     *
+     * @param reply the result
+     * @return the answer embeds
+     */
+    private static List<MessageEmbed> answer(Linking.Reply reply) {
+        return List.of(CommandEmbeds.reply(new Linking.Reply(reply.success(), DiscordText.escape(reply.message()))));
     }
 
     /**

@@ -3,6 +3,9 @@ package de.moritzrohleder.minecraftdiscordlink.config;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
 
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Holds the active config of the mod.
@@ -49,7 +52,7 @@ public final class ConfigManager {
      *
      * @return whether the token or a channel ID changed, which needs a restart
      */
-    public static boolean reload() {
+    public static synchronized boolean reload() {
         ModConfig current = get();
         ModConfig loaded = ConfigLoader.load(file);
 
@@ -77,8 +80,31 @@ public final class ConfigManager {
                         loaded.console().permissions()),
                 loaded.whitelist(),
                 loaded.linking(),
+                loaded.moderation(),
                 loaded.leaderboard());
         Constants.LOG.info("Config reloaded");
         return restartNeeded;
+    }
+
+    /**
+     * Changes the whitelist via Discord roles, e.g. by a command: writes {@code whitelist.enabled} and
+     * {@code whitelist.role_ids} into the config file and applies them. Other changes in the file are kept but not
+     * applied until the next reload.
+     *
+     * @param whitelist the new whitelist settings
+     * @return whether the config file was written; nothing is changed otherwise
+     */
+    public static synchronized boolean updateWhitelist(ModConfig.Whitelist whitelist) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("whitelist.enabled", whitelist.enabled());
+        values.put("whitelist.role_ids", whitelist.roleIds().stream().map(String::valueOf).toList());
+        if (!ConfigLoader.update(file, values)) {
+            return false;
+        }
+        ModConfig current = get();
+        config = new ModConfig(current.discord(), current.chat(), current.console(),
+                new ModConfig.Whitelist(whitelist.enabled(), List.copyOf(whitelist.roleIds())), current.linking(),
+                current.moderation(), current.leaderboard());
+        return true;
     }
 }

@@ -3,18 +3,28 @@ package de.moritzrohleder.minecraftdiscordlink.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.authlib.GameProfile;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
+import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
+import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.info.InfoText;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
+import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
+import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.GameProfileArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
+import java.time.Duration;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
@@ -29,10 +39,16 @@ import java.util.function.Consumer;
  *     <li>{@code /discord whois <name>}: shows the account linked to a Minecraft or Discord name</li>
  *     <li>{@code /discord reload}: reloads the config (admins only)</li>
  *     <li>{@code /discord admin link <player> <discordname>}: links accounts manually (admins only)</li>
+ *     <li>{@code /discord tempban <player> <duration> <reason>}: bans a player for a time (admins only)</li>
+ *     <li>{@code /discord rolewhitelist on|off|status}: switches the whitelist via Discord roles (admins only)</li>
  * </ul>
  * Admins are operators of level 4 or players with the permission node {@code minecraftdiscordlink.admin}.
  */
 public final class DiscordCommand {
+
+    /** Error for an invalid ban duration. */
+    private static final SimpleCommandExceptionType INVALID_DURATION = new SimpleCommandExceptionType(
+            Component.literal("Invalid duration. Use e.g. 30m, 12h, 7d, 2w or 1d12h."));
 
     private DiscordCommand() {
     }
@@ -58,6 +74,23 @@ public final class DiscordCommand {
                 .then(Commands.literal("reload")
                         .requires(Services.PLATFORM::isAdmin)
                         .executes(DiscordCommand::reload))
+                .then(Commands.literal("tempban")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .then(Commands.argument("duration", StringArgumentType.word())
+                                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                                .executes(DiscordCommand::tempban)))))
+                .then(Commands.literal("rolewhitelist")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.literal("on")
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(context -> roleWhitelist(context, true, true))))
+                        .then(Commands.literal("off")
+                                .executes(context -> roleWhitelist(context, false, false))
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(context -> roleWhitelist(context, false, true))))
+                        .then(Commands.literal("status")
+                                .executes(DiscordCommand::roleWhitelistStatus)))
                 .then(Commands.literal("admin")
                         .requires(Services.PLATFORM::isAdmin)
                         .then(Commands.literal("link")
@@ -162,6 +195,80 @@ public final class DiscordCommand {
                                 .withStyle(reply.success() ? ChatFormatting.GREEN : ChatFormatting.RED))));
             }
         });
+        return 1;
+    }
+
+    /**
+     * Runs {@code /discord tempban <player> <duration> <reason>}.
+     *
+     * @param context the command context
+     * @return the number of banned players
+     * @throws CommandSyntaxException if the player or the duration is invalid
+     */
+    private static int tempban(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(context, "player");
+        Duration duration = Durations.parse(StringArgumentType.getString(context, "duration"))
+                .orElseThrow(INVALID_DURATION::create);
+        String reason = StringArgumentType.getString(context, "reason");
+        CommandSourceStack source = context.getSource();
+        Optional<Moderation> moderation = MinecraftDiscordLink.moderation();
+        if (moderation.isEmpty()) {
+            source.sendFailure(Component.literal("The moderation is not available right now."));
+            return 0;
+        }
+        ModerationContext.Scope scope = ModerationContext.Scope.of(source.getTextName(), reason);
+        int banned = 0;
+        for (GameProfile profile : profiles) {
+            Linking.Reply reply = moderation.get().ban(profile, reason, Optional.of(duration), scope);
+            if (reply.success()) {
+                banned++;
+                source.sendSuccess(() -> Component.literal(reply.message()), true);
+            } else {
+                source.sendFailure(Component.literal(reply.message()));
+            }
+        }
+        return banned;
+    }
+
+    /**
+     * Runs {@code /discord rolewhitelist on <reason>} and {@code /discord rolewhitelist off [reason]}.
+     *
+     * @param context   the command context
+     * @param on        whether to switch the role whitelist on
+     * @param hasReason whether the command has a reason argument
+     * @return 1 on success, otherwise 0
+     */
+    private static int roleWhitelist(CommandContext<CommandSourceStack> context, boolean on, boolean hasReason) {
+        CommandSourceStack source = context.getSource();
+        String reason = hasReason ? StringArgumentType.getString(context, "reason") : null;
+        Optional<Moderation> moderation = MinecraftDiscordLink.moderation();
+        if (moderation.isEmpty()) {
+            source.sendFailure(Component.literal("The moderation is not available right now."));
+            return 0;
+        }
+        Linking.Reply reply = moderation.get().roleWhitelistSwitch(on,
+                ModerationContext.Scope.of(source.getTextName(), reason));
+        if (reply.success()) {
+            source.sendSuccess(() -> Component.literal(reply.message()), true);
+            return 1;
+        }
+        source.sendFailure(Component.literal(reply.message()));
+        return 0;
+    }
+
+    /**
+     * Runs {@code /discord rolewhitelist status}.
+     *
+     * @param context the command context
+     * @return 1
+     */
+    private static int roleWhitelistStatus(CommandContext<CommandSourceStack> context) {
+        ModConfig.Whitelist whitelist = ConfigManager.get().whitelist();
+        String state = whitelist.active() ? "on" : whitelist.enabled() ? "on, but inactive without roles" : "off";
+        String roles = whitelist.roleIds().isEmpty() ? "none"
+                : String.join(", ", whitelist.roleIds().stream().map(id -> MinecraftDiscordLink.moderation()
+                        .map(moderation -> moderation.roleLabel(id)).orElse(String.valueOf(id))).toList());
+        context.getSource().sendSystemMessage(Component.literal("Role whitelist: " + state + ". Roles: " + roles));
         return 1;
     }
 

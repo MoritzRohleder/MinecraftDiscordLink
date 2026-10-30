@@ -16,10 +16,11 @@ import java.util.OptionalLong;
  * @param console     console channel settings ({@code [console]})
  * @param whitelist   whitelist via Discord roles ({@code [whitelist]})
  * @param linking     account linking settings ({@code [linking]})
+ * @param moderation  moderation log and ban sync ({@code [moderation]})
  * @param leaderboard leaderboards from the vanilla statistics ({@code [leaderboard]})
  */
 public record ModConfig(Discord discord, Chat chat, Console console, Whitelist whitelist, Linking linking,
-                        Leaderboard leaderboard) {
+                        Moderation moderation, Leaderboard leaderboard) {
 
     /**
      * Discord bot settings.
@@ -153,17 +154,18 @@ public record ModConfig(Discord discord, Chat chat, Console console, Whitelist w
     /**
      * Whitelist via Discord roles, in addition to the vanilla whitelist.
      *
-     * @param roleIds IDs of the roles whose members are whitelisted; the feature is disabled if empty
+     * @param enabled whether the whitelist via Discord roles is switched on
+     * @param roleIds IDs of the roles whose members are whitelisted; the feature is inactive if empty
      */
-    public record Whitelist(List<Long> roleIds) {
+    public record Whitelist(boolean enabled, List<Long> roleIds) {
 
         /**
-         * Checks whether the whitelist via Discord roles is active, i.e. at least one role is configured.
+         * Checks whether the whitelist via Discord roles is active: switched on and at least one role configured.
          *
          * @return whether the whitelist via Discord roles is active
          */
-        public boolean enabled() {
-            return !roleIds.isEmpty();
+        public boolean active() {
+            return enabled && !roleIds.isEmpty();
         }
     }
 
@@ -195,6 +197,34 @@ public record ModConfig(Discord discord, Chat chat, Console console, Whitelist w
         ROLE,
         /** No linked role. */
         NONE
+    }
+
+    /**
+     * Moderation settings.
+     *
+     * @param channelId ID of the moderation log channel, empty if moderation actions are only logged to the file
+     * @param banSync   bans across Minecraft and Discord
+     */
+    public record Moderation(OptionalLong channelId, BanSync banSync) {
+    }
+
+    /**
+     * Bans across Minecraft and Discord for linked accounts.
+     *
+     * @param enabled       whether bans are synchronized at all
+     * @param discordAction what a Minecraft ban does to the linked Discord account
+     */
+    public record BanSync(boolean enabled, DiscordAction discordAction) {
+    }
+
+    /**
+     * What a Minecraft ban does to the linked Discord account.
+     */
+    public enum DiscordAction {
+        /** The Discord account is banned; unbans and expired bans lift the Discord ban. */
+        BAN,
+        /** The Discord account is only kicked from the Discord server. */
+        KICK
     }
 
     /**

@@ -4,6 +4,8 @@ import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.console.CommandPermissions;
 import de.moritzrohleder.minecraftdiscordlink.console.ConsoleCapture;
 import de.moritzrohleder.minecraftdiscordlink.console.ConsoleFormat;
+import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
+import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.Role;
@@ -88,7 +90,11 @@ final class ConsoleChannel extends ListenerAdapter {
 
         ConsoleCapture.AUDIT.info("{} ({}) ran a command from Discord: {}", event.getAuthor().getName(),
                 member.getId(), command);
-        server.execute(() -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command));
+        // Moderation actions of the command are logged with the Discord user as moderator
+        ModerationContext.Scope moderator = ModerationContext.Scope.of(
+                Moderation.DISCORD_PREFIX + "@" + event.getAuthor().getName() + " (console)", null);
+        server.execute(() -> ModerationContext.run(moderator, () ->
+                server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command)));
         react(message);
     }
 
