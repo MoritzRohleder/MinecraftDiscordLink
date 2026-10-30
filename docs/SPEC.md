@@ -95,6 +95,24 @@ code_validity_minutes = 60
 # role ID = use this role
 # ""      = no role
 linked_role = "auto"
+
+[leaderboard]
+# Number of players shown by /mc top (1-25)
+size = 10
+
+# One entry per ranked statistic (at most 25), written as scoreboard criterion.
+# name:  shown in Discord, optional (default: the vanilla name of the statistic)
+# order: "highest" (default) or "lowest" = the lowest value is ranked first
+# With "categories = []" the leaderboard commands are not registered.
+[[leaderboard.categories]]
+stat = "minecraft.custom:minecraft.play_time"
+name = "Play time"
+order = "highest"
+
+[[leaderboard.categories]]
+stat = "minecraft.custom:minecraft.deaths"
+name = "Deaths"
+order = "lowest"
 ```
 
 ## 2. Placeholders for topic and bot status
@@ -136,6 +154,8 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mc status` | everyone | Uptime, TPS/MSPT, player count, version |
 | `/mc whois <name>` | everyone | Linked account or "not linked" (Minecraft or Discord name) |
 | `/mc playtime <player>` | everyone | Play time from vanilla statistics |
+| `/mc top <category>` | everyone | Best players of a leaderboard category (choices from the config) |
+| `/mc stats <player>` | everyone | The player's value and rank in every leaderboard category |
 | `/mc link <code>` | everyone | Complete link with a kick code |
 | `/mc unlink` | everyone | Remove own link |
 | `/mcadmin link <player> <user>` | Administrator | Link accounts manually |
@@ -251,11 +271,28 @@ Discord answers with embeds (no pings), Minecraft with plain text.
 | `playtime` | Player head, `Play time: 12h 34m` |
 | `link`, `unlink`, `reload` | Green on success, red on errors |
 
+| `top` | Gold, title `🏆 Play time`, one line per player: `🥇 **Steve** · 12h 34m`, from rank 4 `**4.** **Alex** · 2h 5m`; footer `12 players ranked` (plus `· lowest value first`) |
+| `stats` | Player head and name, one line per category: `**Play time:** 5th · 17m`, `**Deaths:** 1st · 0`; footer `Ranked among 12 players` |
+
 Minecraft `whois`: `Steve is linked to @steve (online now)` /
 `Steve is not linked (last online 2026-10-29 13:10)`.
 
 "Last online" is recorded by the mod when a player leaves (`last_seen` in
 `stats.json`); it is "unknown" for players who have not left since.
+
+## 4a. Leaderboards
+
+- Ranked are all players with a statistics file in the world
+  (`world/stats/<uuid>.json`); online players with their live values. A
+  statistic missing from a file counts as 0.
+- Players with the same value share a rank, the next rank is skipped
+  (50, 30, 30, 10 → 1st, 2nd, 2nd, 4th).
+- Values are shown in the statistic's unit: time as `2d 3h 15m`, distances as
+  `850 m` / `12.3 km`, damage with one decimal, everything else as number.
+- Unknown statistics are logged as errors and left out. Categories without a
+  name use the vanilla name (`Time Played`, `Mined: Diamond Ore`).
+- The categories are applied on reload (the slash commands are registered
+  again).
 
 ## 5. Data storage
 

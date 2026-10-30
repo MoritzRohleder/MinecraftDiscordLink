@@ -21,8 +21,10 @@ installed on the dedicated server – players don't need it.
 - **Whitelist via Discord** – members with configured roles may join, in
   addition to the vanilla whitelist. Unlinked players get a link code when
   they try to join.
+- **Leaderboards** – rankings from the vanilla statistics (default: play time
+  and deaths) and every player's ranks.
 - **Slash commands** – `/mc online`, `/mc status`, `/mc whois`,
-  `/mc playtime` and more.
+  `/mc top`, `/mc stats` and more.
 
 ## Installation
 
@@ -86,6 +88,8 @@ All options are documented in the generated
 | `[[console.permissions]]` | none | Who may run which commands (see below) |
 | `whitelist.role_ids` | `[]` | Roles whitelisted on the server; empty = off |
 | `linking.linked_role` | `"auto"` | Role for linked members: `"auto"`, a role ID or `""` |
+| `leaderboard.size` | `10` | Players shown by `/mc top` |
+| `[[leaderboard.categories]]` | play time, deaths | Ranked statistics (see below) |
 
 Console permissions – one entry per role or user; without entries nobody can
 run commands from Discord:
@@ -100,6 +104,19 @@ commands = ["stop", "op", "deop"]
 An entry covers a command and its subcommands (`gamerule` or only
 `gamerule doDaylightCycle`). Several matching entries combine; an explicit
 deny always wins.
+
+Leaderboard categories – one entry per statistic, written as scoreboard
+criterion; `order = "lowest"` ranks the lowest value first:
+
+```toml
+[[leaderboard.categories]]
+stat = "minecraft.custom:minecraft.deaths"
+name = "Deaths"     # optional, default: the vanilla name
+order = "lowest"    # "highest" (default) or "lowest"
+
+[[leaderboard.categories]]
+stat = "minecraft.mined:minecraft.diamond_ore"
+```
 
 `/discord reload` applies all changes except the bot token and the channel IDs,
 which need a restart. Invalid values are logged as errors and replaced by their
@@ -126,6 +143,7 @@ Admins are operators of level 4 or players with the permission node
 | Command | Who |
 |---|---|
 | `/mc online`, `/mc status`, `/mc whois <name>`, `/mc playtime <player>` | everyone |
+| `/mc top <category>`, `/mc stats <player>` – leaderboards | everyone |
 | `/mc link <code>` – link with the code from the kick message | everyone |
 | `/mc unlink` | everyone |
 | `/mcadmin link <player> <user>`, `/mcadmin reload` | members with *Administrator* (adjustable in the server's integration settings) |

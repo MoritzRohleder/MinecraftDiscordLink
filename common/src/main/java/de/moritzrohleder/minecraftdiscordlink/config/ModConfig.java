@@ -11,13 +11,15 @@ import java.util.OptionalLong;
  * their defaults. Values without a sensible default (bot token, channel IDs) are empty instead, which disables the
  * affected feature.
  *
- * @param discord   Discord bot settings ({@code [discord]})
- * @param chat      chat bridge settings ({@code [chat]})
- * @param console   console channel settings ({@code [console]})
- * @param whitelist whitelist via Discord roles ({@code [whitelist]})
- * @param linking   account linking settings ({@code [linking]})
+ * @param discord     Discord bot settings ({@code [discord]})
+ * @param chat        chat bridge settings ({@code [chat]})
+ * @param console     console channel settings ({@code [console]})
+ * @param whitelist   whitelist via Discord roles ({@code [whitelist]})
+ * @param linking     account linking settings ({@code [linking]})
+ * @param leaderboard leaderboards from the vanilla statistics ({@code [leaderboard]})
  */
-public record ModConfig(Discord discord, Chat chat, Console console, Whitelist whitelist, Linking linking) {
+public record ModConfig(Discord discord, Chat chat, Console console, Whitelist whitelist, Linking linking,
+                        Leaderboard leaderboard) {
 
     /**
      * Discord bot settings.
@@ -193,5 +195,26 @@ public record ModConfig(Discord discord, Chat chat, Console console, Whitelist w
         ROLE,
         /** No linked role. */
         NONE
+    }
+
+    /**
+     * Leaderboards from the vanilla statistics.
+     *
+     * @param size       number of players shown by {@code /mc top}, 1 to {@link ConfigLoader#MAX_LEADERBOARD_SIZE}
+     * @param categories the ranked statistics, in the configured order; no leaderboards if empty
+     */
+    public record Leaderboard(int size, List<Category> categories) {
+    }
+
+    /**
+     * One ranked statistic.
+     *
+     * @param stat        the vanilla statistic as scoreboard criterion, e.g. {@code minecraft.custom:minecraft.deaths};
+     *                    only the format is validated here, unknown statistics are reported when the leaderboards
+     *                    are set up
+     * @param name        the name shown in Discord, empty for the statistic's vanilla name
+     * @param lowestFirst whether the lowest value is ranked first (e.g. deaths) instead of the highest
+     */
+    public record Category(String stat, Optional<String> name, boolean lowestFirst) {
     }
 }

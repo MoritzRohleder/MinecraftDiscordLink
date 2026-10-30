@@ -9,7 +9,8 @@
     "PlayerAdvancementsMixin",
     "PlayerListLoginMixin",
     "PlayerListMixin",
-    "ServerPlayerMixin"
+    "ServerPlayerMixin",
+    "StatAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -153,7 +153,9 @@ connected:
 - **Notifications** – subscription system: Discord users subscribe to events
   (server start, server stop, …) or to players coming online and get a DM.
 - **Leaderboards** – configurable rankings from the vanilla statistics,
-  default play time and deaths.
+  default play time and deaths, each ranked highest or lowest first (fewest
+  deaths is first). `/mc top <category>` shows a ranking, `/mc stats <player>`
+  a player's value and rank in every category.
 - **whois** – additionally shows "last online", recorded by the mod on every
   leave ("online now" for online players, "unknown" for older data).
 - **Moderation commands** – `/mcadmin kick <player> [reason]`,

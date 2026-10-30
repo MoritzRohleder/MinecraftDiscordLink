@@ -78,6 +78,8 @@ public final class DiscordBot {
     private volatile ChatBridge chatBridge;
     /** The Discord side of the linking, set once the bot is ready if one of the channels is available. */
     private volatile AccountLinking accountLinking;
+    /** The slash commands, set once the bot is ready if one of the channels is available. */
+    private volatile SlashCommands slashCommands;
     /** Whether the bot is connected and ready. */
     private boolean ready;
     /** Whether the server has finished starting. */
@@ -189,6 +191,7 @@ public final class DiscordBot {
             SlashCommands commands = new SlashCommands(guild, linking, server, startTime);
             jda.addEventListener(accounts, commands);
             commands.register();
+            slashCommands = commands;
             accountLinking = accounts;
             accounts.apply();
         });
@@ -252,7 +255,8 @@ public final class DiscordBot {
 
     /**
      * Applies a reloaded config: sets up the chat webhook again, as {@code chat.webhook} may have changed, and
-     * applies the linked role and the whitelist roles.
+     * applies the linked role and the whitelist roles and registers the slash commands again for the leaderboard
+     * categories.
      */
     public void onConfigReloaded() {
         ChatBridge bridge = chatBridge;
@@ -266,6 +270,10 @@ public final class DiscordBot {
         AccountLinking accounts = accountLinking;
         if (accounts != null) {
             accounts.apply();
+        }
+        SlashCommands commands = slashCommands;
+        if (commands != null) {
+            commands.register();
         }
     }
 

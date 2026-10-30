@@ -46,11 +46,18 @@ public final class ConfigLoader {
     /** Name of the config file inside the config directory. */
     public static final String FILE_NAME = Constants.MOD_ID + ".toml";
 
+    /** Discord allows at most 25 choices for an option, one per leaderboard category. */
+    private static final int MAX_CATEGORIES = 25;
+    /** Largest number of players shown by {@code /mc top}, so the answer stays readable. */
+    public static final int MAX_LEADERBOARD_SIZE = 25;
+
     /** Discord IDs ("snowflakes") are 17 to 20 digit numbers. */
     private static final Pattern SNOWFLAKE = Pattern.compile("\\d{17,20}");
     /** Webhook URLs as copied from Discord, including the PTB and Canary clients. */
     private static final Pattern WEBHOOK_URL =
             Pattern.compile("https://(?:ptb\\.|canary\\.)?discord(?:app)?\\.com/api/webhooks/\\d+/[\\w-]+");
+    /** Vanilla scoreboard criteria of statistics, e.g. {@code minecraft.mined:minecraft.diamond_ore}. */
+    private static final Pattern STAT = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_.-]+");
 
     /** Comment documenting the placeholders of the status and topic formats. */
     private static final String PLACEHOLDERS = comment(
@@ -151,6 +158,38 @@ public final class ConfigLoader {
                 "  \"auto\"  the bot creates and uses a role named \"Linked Account\" (needs \"Manage Roles\")",
                 "  role ID use this role (it must be below the bot's highest role)",
                 "  \"\"      no role"));
+
+        section("leaderboard", comment(
+                "Leaderboards from the vanilla statistics: /mc top <category> and /mc stats <player>.",
+                "",
+                "Every [[leaderboard.categories]] entry is one ranked statistic:",
+                "  stat   the statistic as scoreboard criterion, e.g.",
+                "         \"minecraft.custom:minecraft.play_time\", \"minecraft.mined:minecraft.diamond_ore\",",
+                "         \"minecraft.killed:minecraft.zombie\" or \"minecraft.used:minecraft.diamond_pickaxe\"",
+                "  name   name shown in Discord (optional, default: the vanilla name of the statistic)",
+                "  order  \"highest\" = the highest value is ranked first, \"lowest\" = the lowest (e.g. deaths)",
+                "At most 25 categories. With \"categories = []\" the leaderboard commands are not available."));
+        entry("leaderboard.size", 10, comment("Number of players shown by /mc top. Minimum: 1, maximum: "
+                + MAX_LEADERBOARD_SIZE + "."));
+        entry("leaderboard.categories", List.of(
+                category("minecraft.custom:minecraft.play_time", "Play time", "highest"),
+                category("minecraft.custom:minecraft.deaths", "Deaths", "lowest")), null);
+    }
+
+    /**
+     * Creates a default {@code [[leaderboard.categories]]} entry.
+     *
+     * @param stat  the statistic as scoreboard criterion
+     * @param name  the name shown in Discord
+     * @param order {@code "highest"} or {@code "lowest"}
+     * @return the entry
+     */
+    private static CommentedConfig category(String stat, String name, String order) {
+        CommentedConfig category = newConfig();
+        category.set("stat", stat);
+        category.set("name", name);
+        category.set("order", order);
+        return category;
     }
 
     private ConfigLoader() {
@@ -323,7 +362,8 @@ public final class ConfigLoader {
                             integer("console.batch_interval_ms", 1000),
                             permissions()),
                     new ModConfig.Whitelist(roleIds()),
-                    new ModConfig.Linking(integer("linking.code_validity_minutes", 1), linkedRole()));
+                    new ModConfig.Linking(integer("linking.code_validity_minutes", 1), linkedRole()),
+                    new ModConfig.Leaderboard(integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()));
         }
 
         /**
@@ -497,6 +537,65 @@ public final class ConfigLoader {
         }
 
         /**
+         * Reads the {@code [[leaderboard.categories]]} entries. Invalid entries, entries repeating a statistic and
+         * entries beyond the 25th (Discord's limit of choices) are logged and ignored.
+         *
+         * @return the valid categories
+         */
+        private List<ModConfig.Category> categories() {
+            String path = "leaderboard.categories";
+            if (!(config.get(path) instanceof List<?> entries)) {
+                Constants.LOG.error("Invalid value for '{}' in the config. The leaderboards stay inactive.", path);
+                return List.of();
+            }
+            List<ModConfig.Category> categories = new ArrayList<>();
+            for (int i = 0; i < entries.size(); i++) {
+                String name = path + " entry " + (i + 1);
+                ModConfig.Category category = entries.get(i) instanceof UnmodifiableConfig entry
+                        ? category(entry) : null;
+                if (category == null) {
+                    Constants.LOG.error("Invalid {} in the config (needs a valid 'stat' and 'order' = \"highest\" "
+                            + "or \"lowest\"). The entry is ignored.", name);
+                } else if (categories.stream().anyMatch(other -> other.stat().equals(category.stat()))) {
+                    Constants.LOG.error("The statistic '{}' of {} is already a category. The entry is ignored.",
+                            category.stat(), name);
+                } else if (categories.size() == MAX_CATEGORIES) {
+                    Constants.LOG.error("More than {} entries in '{}' in the config. {} is ignored.",
+                            MAX_CATEGORIES, path, name);
+                } else {
+                    categories.add(category);
+                }
+            }
+            return List.copyOf(categories);
+        }
+
+        /**
+         * Parses one {@code [[leaderboard.categories]]} entry.
+         *
+         * @param entry the entry
+         * @return the category, or {@code null} if invalid
+         */
+        private static ModConfig.Category category(UnmodifiableConfig entry) {
+            if (!(entry.get("stat") instanceof String stat) || !STAT.matcher(stat.strip()).matches()) {
+                return null;
+            }
+            Object name = entry.get("name");
+            if (name != null && !(name instanceof String)) {
+                return null;
+            }
+            Optional<String> displayName = Optional.ofNullable((String) name).map(String::strip)
+                    .filter(text -> !text.isEmpty());
+            Object order = entry.get("order");
+            if (order == null || "highest".equals(order)) {
+                return new ModConfig.Category(stat.strip(), displayName, false);
+            }
+            if ("lowest".equals(order)) {
+                return new ModConfig.Category(stat.strip(), displayName, true);
+            }
+            return null;
+        }
+
+        /**
          * Reads the whitelisted role IDs. Invalid IDs are logged and ignored.
          *
          * @return the valid role IDs
@@ -540,9 +639,21 @@ public final class ConfigLoader {
          * @return the integer value, or the default if invalid
          */
         private int integer(String path, int min) {
+            return integer(path, min, Integer.MAX_VALUE);
+        }
+
+        /**
+         * Reads an integer value with a lower and an upper bound.
+         *
+         * @param path path of the entry
+         * @param min  smallest valid value; smaller values are invalid
+         * @param max  largest valid value; larger values are invalid
+         * @return the integer value, or the default if invalid
+         */
+        private int integer(String path, int min, int max) {
             if (config.get(path) instanceof Number number) {
                 long value = number.longValue();
-                if (value >= min && value <= Integer.MAX_VALUE) {
+                if (value >= min && value <= max) {
                     return (int) value;
                 }
             }

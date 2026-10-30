@@ -2,6 +2,8 @@ package de.moritzrohleder.minecraftdiscordlink.discord;
 
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
+import de.moritzrohleder.minecraftdiscordlink.leaderboard.Leaderboards.Category;
+import de.moritzrohleder.minecraftdiscordlink.leaderboard.Ranking;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.Reply;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.WhoisEntry;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
@@ -12,8 +14,10 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 import java.awt.Color;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -106,6 +110,60 @@ final class CommandEmbeds {
     }
 
     /**
+     * Builds the answer of {@code /mc top}: the best players of one category, the first three with medals.
+     *
+     * @param category the category
+     * @param ranking  the ranking of the category
+     * @param size     the number of players shown
+     * @param names    returns the name of a player
+     * @return the embed
+     */
+    static MessageEmbed top(Category category, Ranking ranking, int size, Function<UUID, String> names) {
+        EmbedBuilder embed = new EmbedBuilder().setTitle("🏆 " + category.name());
+        if (ranking.entries().isEmpty()) {
+            return embed.setDescription("Nobody has played on this server yet.").setColor(EmbedColors.GRAY).build();
+        }
+        String list = ranking.top(size).stream()
+                .map(entry -> place(entry.rank()) + " **" + DiscordText.escape(names.apply(entry.player())) + "** · "
+                        + category.format().format(entry.value()))
+                .collect(Collectors.joining("\n"));
+        return embed.setDescription(list)
+                .setFooter(players(ranking.entries().size()) + " ranked"
+                        + (category.lowestFirst() ? " · lowest value first" : ""))
+                .setColor(EmbedColors.GOLD)
+                .build();
+    }
+
+    /**
+     * Builds the answer of {@code /mc stats}: the player's value and rank in every category, e.g.
+     * {@code Deaths: 1st · 0}.
+     *
+     * @param uuid     the player's UUID, for the head
+     * @param name     the player's name
+     * @param rankings the ranking of every category
+     * @return the embed
+     */
+    static MessageEmbed stats(UUID uuid, String name, Map<Category, Ranking> rankings) {
+        EmbedBuilder embed = new EmbedBuilder().setAuthor(name, null, head(uuid, name));
+        StringBuilder lines = new StringBuilder();
+        int players = 0;
+        for (Map.Entry<Category, Ranking> category : rankings.entrySet()) {
+            Optional<Ranking.Entry> entry = category.getValue().find(uuid);
+            if (entry.isEmpty()) {
+                return embed.setDescription("Has not played on this server yet.").setColor(EmbedColors.GRAY).build();
+            }
+            players = category.getValue().entries().size();
+            lines.append("**").append(DiscordText.escape(category.getKey().name())).append(":** ")
+                    .append(Ranking.ordinal(entry.get().rank())).append(" · ")
+                    .append(category.getKey().format().format(entry.get().value())).append('\n');
+        }
+        return embed.setDescription(lines.toString().strip())
+                .setFooter("Ranked among " + players(players))
+                .setColor(EmbedColors.BLURPLE)
+                .build();
+    }
+
+    /**
      * Builds the answer of an action such as {@code /mc link}: green on success, red on failure.
      *
      * @param reply the result of the action
@@ -167,6 +225,31 @@ final class CommandEmbeds {
             embed.setColor(EmbedColors.GRAY);
         }
         return embed.build();
+    }
+
+    /**
+     * Shows a rank in a leaderboard: a medal for the first three, otherwise the number.
+     *
+     * @param rank the rank
+     * @return e.g. {@code 🥇} or {@code **4.**}
+     */
+    private static String place(int rank) {
+        return switch (rank) {
+            case 1 -> "🥇";
+            case 2 -> "🥈";
+            case 3 -> "🥉";
+            default -> "**" + rank + ".**";
+        };
+    }
+
+    /**
+     * Formats a number of players.
+     *
+     * @param count the number of players
+     * @return e.g. {@code 1 player} or {@code 12 players}
+     */
+    private static String players(int count) {
+        return count + (count == 1 ? " player" : " players");
     }
 
     /**

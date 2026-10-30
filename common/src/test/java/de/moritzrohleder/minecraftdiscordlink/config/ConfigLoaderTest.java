@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -44,6 +45,49 @@ class ConfigLoaderTest {
         assertTrue(config.console().permissions().isEmpty());
         assertFalse(config.whitelist().enabled());
         assertEquals(60, config.linking().codeValidityMinutes());
+        assertTrue(content.contains("[[leaderboard.categories]]"));
+        assertEquals(10, config.leaderboard().size());
+        assertEquals(List.of(
+                new ModConfig.Category("minecraft.custom:minecraft.play_time", Optional.of("Play time"), false),
+                new ModConfig.Category("minecraft.custom:minecraft.deaths", Optional.of("Deaths"), true)),
+                config.leaderboard().categories());
+        assertEquals(config, ConfigLoader.load(file));
+    }
+
+    @Test
+    void readsLeaderboardCategories() throws IOException {
+        Path file = dir.resolve("config.toml");
+        Files.writeString(file, """
+                [leaderboard]
+                size = 99
+
+                [[leaderboard.categories]]
+                stat = "minecraft.mined:minecraft.diamond_ore"
+
+                [[leaderboard.categories]]
+                stat = "minecraft.custom:minecraft.deaths"
+                name = "Deaths"
+                order = "lowest"
+
+                [[leaderboard.categories]]
+                stat = "minecraft.custom:minecraft.deaths"
+                order = "lowest"
+
+                [[leaderboard.categories]]
+                stat = "no stat"
+
+                [[leaderboard.categories]]
+                stat = "minecraft.custom:minecraft.jump"
+                order = "sideways"
+                """);
+
+        ModConfig config = ConfigLoader.load(file);
+
+        assertEquals(10, config.leaderboard().size());
+        assertEquals(List.of(
+                new ModConfig.Category("minecraft.mined:minecraft.diamond_ore", Optional.empty(), false),
+                new ModConfig.Category("minecraft.custom:minecraft.deaths", Optional.of("Deaths"), true)),
+                config.leaderboard().categories());
     }
 
     @Test

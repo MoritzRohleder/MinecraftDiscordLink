@@ -76,7 +76,8 @@ public final class ConfigManager {
                         loaded.console().batchIntervalMs(),
                         loaded.console().permissions()),
                 loaded.whitelist(),
-                loaded.linking());
+                loaded.linking(),
+                loaded.leaderboard());
         Constants.LOG.info("Config reloaded");
         return restartNeeded;
     }
