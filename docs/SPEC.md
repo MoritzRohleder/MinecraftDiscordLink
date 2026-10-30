@@ -287,8 +287,8 @@ Minecraft `whois`: `Steve is linked to @steve (online now)` /
   statistic missing from a file counts as 0.
 - Players with the same value share a rank, the next rank is skipped
   (50, 30, 30, 10 → 1st, 2nd, 2nd, 4th).
-- Values are shown in the statistic's unit: time as `2d 3h 15m`, distances as
-  `850 m` / `12.3 km`, damage with one decimal, everything else as number.
+- Values are shown in the statistic's unit: time as `42s` below a minute,
+  otherwise `2d 3h 15m`; distances as `38 cm` / `850 m` / `12.3 km`, damage with one decimal, everything else as number.
 - Unknown statistics are logged as errors and left out. Categories without a
   name use the vanilla name (`Time Played`, `Mined: Diamond Ore`).
 - The categories are applied on reload (the slash commands are registered

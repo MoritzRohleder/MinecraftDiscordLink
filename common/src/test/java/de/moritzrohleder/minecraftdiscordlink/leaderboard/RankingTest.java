@@ -54,8 +54,14 @@ class RankingTest {
     void formatsValues() {
         assertEquals("1,234", StatFormat.NUMBER.format(1234));
         assertEquals("12.5", StatFormat.TENTHS.format(125));
+        assertEquals("0 cm", StatFormat.DISTANCE.format(0));
+        assertEquals("38 cm", StatFormat.DISTANCE.format(38));
+        assertEquals("1 m", StatFormat.DISTANCE.format(100));
         assertEquals("850 m", StatFormat.DISTANCE.format(85_000));
         assertEquals("12.3 km", StatFormat.DISTANCE.format(1_234_567));
+        assertEquals("0s", StatFormat.TIME.format(0));
+        assertEquals("42s", StatFormat.TIME.format(841));
+        assertEquals("1m", StatFormat.TIME.format(60 * 20));
         assertEquals("17m", StatFormat.TIME.format(17 * 60 * 20));
         assertEquals("1d 2h 3m", StatFormat.TIME.format(((24 + 2) * 60 + 3) * 60 * 20L));
     }
