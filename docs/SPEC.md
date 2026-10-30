@@ -96,6 +96,16 @@ code_validity_minutes = 60
 # ""      = no role
 linked_role = "auto"
 
+[moderation]
+# Channel for the moderation log, optional ("" = only the log file)
+channel_id = ""
+
+[moderation.ban_sync]
+# Bans across Minecraft and Discord for linked accounts (opt-in)
+enabled = false
+# What a Minecraft ban does to the linked Discord account: "ban" or "kick"
+discord_action = "ban"
+
 [leaderboard]
 # Number of players shown by /mc top (1-25)
 size = 10
@@ -140,6 +150,7 @@ order = "lowest"
 | `/discord unlink` | everyone | Remove own link |
 | `/discord whois <name>` | everyone | Linked account or "not linked" (Minecraft or Discord name) |
 | `/discord admin link <player> <discordname>` | admin | Link accounts manually |
+| `/discord tempban <player> <duration> <reason>` | admin | Temporary ban, e.g. `/discord tempban Steve 7d Griefing` |
 | `/discord reload` | admin | Reload config |
 
 Admin = OP level 4 **or** permission node `minecraftdiscordlink.admin`.
@@ -160,6 +171,15 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mc unlink` | everyone | Remove own link |
 | `/mcadmin link <player> <user>` | Administrator | Link accounts manually |
 | `/mcadmin reload` | Administrator | Reload config |
+| `/mcadmin kick <player> <reason>` | Administrator | Kick an online player |
+| `/mcadmin ban <player> <reason> [duration]` | Administrator | Ban a player, permanently without duration |
+| `/mcadmin unban <player> <reason>` | Administrator | Lift a ban |
+| `/mcadmin banlist` | Administrator | List the banned players with reason, source and end |
+| `/mcadmin whitelist add <player> [reason]` | Administrator | Add a player to the vanilla whitelist |
+| `/mcadmin whitelist remove <player> [reason]` | Administrator | Remove a player from the vanilla whitelist |
+| `/mcadmin whitelist list` | Administrator | List the whitelisted players |
+| `/mcadmin whitelist on <reason>` | Administrator | Switch the vanilla whitelist on (not the role whitelist) |
+| `/mcadmin whitelist off [reason]` | Administrator | Switch the vanilla whitelist off |
 
 `whois` searches Minecraft and Discord names. Minecraft names only count for
 players who have played on the server or are linked. If a name matches
@@ -293,6 +313,71 @@ Minecraft `whois`: `Steve is linked to @steve (online now)` /
   name use the vanilla name (`Time Played`, `Mined: Diamond Ore`).
 - The categories are applied on reload (the slash commands are registered
   again).
+
+## 4b. Moderation
+
+### Actions and reasons
+
+- Players are given by Minecraft name; players who never joined are looked
+  up like in vanilla (Mojang).
+- A reason is required for `kick`, `ban`, `tempban`, `unban` and
+  `whitelist on`; optional for `whitelist add|remove|off`. Vanilla commands
+  (`/kick`, `/ban`, `/pardon`, …) stay unchanged: without a reason the log
+  says `no reason given`.
+- Durations: `30m`, `12h`, `7d`, `2w` and combinations such as `1d12h`.
+  Without a duration a ban is permanent.
+- Bans are vanilla bans in `banned-players.json`: the source is the
+  moderator (`Discord: @anedhel` for Discord, the player name or `Server`
+  for Minecraft), the end of a temporary ban is the vanilla `expires` field.
+- Banned online players are kicked with the vanilla ban message.
+- `whitelist add` while the vanilla whitelist is off adds the player
+  anyway; the answer says that the whitelist is off.
+
+### Moderation log
+
+Every moderation action is logged, from Discord commands as well as from
+vanilla commands and other mods: kick, ban, temporary ban, unban, ban
+expired, IP ban and IP unban (log only), whitelist add/remove/on/off.
+
+- Server console (INFO).
+- `minecraftdiscordlink/moderation.log`, one line per action:
+  `2026-10-30 15:40:12 | BAN | Steve | by Discord @anedhel | 7d (until 2026-11-06 15:40) | Griefing`
+- The moderation channel if `moderation.channel_id` is set: one embed per
+  action, kick yellow, ban red, unban and ban expired green, whitelist blue.
+
+Admins in Minecraft see Discord actions like vanilla commands of other
+operators: `[@anedhel: Banned Steve: Griefing]` (gray, italic).
+
+### Ban sync (`moderation.ban_sync`)
+
+Opt-in, only for linked accounts:
+
+| Action | Effect on the other side |
+|---|---|
+| Minecraft ban (any source, also temporary) | `discord_action = "ban"`: the Discord account is banned; `"kick"`: it is kicked from the Discord server |
+| Minecraft unban | the Discord ban is lifted (with `"ban"`) |
+| Temporary ban expires | the Discord ban is lifted; logged as `ban expired` |
+| Discord ban (by anyone, also via the Discord menu) | the Minecraft account is banned, source the Discord moderator, reason the Discord ban reason |
+| Discord unban | the Minecraft ban is lifted |
+| Kick (either side) | only logged, never synchronized |
+
+- Discord has no temporary bans. The mod notices when Minecraft removes an
+  expired ban (Minecraft does that on the next login attempt or server
+  start) and lifts the Discord ban then. If Discord is unavailable, the mod
+  retries while the server runs.
+- An action caused by the sync does not trigger the sync again and is
+  logged once.
+- The Discord ban reason (audit log) is `Minecraft ban: <reason>`; no
+  messages are deleted.
+- Requires the bot permissions *Ban Members* and *Kick Members*; members
+  above the bot's highest role cannot be banned (logged as error).
+
+### Answers
+
+Discord answers are embeds as usual: green on success, e.g.
+`✅ Banned **Steve** for 7d (until <date>): Griefing`, red on errors, e.g.
+`❌ Steve is not banned.` `banlist` and `whitelist list` show one player per
+line (`**Steve** · by Discord @anedhel · until <date> · Griefing`).
 
 ## 5. Data storage
 

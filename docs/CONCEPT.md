@@ -149,7 +149,9 @@ connected:
   - Persistent status message, edited at a configurable interval, content
     configurable with placeholders (default: status and player list).
 - **Bans across both sides** – opt-in, bidirectional; configurable whether a
-  Minecraft ban bans or only kicks from Discord.
+  Minecraft ban bans or only kicks from Discord. Built together with the
+  moderation commands; temporary bans are lifted on both sides when they
+  expire.
 - **Notifications** – subscription system: Discord users subscribe to events
   (server start, server stop, …) or to players coming online and get a DM.
 - **Leaderboards** – configurable rankings from the vanilla statistics,
@@ -158,9 +160,11 @@ connected:
   a player's value and rank in every category.
 - **whois** – additionally shows "last online", recorded by the mod on every
   leave ("online now" for online players, "unknown" for older data).
-- **Moderation commands** – `/mcadmin kick <player> [reason]`,
-  `/mcadmin ban <player> [reason]`, `/mcadmin unban <player>`,
-  `/mcadmin whitelist add|remove <player>`.
+- **Moderation commands** – kick, (temporary) ban, unban and whitelist from
+  Discord, temporary bans also from Minecraft; a reason is required for
+  kick, ban, unban and switching the whitelist on. Every moderation action,
+  including vanilla commands, goes to the console, a moderation log file and
+  optionally a moderation channel. See SPEC section 4b.
 - **Maintenance mode** – bidirectional commands (Discord and Minecraft), a
   temporary whitelist: only operators and linked Discord admins may join.
   Whether it survives a restart is a parameter of the command. Shown in the
