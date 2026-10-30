@@ -268,7 +268,7 @@ Discord answers with embeds (no pings), Minecraft with plain text.
 | `online` | Title `🟢 2/20 players online`, one player per line, linked players with their Discord account (`Steve · @anedhel`); gray "Nobody is online." if empty |
 | `status` | Fields Uptime, TPS, MSPT, Players, Version; bar green from 19 TPS, yellow from 15, otherwise red |
 | `whois` | One embed per account: player head and name, fields Minecraft, Discord, Last online, Linked since; gray "Not linked" otherwise |
-| `playtime` | Player head, `Play time: 12h 34m` |
+| `playtime` | Player head, `Play time: 12h 34m`; online players additionally `🟢 Online since <relative time>` with a green bar |
 | `link`, `unlink`, `reload` | Green on success, red on errors |
 
 | `top` | Gold, title `🏆 Play time`, one line per player: `🥇 **Steve** · 12h 34m`, from rank 4 `**4.** **Alex** · 2h 5m`; footer `12 players ranked` (plus `· lowest value first`) |

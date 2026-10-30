@@ -49,8 +49,10 @@ class PlayerStatsTest {
         PlayerStats stats = new PlayerStats(dir, Clock.fixed(DAY_ONE, ZoneOffset.UTC));
         stats.recordJoin(STEVE, List.of(STEVE));
         assertTrue(stats.lastSeen(STEVE).isEmpty());
+        assertEquals(Optional.of(DAY_ONE), stats.onlineSince(STEVE));
 
         stats.recordLeave(STEVE);
+        assertTrue(stats.onlineSince(STEVE).isEmpty());
 
         assertEquals(Optional.of(DAY_ONE), new PlayerStats(dir, Clock.systemUTC()).lastSeen(STEVE));
     }

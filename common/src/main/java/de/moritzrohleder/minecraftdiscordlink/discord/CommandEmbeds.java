@@ -13,6 +13,7 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 
 import java.awt.Color;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -92,18 +93,21 @@ final class CommandEmbeds {
     }
 
     /**
-     * Builds the answer of {@code /mc playtime}.
+     * Builds the answer of {@code /mc playtime}, for online players with the time since they joined.
      *
-     * @param uuid     the player's UUID, for the head
-     * @param name     the player's name
-     * @param playtime the play time, empty if the player has never played
+     * @param uuid        the player's UUID, for the head
+     * @param name        the player's name
+     * @param playtime    the play time, empty if the player has never played
+     * @param onlineSince when the player joined, empty if the player is not online
      * @return the embed
      */
-    static MessageEmbed playtime(UUID uuid, String name, Optional<Duration> playtime) {
+    static MessageEmbed playtime(UUID uuid, String name, Optional<Duration> playtime, Optional<Instant> onlineSince) {
         EmbedBuilder embed = new EmbedBuilder().setTitle(DiscordText.escape(name)).setThumbnail(head(uuid, name));
         return playtime
-                .map(duration -> embed.setDescription("Play time: **" + Durations.format(duration) + "**")
-                        .setColor(EmbedColors.BLURPLE))
+                .map(duration -> embed.setDescription("Play time: **" + Durations.format(duration) + "**"
+                                + onlineSince.map(time -> "\n🟢 Online since <t:" + time.getEpochSecond() + ":R>")
+                                        .orElse(""))
+                        .setColor(onlineSince.isPresent() ? EmbedColors.GREEN : EmbedColors.BLURPLE))
                 .orElseGet(() -> embed.setDescription("Has not played on this server yet.")
                         .setColor(EmbedColors.GRAY))
                 .build();

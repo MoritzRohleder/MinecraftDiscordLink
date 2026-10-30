@@ -6,6 +6,7 @@ import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Leaderboards;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
@@ -46,6 +47,7 @@ final class SlashCommands extends ListenerAdapter {
     private final Linking linking;
     private final MinecraftServer server;
     private final Instant startTime;
+    private final PlayerStats stats;
     /** The leaderboard categories of the registered commands. */
     private volatile List<Leaderboards.Category> categories = List.of();
 
@@ -56,12 +58,14 @@ final class SlashCommands extends ListenerAdapter {
      * @param linking   the account linking
      * @param server    the running server
      * @param startTime when the server was started, for the uptime
+     * @param stats     the player statistics, for "online since"
      */
-    SlashCommands(Guild guild, Linking linking, MinecraftServer server, Instant startTime) {
+    SlashCommands(Guild guild, Linking linking, MinecraftServer server, Instant startTime, PlayerStats stats) {
         this.guild = guild;
         this.linking = linking;
         this.server = server;
         this.startTime = startTime;
+        this.stats = stats;
     }
 
     /**
@@ -130,7 +134,8 @@ final class SlashCommands extends ListenerAdapter {
                                 ? CompletableFuture.completedFuture(List.of(CommandEmbeds.error(
                                         "No Minecraft player named **" + DiscordText.escape(player) + "** was found.")))
                                 : onServerThread(() -> List.of(CommandEmbeds.playtime(profile.get().getId(),
-                                        profile.get().getName(), ServerInfo.playtime(server, profile.get()))))));
+                                        profile.get().getName(), ServerInfo.playtime(server, profile.get()),
+                                        stats.onlineSince(profile.get().getId()))))));
             }
             case "mc top" -> top(event);
             case "mc stats" -> stats(event);

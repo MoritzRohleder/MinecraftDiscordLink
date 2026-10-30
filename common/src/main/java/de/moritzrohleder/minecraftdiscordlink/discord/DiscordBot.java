@@ -188,7 +188,7 @@ public final class DiscordBot {
         });
         guild().ifPresent(guild -> {
             AccountLinking accounts = new AccountLinking(jda, guild, server, linking, state, executor);
-            SlashCommands commands = new SlashCommands(guild, linking, server, startTime);
+            SlashCommands commands = new SlashCommands(guild, linking, server, startTime, stats);
             jda.addEventListener(accounts, commands);
             commands.register();
             slashCommands = commands;

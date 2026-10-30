@@ -22,7 +22,7 @@ import java.util.UUID;
 
 /**
  * Counts the distinct players for the placeholders {@code {unique_session}}, {@code {unique_today}} and
- * {@code {unique_total}}, and remembers when each player was last online.
+ * {@code {unique_total}}, remembers when each player was last online and since when the online players are online.
  * <p>
  * Players since the server start are only kept in memory. Today's and all players ever are stored in
  * {@code minecraftdiscordlink/stats.json} (see {@link JsonFile}) and written on every new player, so nothing is lost
@@ -44,6 +44,8 @@ public final class PlayerStats {
     private final Set<UUID> total = new LinkedHashSet<>();
     /** When each player left the server the last time. */
     private final Map<UUID, Instant> lastSeen = new HashMap<>();
+    /** When each online player joined, only kept in memory. */
+    private final Map<UUID, Instant> onlineSince = new HashMap<>();
     private LocalDate date;
 
     /**
@@ -68,6 +70,7 @@ public final class PlayerStats {
     public synchronized void recordJoin(UUID player, Collection<UUID> online) {
         boolean changed = rollOver(online);
         session.add(player);
+        onlineSince.put(player, clock.instant().truncatedTo(ChronoUnit.SECONDS));
         changed |= today.add(player);
         changed |= total.add(player);
         if (changed) {
@@ -82,7 +85,18 @@ public final class PlayerStats {
      */
     public synchronized void recordLeave(UUID player) {
         lastSeen.put(player, clock.instant().truncatedTo(ChronoUnit.SECONDS));
+        onlineSince.remove(player);
         save();
+    }
+
+    /**
+     * Returns since when a player is online.
+     *
+     * @param player the player's UUID
+     * @return the time the player joined, empty if the player is not online
+     */
+    public synchronized Optional<Instant> onlineSince(UUID player) {
+        return Optional.ofNullable(onlineSince.get(player));
     }
 
     /**
