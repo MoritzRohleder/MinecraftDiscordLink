@@ -18,13 +18,14 @@ installed on the dedicated server – players don't need it.
   or users can run commands there.
 - **Account linking** – players link their Minecraft and Discord accounts;
   linked members get a Discord role and appear with both names.
-- **Whitelist via Discord** – members with configured roles may join, in
-  addition to the vanilla whitelist. Unlinked players get a link code when
-  they try to join.
+- **Whitelist via Discord** – while the whitelist is on, linked members with
+  configured roles may join, in addition to the vanilla whitelist. Unlinked
+  players get a link code when they try to join.
 - **Moderation** – kick, (temporary) ban, unban and whitelist from Discord,
   temporary bans also in Minecraft. Every moderation action, also from
   vanilla commands, goes to a moderation log file and optionally a Discord
-  channel. Optional ban sync between Minecraft and linked Discord accounts.
+  channel. Optional ban sync between Minecraft and linked Discord accounts,
+  bans on all servers sharing the Discord server.
 - **Maintenance mode** – only operators and linked Discord admins may join;
   switched from Discord or Minecraft, optionally kept after a restart.
 - **Monitoring channel** – lag warnings, crash notices, a daily report and a
@@ -35,6 +36,8 @@ installed on the dedicated server – players don't need it.
   and deaths) and every player's ranks.
 - **Slash commands** – `/mc online`, `/mc status`, `/mc whois`,
   `/mc top`, `/mc stats` and more.
+- **Configurable** – every feature can be switched off (`enabled` in each
+  config section), all texts players and members see are in `[messages]`.
 
 ## Installation
 
@@ -86,9 +89,12 @@ installed on the dedicated server – players don't need it.
 
 Several servers can share one Discord server and bot: use the same token,
 a chat and console channel per server, a unique `server.name` on every
-server and `server.primary = true` on exactly one. Slash commands then take
-an optional `server` option; without it the primary server answers. Enable
-the bot status (`discord.status.enabled`) on one server only.
+server and `server.primary = true` on exactly one (with none, commands
+without `server` option stay unanswered; with two, both run them). Slash
+commands then take an optional `server` option; without it the primary
+server answers. Enable the bot status (`discord.status.enabled`) on one
+server only. For bans on all servers, all servers use the same
+`moderation.channel_id`.
 
 ## Configuration
 
@@ -108,14 +114,15 @@ All options are documented in the generated
 | `chat.topic.*` | every 10 min | Channel topic with placeholders |
 | `console.channel_id` | – | Console channel |
 | `[[console.permissions]]` | none | Who may run which commands (see below) |
-| `whitelist.role_ids` | `[]` | Roles whitelisted on the server; empty = off |
+| `*.enabled` | `true` | Switches a feature off (chat, console, whitelist roles, linking, moderation, maintenance, info, monitoring, notifications, leaderboard) |
+| `whitelist.role_ids` | `[]` | Discord roles on the whitelist (while `/whitelist on`); also `/mcadmin rolewhitelist add\|remove` |
 | `linking.linked_role` | `"auto"` | Role for linked members: `"auto"`, a role ID or `""` |
-| `whitelist.enabled` | `true` | Role whitelist on/off, also switched by `/mcadmin rolewhitelist` |
 | `moderation.channel_id` | – | Channel for the moderation log (optional) |
 | `moderation.ban_sync.enabled` | `false` | Bans across Minecraft and linked Discord accounts |
 | `moderation.ban_sync.discord_action` | `"ban"` | What a Minecraft ban does in Discord: `"ban"` or `"kick"` |
 | `monitoring.channel_id` | – | Monitoring channel (lag, crashes, daily report, status message) |
-| `monitoring.*` | on | Lag threshold, crash log lines, report time and format, status message |
+| `monitoring.*` | on | Lag threshold, crash notice, report time and format, status message (pinned) |
+| `[messages]` | English texts | Event, kick, DM, notification and monitoring texts with placeholders |
 | `leaderboard.size` | `10` | Players shown by `/mc top` |
 | `[[leaderboard.categories]]` | play time, deaths | Ranked statistics (see below) |
 
@@ -146,9 +153,9 @@ order = "lowest"    # "highest" (default) or "lowest"
 stat = "minecraft.mined:minecraft.diamond_ore"
 ```
 
-`/discord reload` applies all changes except the bot token and the channel IDs,
-which need a restart. Invalid values are logged as errors and replaced by their
-default.
+`/discord reload` applies all changes except the bot token and the `[server]`
+section, which need a restart; changed channels are applied at once. Invalid
+values are logged as errors and replaced by their default.
 
 ## Commands
 
@@ -162,7 +169,8 @@ default.
 | `/discord whois <name>` | everyone |
 | `/discord admin link <player> <discordname>` | admins |
 | `/discord tempban <player> <duration> <reason>` – e.g. `7d`, `12h`, `1d12h` | admins |
-| `/discord rolewhitelist on <reason>`, `off [reason]`, `status` | admins |
+| `/discord networkban`, `networktempban`, `networkunban` – the same on all servers | admins |
+| `/discord rolewhitelist status` | admins |
 | `/discord maintenance on [persistent] [reason]`, `off [reason]`, `status` | admins |
 | `/discord reload` | admins |
 
@@ -178,8 +186,8 @@ Admins are operators of level 4 or players with the permission node
 | `/mc subscribe`, `/mc unsubscribe`, `/mc subscriptions` – DM notifications | everyone |
 | `/mc link <code>` – link with the code from the kick message | everyone |
 | `/mc unlink` | everyone |
-| `/mcadmin kick`, `ban [duration]`, `unban`, `banlist` – reason required except for `banlist` | members with *Administrator* |
-| `/mcadmin whitelist add\|remove\|list\|on\|off`, `/mcadmin rolewhitelist on\|off\|add\|remove\|status` | members with *Administrator* |
+| `/mcadmin kick`, `ban [duration] [delete_messages] [all_servers]`, `unban [all_servers]`, `banlist [page]` – reason required except for `banlist` | members with *Administrator* |
+| `/mcadmin whitelist add\|remove\|list\|on\|off`, `/mcadmin rolewhitelist add\|remove\|status` | members with *Administrator* |
 | `/mcadmin maintenance on [keep_after_restart] [reason]`, `off`, `status` | members with *Administrator* |
 | `/mcadmin link <player> <user>`, `/mcadmin reload` | members with *Administrator* (adjustable in the server's integration settings) |
 
