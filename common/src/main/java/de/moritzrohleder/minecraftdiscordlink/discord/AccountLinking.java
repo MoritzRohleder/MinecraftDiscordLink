@@ -1,6 +1,7 @@
 package de.moritzrohleder.minecraftdiscordlink.discord;
 
 import de.moritzrohleder.minecraftdiscordlink.Constants;
+import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import net.dv8tion.jda.api.JDA;
@@ -206,9 +207,13 @@ public final class AccountLinking extends ListenerAdapter {
                 || !event.getMessage().getContentRaw().strip().equalsIgnoreCase("refresh")) {
             return;
         }
-        String reply = linking.refreshDmCode(event.getAuthor().getIdLong())
-                .orElse("There is no pending link request for your account. Start one in Minecraft with "
-                        + "`/discord link <your Discord username>`.");
+        Optional<String> refreshed = linking.refreshDmCode(event.getAuthor().getIdLong());
+        if (refreshed.isEmpty() && !ConfigManager.get().server().primary()) {
+            // Several servers share the Discord server: only the primary one answers that nothing is pending
+            return;
+        }
+        String reply = refreshed.orElse("There is no pending link request for your account. Start one in Minecraft "
+                + "with `/discord link <your Discord username>`.");
         event.getChannel().sendMessage(reply).queue(null, error ->
                 Constants.LOG.error("Could not answer a direct message: {}", error.getMessage()));
     }

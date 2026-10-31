@@ -62,7 +62,7 @@ final class Notifications {
             return CompletableFuture.completedFuture(null);
         }
         MessageEmbed embed = new EmbedBuilder().setDescription(text).setColor(color).setTimestamp(Instant.now())
-                .setFooter("Unsubscribe with /mc unsubscribe event:" + event.id()).build();
+                .setFooter("Unsubscribe with /mc unsubscribe event:" + event.id() + serverOption()).build();
         return sendAll(store.subscribers(event), embed);
     }
 
@@ -89,10 +89,30 @@ final class Notifications {
                 .toList();
         recipients.forEach(id -> lastPlayerNotice.put(id + "/" + player, now));
         MessageEmbed embed = new EmbedBuilder()
-                .setDescription("🟢 **" + DiscordText.escape(name) + "** is now online on the Minecraft server.")
+                .setDescription("🟢 **" + DiscordText.escape(name) + "** is now online on " + serverLabel() + ".")
                 .setColor(EmbedColors.GREEN).setTimestamp(now)
-                .setFooter("Unsubscribe with /mc unsubscribe player:" + name).build();
+                .setFooter("Unsubscribe with /mc unsubscribe player:" + name + serverOption()).build();
         sendAll(recipients, embed);
+    }
+
+    /**
+     * Names this server in notification texts.
+     *
+     * @return {@code the Minecraft server}, or with {@code server.name} e.g. {@code the Minecraft server **Survival**}
+     */
+    static String serverLabel() {
+        ModConfig.Server server = ConfigManager.get().server();
+        return "the Minecraft server" + (server.named() ? " **" + DiscordText.escape(server.name()) + "**" : "");
+    }
+
+    /**
+     * Returns the {@code server} option for the unsubscribe hint.
+     *
+     * @return e.g. {@code  server:Survival}, empty for a single server
+     */
+    private static String serverOption() {
+        ModConfig.Server server = ConfigManager.get().server();
+        return server.named() ? " server:" + server.name() : "";
     }
 
     /**

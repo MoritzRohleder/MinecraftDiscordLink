@@ -153,7 +153,8 @@ public final class MinecraftDiscordLink {
             bot.onConfigReloaded();
         }
         return restartNeeded
-                ? "Config reloaded. Changes to the bot token and the channel IDs need a server restart."
+                ? "Config reloaded. Changes to the bot token, the channel IDs and the [server] section need a "
+                        + "server restart."
                 : "Config reloaded.";
     }
 

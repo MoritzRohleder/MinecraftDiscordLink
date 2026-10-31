@@ -81,6 +81,14 @@ installed on the dedicated server – players don't need it.
    (Settings → Advanced), right-click the channels → *Copy Channel ID*, and put
    the IDs into `chat.channel_id` and `console.channel_id`.
 
+## Several Minecraft servers
+
+Several servers can share one Discord server and bot: use the same token,
+a chat and console channel per server, a unique `server.name` on every
+server and `server.primary = true` on exactly one. Slash commands then take
+an optional `server` option; without it the primary server answers. Enable
+the bot status (`discord.status.enabled`) on one server only.
+
 ## Configuration
 
 All options are documented in the generated
@@ -88,6 +96,8 @@ All options are documented in the generated
 
 | Option | Default | Meaning |
 |---|---|---|
+| `server.name` | `""` | Name of this server when several share the Discord server |
+| `server.primary` | `true` | Answers slash commands without a `server` option |
 | `discord.token` | – | Bot token |
 | `discord.status.*` | `playing`, every 5 min | Bot status text with placeholders |
 | `chat.channel_id` | – | Chat channel |

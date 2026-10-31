@@ -173,6 +173,17 @@ public final class LinkCodes {
     }
 
     /**
+     * Checks whether a kick code exists and is still valid, without redeeming it.
+     *
+     * @param code the code, case-insensitive
+     * @return whether the code is a valid kick code
+     */
+    public synchronized boolean hasKickCode(String code) {
+        removeExpired();
+        return kickCodes.containsKey(code.strip().toUpperCase(Locale.ROOT));
+    }
+
+    /**
      * A code sent by direct message.
      *
      * @param player    the player who requested it

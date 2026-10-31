@@ -214,6 +214,17 @@ public final class Linking {
     }
 
     /**
+     * Checks whether a kick code was given out by this server, so this server answers {@code /mc link} when several
+     * servers share the Discord server.
+     *
+     * @param code the code
+     * @return whether the code is a valid kick code of this server
+     */
+    public boolean ownsKickCode(String code) {
+        return codes.hasKickCode(code);
+    }
+
+    /**
      * Removes the link of a Discord user ({@code /mc unlink}).
      *
      * @param discordId the Discord user's ID

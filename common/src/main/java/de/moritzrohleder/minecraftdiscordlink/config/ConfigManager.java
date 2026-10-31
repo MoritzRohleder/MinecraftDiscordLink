@@ -58,12 +58,15 @@ public final class ConfigManager {
 
         boolean restartNeeded = !loaded.discord().token().equals(current.discord().token())
                 || !loaded.chat().channelId().equals(current.chat().channelId())
-                || !loaded.console().channelId().equals(current.console().channelId());
+                || !loaded.console().channelId().equals(current.console().channelId())
+                || !loaded.server().equals(current.server());
         if (restartNeeded) {
-            Constants.LOG.warn("The bot token and the channel IDs are only applied after a server restart.");
+            Constants.LOG.warn("The bot token, the channel IDs and the [server] section are only applied after a "
+                    + "server restart.");
         }
 
         config = new ModConfig(
+                current.server(),
                 new ModConfig.Discord(current.discord().token(), loaded.discord().status()),
                 new ModConfig.Chat(
                         current.chat().channelId(),
@@ -104,7 +107,7 @@ public final class ConfigManager {
             return false;
         }
         ModConfig current = get();
-        config = new ModConfig(current.discord(), current.chat(), current.console(),
+        config = new ModConfig(current.server(), current.discord(), current.chat(), current.console(),
                 new ModConfig.Whitelist(whitelist.enabled(), List.copyOf(whitelist.roleIds())), current.linking(),
                 current.moderation(), current.monitoring(), current.notifications(),
                 current.leaderboard());

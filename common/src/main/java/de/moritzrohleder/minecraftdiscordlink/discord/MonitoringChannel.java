@@ -29,6 +29,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -180,7 +181,8 @@ final class MonitoringChannel {
                 .setDescription(truncate(header + log)).setColor(EmbedColors.RED).setTimestamp(Instant.now())
                 .build();
         try {
-            channel.get().sendMessageEmbeds(embed).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
+            channel.get().sendMessageEmbeds(SlashCommands.tag(List.of(embed)))
+                    .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
                     .submit().get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -251,7 +253,7 @@ final class MonitoringChannel {
                 .setDescription("Stopped <t:" + Instant.now().getEpochSecond() + ":R>.")
                 .setColor(EmbedColors.RED).setTimestamp(Instant.now()).build();
         try {
-            channel.get().editMessageEmbedsById(messageId.getAsLong(), embed).submit()
+            channel.get().editMessageEmbedsById(messageId.getAsLong(), SlashCommands.tag(List.of(embed))).submit()
                     .get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -294,7 +296,8 @@ final class MonitoringChannel {
                 sendNew(channel.get(), embed);
                 return;
             }
-            channel.get().editMessageEmbedsById(messageId.getAsLong(), embed).queue(null, error -> {
+            channel.get().editMessageEmbedsById(messageId.getAsLong(), SlashCommands.tag(List.of(embed)))
+                    .queue(null, error -> {
                 if (error instanceof ErrorResponseException response
                         && (response.getErrorResponse() == ErrorResponse.UNKNOWN_MESSAGE
                         || response.getErrorResponse() == ErrorResponse.UNKNOWN_CHANNEL)) {
@@ -312,7 +315,7 @@ final class MonitoringChannel {
          * @param embed   the status
          */
         private void sendNew(GuildMessageChannel channel, MessageEmbed embed) {
-            channel.sendMessageEmbeds(embed).queue(
+            channel.sendMessageEmbeds(SlashCommands.tag(List.of(embed))).queue(
                     message -> state.setStatusMessage(OptionalLong.of(message.getIdLong())),
                     error -> Constants.LOG.error("Could not send the status message: {}", error.getMessage()));
         }
@@ -326,7 +329,7 @@ final class MonitoringChannel {
      * @param embed the embed
      */
     private void send(MessageEmbed embed) {
-        channel().ifPresent(channel -> channel.sendMessageEmbeds(embed)
+        channel().ifPresent(channel -> channel.sendMessageEmbeds(SlashCommands.tag(List.of(embed)))
                 .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
                 .queue(null, error -> Constants.LOG.error("Could not send to the monitoring channel: {}",
                         error.getMessage())));

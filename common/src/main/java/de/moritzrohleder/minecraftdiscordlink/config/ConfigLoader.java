@@ -82,6 +82,15 @@ public final class ConfigLoader {
     private static final Map<String, Entry> ENTRIES = new LinkedHashMap<>();
 
     static {
+        section("server", comment("This Minecraft server. Changes in this section require a server restart."));
+        entry("server.name", "", comment(
+                "Name of this server when several Minecraft servers share one Discord server (same bot token).",
+                "Shown in answers, notifications and the monitoring and moderation channels; the linked role",
+                "\"auto\" is then named \"Linked Account (<name>)\". \"\" = this is the only server."));
+        entry("server.primary", true, comment(
+                "The primary server answers slash commands without a \"server\" option. Exactly one server",
+                "sharing the Discord server should be primary."));
+
         section("discord", comment("Discord bot settings. Changes in this section require a server restart,",
                 "except for the status."));
         entry("discord.token", "", comment("Bot token from the Discord Developer Portal. Keep it secret!"));
@@ -437,6 +446,7 @@ public final class ConfigLoader {
          */
         ModConfig read() {
             return new ModConfig(
+                    new ModConfig.Server(string("server.name").strip(), bool("server.primary")),
                     new ModConfig.Discord(
                             token(),
                             new ModConfig.Status(

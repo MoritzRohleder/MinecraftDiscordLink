@@ -20,7 +20,8 @@ import java.util.concurrent.ScheduledExecutorService;
  * <p>
  * The role is synchronized for all members on server start and config reload, and for single members when a link
  * changes or someone changes the member's roles in Discord. For {@code "auto"} the bot creates the role
- * {@value #AUTO_ROLE_NAME} and creates it again if it is deleted; when the setting changes away from {@code "auto"},
+ * {@value #AUTO_ROLE_NAME} (with a {@code server.name}: {@code Linked Account (<name>)}) and creates it again if
+ * it is deleted; when the setting changes away from {@code "auto"},
  * the bot deletes the role it created. The ID of that role is kept in {@link StateStore}.
  * <p>
  * All work runs on the bot's executor, so it never blocks Discord's event threads.
@@ -29,6 +30,17 @@ final class LinkedRoles {
 
     /** Name of the role the bot creates for {@code "auto"}. */
     static final String AUTO_ROLE_NAME = "Linked Account";
+
+    /**
+     * Returns the name of the role the bot creates for {@code "auto"}: with the server name when several servers
+     * share the Discord server, so every server has its own role.
+     *
+     * @return e.g. {@code Linked Account} or {@code Linked Account (Survival)}
+     */
+    static String autoRoleName() {
+        ModConfig.Server server = ConfigManager.get().server();
+        return server.named() ? AUTO_ROLE_NAME + " (" + server.name() + ")" : AUTO_ROLE_NAME;
+    }
 
     private final Guild guild;
     private final LinkStore links;
@@ -171,10 +183,10 @@ final class LinkedRoles {
             }
         }
         try {
-            Role created = guild.createRole().setName(AUTO_ROLE_NAME).setPermissions(0L).setMentionable(false)
+            Role created = guild.createRole().setName(autoRoleName()).setPermissions(0L).setMentionable(false)
                     .complete();
             state.setCreatedLinkedRole(OptionalLong.of(created.getIdLong()));
-            Constants.LOG.info("Created the Discord role '{}' for linked accounts", AUTO_ROLE_NAME);
+            Constants.LOG.info("Created the Discord role '{}' for linked accounts", created.getName());
             return created;
         } catch (InsufficientPermissionException e) {
             Constants.LOG.error("Could not create the linked role: the bot needs the 'Manage Roles' permission.");

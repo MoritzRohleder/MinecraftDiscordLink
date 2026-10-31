@@ -4,6 +4,7 @@ import com.mojang.authlib.GameProfile;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
+import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Leaderboards;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
@@ -15,18 +16,23 @@ import de.moritzrohleder.minecraftdiscordlink.notifications.SubscriptionStore;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
+import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
+import net.dv8tion.jda.api.interactions.commands.Command;
+import net.dv8tion.jda.api.interactions.commands.CommandInteractionPayload;
 import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 import net.dv8tion.jda.api.interactions.commands.build.Commands;
+import net.dv8tion.jda.api.interactions.commands.build.SlashCommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandData;
 import net.dv8tion.jda.api.interactions.commands.build.SubcommandGroupData;
 import net.minecraft.server.MinecraftServer;
@@ -34,10 +40,11 @@ import net.minecraft.server.MinecraftServer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -49,10 +56,16 @@ import java.util.function.Supplier;
  * integration settings of the Discord server. Answers are public embeds in the channel, see {@link CommandEmbeds};
  * they never ping anyone.
  * <p>
- * The leaderboard commands {@code /mc top} and {@code /mc stats} are only registered if at least one category is
- * configured; the commands are registered again on a config reload, as the categories may have changed.
+ * Several Minecraft servers can share one Discord server with the same bot. Every server registers the same commands,
+ * each with an optional {@code server} option; the server named there answers, without it the primary server
+ * ({@code server.primary}). For an unknown server name the primary server answers with an error after a short delay.
+ * {@code /mc link} is answered by the server that gave out the code. Answers of named servers show the server name in
+ * the footer. The leaderboard categories are suggested by the answering server (autocomplete), as they may differ.
  */
 final class SlashCommands extends ListenerAdapter {
+
+    /** Delay before the primary server answers commands no other server answered, in milliseconds. */
+    private static final long FALLBACK_DELAY_MS = 2000;
 
     private final Guild guild;
     private final Linking linking;
@@ -92,16 +105,14 @@ final class SlashCommands extends ListenerAdapter {
      */
     void register() {
         categories = Leaderboards.resolve(ConfigManager.get().leaderboard());
-        List<SubcommandData> leaderboards = new ArrayList<>();
-        if (!categories.isEmpty()) {
-            OptionData category = new OptionData(OptionType.STRING, "category", "The statistic", true);
-            categories.forEach(entry -> category.addChoice(entry.name(), entry.id()));
-            leaderboards.add(new SubcommandData("top", "Show the best players of a statistic").addOptions(category));
-            leaderboards.add(new SubcommandData("stats", "Show a player's statistics and ranks")
-                    .addOption(OptionType.STRING, "player", "The Minecraft name", true));
-        }
+        // The same definition on every server sharing the Discord server, so the categories are suggested instead
+        List<SubcommandData> leaderboards = List.of(
+                new SubcommandData("top", "Show the best players of a statistic")
+                        .addOptions(new OptionData(OptionType.STRING, "category", "The statistic", true, true)),
+                new SubcommandData("stats", "Show a player's statistics and ranks")
+                        .addOption(OptionType.STRING, "player", "The Minecraft name", true));
         guild.updateCommands().addCommands(
-                Commands.slash("mc", "Minecraft server").addSubcommands(
+                withServerOption(Commands.slash("mc", "Minecraft server").addSubcommands(
                         new SubcommandData("online", "List the players online on the Minecraft server"),
                         new SubcommandData("status", "Show uptime, TPS, MSPT, players and version"),
                         new SubcommandData("whois", "Show the account linked to a Minecraft or Discord name")
@@ -118,8 +129,8 @@ final class SlashCommands extends ListenerAdapter {
                                 .addOptions(eventOption(), new OptionData(OptionType.STRING, "player",
                                         "A Minecraft player", false)),
                         new SubcommandData("subscriptions", "List your notifications"))
-                        .addSubcommands(leaderboards),
-                Commands.slash("mcadmin", "Minecraft server administration")
+                        .addSubcommands(leaderboards)),
+                withServerOption(Commands.slash("mcadmin", "Minecraft server administration")
                         .setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.ADMINISTRATOR))
                         .addSubcommands(
                                 new SubcommandData("link", "Link a Minecraft account with a Discord account")
@@ -171,9 +182,95 @@ final class SlashCommands extends ListenerAdapter {
                                                 .addOption(OptionType.STRING, "reason", "Why", false),
                                         new SubcommandData("off", "Switch the maintenance mode off")
                                                 .addOption(OptionType.STRING, "reason", "Why", false),
-                                        new SubcommandData("status", "Show whether the maintenance mode is on")))
+                                        new SubcommandData("status", "Show whether the maintenance mode is on"))))
         ).queue(null, error -> Constants.LOG.error("Could not register the Discord slash commands: {}",
                 error.getMessage()));
+    }
+
+    /**
+     * Adds the optional {@code server} option to every subcommand.
+     *
+     * @param command the command
+     * @return the command
+     */
+    private static SlashCommandData withServerOption(SlashCommandData command) {
+        OptionData option = new OptionData(OptionType.STRING, "server",
+                "The Minecraft server, if several share this Discord server", false);
+        command.getSubcommands().forEach(subcommand -> subcommand.addOptions(option));
+        command.getSubcommandGroups().forEach(group -> group.getSubcommands()
+                .forEach(subcommand -> subcommand.addOptions(option)));
+        return command;
+    }
+
+    /**
+     * Checks whether this server answers a command: the server named in the {@code server} option, otherwise the
+     * primary server.
+     *
+     * @param interaction the command interaction
+     * @return whether this server answers
+     */
+    private static boolean answers(CommandInteractionPayload interaction) {
+        String target = interaction.getOption("server", OptionMapping::getAsString);
+        ModConfig.Server server = ConfigManager.get().server();
+        return target == null ? server.primary() : server.named() && target.strip().equalsIgnoreCase(server.name());
+    }
+
+    /**
+     * Answers a command for an unknown server, if this is the primary server: after a short delay, so a server with
+     * that name can answer first. Answering an already answered command fails silently.
+     *
+     * @param event the command interaction
+     */
+    private static void answerUnknownServer(SlashCommandInteractionEvent event) {
+        String target = event.getOption("server", OptionMapping::getAsString);
+        if (target == null || !ConfigManager.get().server().primary()) {
+            return;
+        }
+        CompletableFuture.delayedExecutor(FALLBACK_DELAY_MS, TimeUnit.MILLISECONDS).execute(() ->
+                event.replyEmbeds(CommandEmbeds.error("No Minecraft server named **" + DiscordText.escape(target)
+                                + "** is online."))
+                        .setEphemeral(true).queue(null, error -> {
+                            // Another server answered
+                        }));
+    }
+
+    /**
+     * Marks answers with the name of this server, if it shares the Discord server with others.
+     *
+     * @param embeds the answers
+     * @return the answers, with the server name in the footer
+     */
+    static List<MessageEmbed> tag(List<MessageEmbed> embeds) {
+        ModConfig.Server server = ConfigManager.get().server();
+        if (!server.named()) {
+            return embeds;
+        }
+        return embeds.stream().map(embed -> {
+            String footer = embed.getFooter() == null ? null : embed.getFooter().getText();
+            return new EmbedBuilder(embed).setFooter(footer == null ? server.name() : footer + " · " + server.name())
+                    .build();
+        }).toList();
+    }
+
+    /**
+     * Suggests the leaderboard categories of the answering server for {@code /mc top}.
+     *
+     * @param event the autocomplete interaction
+     */
+    @Override
+    public void onCommandAutoCompleteInteraction(CommandAutoCompleteInteractionEvent event) {
+        if (event.getGuild() == null || event.getGuild().getIdLong() != guild.getIdLong()
+                || !event.getFullCommandName().equals("mc top") || !answers(event)) {
+            return;
+        }
+        String typed = event.getFocusedOption().getValue().toLowerCase(Locale.ROOT);
+        event.replyChoices(categories.stream()
+                .filter(category -> category.name().toLowerCase(Locale.ROOT).contains(typed))
+                .limit(OptionData.MAX_CHOICES)
+                .map(category -> new Command.Choice(category.name(), category.id()))
+                .toList()).queue(null, error -> {
+                    // Another server answered
+                });
     }
 
     /**
@@ -188,6 +285,14 @@ final class SlashCommands extends ListenerAdapter {
         }
         String command = event.getFullCommandName();
         long userId = event.getUser().getIdLong();
+        if (command.equals("mc link")) {
+            link(event, userId);
+            return;
+        }
+        if (!answers(event)) {
+            answerUnknownServer(event);
+            return;
+        }
         switch (command) {
             case "mc online" -> deferred(event, onServerThread(() ->
                     List.of(CommandEmbeds.online(ServerInfo.online(server, linking.links()::discordId)))));
@@ -220,8 +325,6 @@ final class SlashCommands extends ListenerAdapter {
             case "mc stats" -> stats(event);
             case "mcadmin reload" -> deferred(event, onServerThread(() ->
                     List.of(CommandEmbeds.success(MinecraftDiscordLink.reloadConfig()))));
-            case "mc link" -> reply(event, CommandEmbeds.reply(linking.linkWithKickCode(userId, option(event,
-                    "code"))));
             case "mc unlink" -> reply(event, CommandEmbeds.reply(linking.unlinkDiscord(userId)));
             case "mcadmin link" -> {
                 String player = option(event, "player");
@@ -295,7 +398,8 @@ final class SlashCommands extends ListenerAdapter {
                         : CommandEmbeds.error(subscribe ? "You are already subscribed to **" + name + "**."
                         : "You are not subscribed to **" + name + "**.");
             }
-            event.getHook().sendMessageEmbeds(answer).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
+            event.getHook().sendMessageEmbeds(tag(List.of(answer)))
+                    .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
                     .queue();
         });
     }
@@ -312,7 +416,7 @@ final class SlashCommands extends ListenerAdapter {
                 own.events().stream().map(NotificationEvent::displayName).sorted().toList(),
                 own.players().stream().map(player -> Leaderboards.playerName(server, player))
                         .sorted(String.CASE_INSENSITIVE_ORDER).toList()))
-                .thenAccept(embed -> event.getHook().sendMessageEmbeds(embed).queue());
+                .thenAccept(embed -> event.getHook().sendMessageEmbeds(tag(List.of(embed))).queue());
     }
 
     /**
@@ -322,8 +426,8 @@ final class SlashCommands extends ListenerAdapter {
      * @param embed the answer
      */
     private static void replyPrivately(SlashCommandInteractionEvent event, MessageEmbed embed) {
-        event.replyEmbeds(embed).setEphemeral(true).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
-                .queue();
+        event.replyEmbeds(tag(List.of(embed))).setEphemeral(true)
+                .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue();
     }
 
     /**
@@ -414,16 +518,39 @@ final class SlashCommands extends ListenerAdapter {
     }
 
     /**
+     * Runs {@code /mc link <code>}: the server that gave out the code answers at once. If no server has the code, the
+     * primary server answers that it is invalid, after a short delay.
+     *
+     * @param event  the command interaction
+     * @param userId the Discord user
+     */
+    private void link(SlashCommandInteractionEvent event, long userId) {
+        String code = option(event, "code");
+        if (linking.ownsKickCode(code)) {
+            reply(event, CommandEmbeds.reply(linking.linkWithKickCode(userId, code)));
+        } else if (ConfigManager.get().server().primary()) {
+            CompletableFuture.delayedExecutor(FALLBACK_DELAY_MS, TimeUnit.MILLISECONDS).execute(() ->
+                    event.replyEmbeds(tag(List.of(CommandEmbeds.reply(linking.linkWithKickCode(userId, code)))))
+                            .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
+                            .queue(null, error -> {
+                                // Another server answered
+                            }));
+        }
+    }
+
+    /**
      * Runs {@code /mc top}: the best players of one leaderboard category.
      *
      * @param event the command interaction
      */
     private void top(SlashCommandInteractionEvent event) {
-        String id = option(event, "category");
-        Leaderboards.Category category = categories.stream().filter(entry -> entry.id().equals(id)).findFirst()
+        String id = option(event, "category").strip();
+        Leaderboards.Category category = categories.stream()
+                .filter(entry -> entry.id().equals(id) || entry.name().equalsIgnoreCase(id)).findFirst()
                 .orElse(null);
         if (category == null) {
-            reply(event, CommandEmbeds.error("This category does not exist anymore."));
+            reply(event, CommandEmbeds.error(categories.isEmpty() ? "No leaderboards are configured."
+                    : "Unknown category **" + DiscordText.escape(id) + "**. Choose one of the suggestions."));
             return;
         }
         int size = ConfigManager.get().leaderboard().size();
@@ -440,6 +567,10 @@ final class SlashCommands extends ListenerAdapter {
     private void stats(SlashCommandInteractionEvent event) {
         String player = option(event, "player");
         List<Leaderboards.Category> current = categories;
+        if (current.isEmpty()) {
+            reply(event, CommandEmbeds.error("No leaderboards are configured."));
+            return;
+        }
         // Looking up the player may contact Mojang
         deferred(event, CompletableFuture.supplyAsync(() -> server.getProfileCache().get(player))
                 .thenCompose(profile -> profile.isEmpty()
@@ -462,7 +593,7 @@ final class SlashCommands extends ListenerAdapter {
             Constants.LOG.error("Could not run the Discord command /{}: {}", event.getFullCommandName(),
                     error.toString());
             return List.of(CommandEmbeds.error("Something went wrong. See the server log for details."));
-        }).thenAccept(embeds -> event.getHook().sendMessageEmbeds(embeds)
+        }).thenAccept(embeds -> event.getHook().sendMessageEmbeds(tag(embeds))
                 .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue());
     }
 
@@ -483,7 +614,7 @@ final class SlashCommands extends ListenerAdapter {
      * @param embed the answer
      */
     private static void reply(SlashCommandInteractionEvent event, MessageEmbed embed) {
-        event.replyEmbeds(embed).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue();
+        event.replyEmbeds(tag(List.of(embed))).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue();
     }
 
     /**

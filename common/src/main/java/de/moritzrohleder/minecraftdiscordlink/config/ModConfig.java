@@ -12,19 +12,38 @@ import java.util.OptionalLong;
  * their defaults. Values without a sensible default (bot token, channel IDs) are empty instead, which disables the
  * affected feature.
  *
- * @param discord     Discord bot settings ({@code [discord]})
- * @param chat        chat bridge settings ({@code [chat]})
- * @param console     console channel settings ({@code [console]})
- * @param whitelist   whitelist via Discord roles ({@code [whitelist]})
- * @param linking     account linking settings ({@code [linking]})
- * @param moderation  moderation log and ban sync ({@code [moderation]})
+ * @param server        this Minecraft server among several sharing one Discord server ({@code [server]})
+ * @param discord       Discord bot settings ({@code [discord]})
+ * @param chat          chat bridge settings ({@code [chat]})
+ * @param console       console channel settings ({@code [console]})
+ * @param whitelist     whitelist via Discord roles ({@code [whitelist]})
+ * @param linking       account linking settings ({@code [linking]})
+ * @param moderation    moderation log and ban sync ({@code [moderation]})
  * @param monitoring    monitoring channel ({@code [monitoring]})
  * @param notifications direct messages to subscribers ({@code [notifications]})
  * @param leaderboard   leaderboards from the vanilla statistics ({@code [leaderboard]})
  */
-public record ModConfig(Discord discord, Chat chat, Console console, Whitelist whitelist, Linking linking,
-                        Moderation moderation, Monitoring monitoring, Notifications notifications,
+public record ModConfig(Server server, Discord discord, Chat chat, Console console, Whitelist whitelist,
+                        Linking linking, Moderation moderation, Monitoring monitoring, Notifications notifications,
                         Leaderboard leaderboard) {
+
+    /**
+     * This Minecraft server, for several servers sharing one Discord server.
+     *
+     * @param name    the name of this server, empty if it is the only one
+     * @param primary whether this server answers slash commands without a {@code server} option
+     */
+    public record Server(String name, boolean primary) {
+
+        /**
+         * Checks whether this server has a name, i.e. shares the Discord server with others.
+         *
+         * @return whether a name is configured
+         */
+        public boolean named() {
+            return !name.isEmpty();
+        }
+    }
 
     /**
      * Discord bot settings.

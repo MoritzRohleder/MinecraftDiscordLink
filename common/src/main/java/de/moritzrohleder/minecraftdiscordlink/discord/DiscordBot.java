@@ -260,12 +260,14 @@ public final class DiscordBot {
             chatChannel().ifPresent(channel -> channel.sendMessageEmbeds(
                     embed("✅ Server started", EmbedColors.GREEN)).queue(null, this::logSendError));
         }
-        notifications.onEvent(NotificationEvent.SERVER_START, "✅ The Minecraft server has started.",
+        notifications.onEvent(NotificationEvent.SERVER_START, "✅ " + capitalize(Notifications.serverLabel())
+                        + " has started.",
                 EmbedColors.GREEN);
         maintenance.addListener(change -> notifications.onEvent(NotificationEvent.MAINTENANCE, change
-                .map(status -> "🔧 The Minecraft server is now in maintenance mode."
+                .map(status -> "🔧 " + capitalize(Notifications.serverLabel()) + " is now in maintenance mode."
                         + status.reason().map(reason -> " Reason: " + DiscordText.escape(reason)).orElse(""))
-                .orElse("✅ The maintenance mode of the Minecraft server is over."), EmbedColors.BLURPLE));
+                .orElse("✅ The maintenance mode of " + Notifications.serverLabel() + " is over."),
+                EmbedColors.BLURPLE));
         MonitoringChannel monitor = new MonitoringChannel(jda, server, startTime, stats, state, report, executor);
         monitor.start();
         maintenance.addListener(change -> monitor.updateStatusNow());
@@ -341,6 +343,16 @@ public final class DiscordBot {
     }
 
     /**
+     * Capitalizes the first letter of a text.
+     *
+     * @param text the text
+     * @return the text starting with an upper case letter
+     */
+    private static String capitalize(String text) {
+        return text.isEmpty() ? text : Character.toUpperCase(text.charAt(0)) + text.substring(1);
+    }
+
+    /**
      * Notifies the subscribers of a player who came online.
      *
      * @param player the player's UUID
@@ -379,7 +391,8 @@ public final class DiscordBot {
         Notifications notify = notifications;
         if (notify != null && isReady()) {
             try {
-                notify.onEvent(NotificationEvent.SERVER_STOP, "🛑 The Minecraft server is stopping.", EmbedColors.RED)
+                notify.onEvent(NotificationEvent.SERVER_STOP, "🛑 " + capitalize(Notifications.serverLabel())
+                                + " is stopping.", EmbedColors.RED)
                         .get(SHUTDOWN_TIMEOUT.dividedBy(3).toMillis(), TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

@@ -21,6 +21,13 @@ the mod logs an **error** and the affected part stays inactive (no token: the
 whole mod; one channel: only that feature).
 
 ```toml
+[server]
+# Name of this server when several Minecraft servers share one Discord
+# server; "" = only one server. Changes need a restart.
+name = ""
+# Answers slash commands without a "server" option
+primary = true
+
 [discord]
 # Bot token from the Discord Developer Portal. Keep it secret!
 token = ""
@@ -510,6 +517,32 @@ The ID of the status message is stored in `state.json` (`status_message`).
 - Stored in `minecraftdiscordlink/subscriptions.json`
   (`{"subscriptions": [{"discord_id": "…", "events": ["server_start"],
   "players": ["<uuid>"]}]}`).
+
+## 4f. Several Minecraft servers in one Discord server
+
+- Every server runs the mod with the same bot token, its own chat and
+  console channel and its own `server.name`; exactly one is
+  `server.primary = true`. Moderation and monitoring channels may be
+  shared.
+- All servers register the same slash commands; every subcommand has an
+  optional `server` option. The server with that name answers (case
+  insensitive), without the option the primary server. For an unknown name
+  the primary server answers `No Minecraft server named … is online.` after
+  2 seconds.
+- `/mc link <code>` is answered by the server that gave out the code; if no
+  server has it, the primary server answers after 2 seconds that it is
+  invalid. `refresh` in DMs is answered by the server with the pending
+  code, "nothing pending" only by the primary server.
+- `/mc top` suggests the categories of the answering server
+  (autocomplete), as they may differ between servers.
+- Answers, moderation and monitoring embeds of a named server show the name
+  in the footer; notifications name it in the text (`the Minecraft server
+  **Survival**`) and in the unsubscribe hint (`server:Survival`).
+- Links, subscriptions, the maintenance mode and all other data are per
+  server. The linked role `auto` is named `Linked Account (<name>)`.
+- The bot status is set by every server with `discord.status.enabled`; for
+  several servers enable it on one server only, e.g. with the text
+  "Watching several servers" (the servers do not communicate).
 
 ## 5. Data storage
 

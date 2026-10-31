@@ -14,6 +14,7 @@ import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 
 import java.awt.Color;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.OptionalLong;
 
 /**
@@ -55,7 +56,8 @@ final class ModerationChannel {
             }
             return;
         }
-        channel.sendMessageEmbeds(embed(entry)).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
+        channel.sendMessageEmbeds(SlashCommands.tag(List.of(embed(entry))))
+                .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
                 .queue(null, error -> Constants.LOG.error("Could not send to the moderation channel: {}",
                         error.getMessage()));
     }

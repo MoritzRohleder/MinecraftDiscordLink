@@ -136,6 +136,9 @@ connected:
 
 ## Next features
 
+Status: all implemented (see SPEC sections 4a–4f), role synchronization
+excepted.
+
 - **Monitoring channel** – a third, read-only/admin-only channel
   (`monitoring.channel_id`), shared by all servers:
   - Lag warning below a TPS threshold for a duration (default 15 TPS for
