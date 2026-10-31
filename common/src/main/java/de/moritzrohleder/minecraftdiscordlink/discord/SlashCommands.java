@@ -10,6 +10,8 @@ import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext;
+import de.moritzrohleder.minecraftdiscordlink.notifications.NotificationEvent;
+import de.moritzrohleder.minecraftdiscordlink.notifications.SubscriptionStore;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
@@ -58,6 +60,7 @@ final class SlashCommands extends ListenerAdapter {
     private final Instant startTime;
     private final PlayerStats stats;
     private final Moderation moderation;
+    private final SubscriptionStore subscriptions;
     /** The leaderboard categories of the registered commands. */
     private volatile List<Leaderboards.Category> categories = List.of();
 
@@ -69,16 +72,18 @@ final class SlashCommands extends ListenerAdapter {
      * @param server    the running server
      * @param startTime when the server was started, for the uptime
      * @param stats      the player statistics, for "online since"
-     * @param moderation the moderation, for the moderation commands
+     * @param moderation    the moderation, for the moderation commands
+     * @param subscriptions the subscriptions of the notifications
      */
     SlashCommands(Guild guild, Linking linking, MinecraftServer server, Instant startTime, PlayerStats stats,
-                  Moderation moderation) {
+                  Moderation moderation, SubscriptionStore subscriptions) {
         this.guild = guild;
         this.linking = linking;
         this.server = server;
         this.startTime = startTime;
         this.stats = stats;
         this.moderation = moderation;
+        this.subscriptions = subscriptions;
     }
 
     /**
@@ -105,7 +110,14 @@ final class SlashCommands extends ListenerAdapter {
                                 .addOption(OptionType.STRING, "player", "The Minecraft name", true),
                         new SubcommandData("link", "Link your Minecraft account with the code from the kick message")
                                 .addOption(OptionType.STRING, "code", "The code from the kick message", true),
-                        new SubcommandData("unlink", "Remove the link to your Minecraft account"))
+                        new SubcommandData("unlink", "Remove the link to your Minecraft account"),
+                        new SubcommandData("subscribe", "Get a direct message on a server event or a player joining")
+                                .addOptions(eventOption(), new OptionData(OptionType.STRING, "player",
+                                        "A Minecraft player", false)),
+                        new SubcommandData("unsubscribe", "Stop a notification")
+                                .addOptions(eventOption(), new OptionData(OptionType.STRING, "player",
+                                        "A Minecraft player", false)),
+                        new SubcommandData("subscriptions", "List your notifications"))
                         .addSubcommands(leaderboards),
                 Commands.slash("mcadmin", "Minecraft server administration")
                         .setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.ADMINISTRATOR))
@@ -202,6 +214,8 @@ final class SlashCommands extends ListenerAdapter {
                  "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove", "mcadmin rolewhitelist status",
                  "mcadmin maintenance on", "mcadmin maintenance off", "mcadmin maintenance status" ->
                     moderate(event, command);
+            case "mc subscribe", "mc unsubscribe" -> subscribe(event, command.equals("mc subscribe"));
+            case "mc subscriptions" -> listSubscriptions(event);
             case "mc top" -> top(event);
             case "mc stats" -> stats(event);
             case "mcadmin reload" -> deferred(event, onServerThread(() ->
@@ -220,6 +234,96 @@ final class SlashCommands extends ListenerAdapter {
                 // Not a command of this mod
             }
         }
+    }
+
+    /**
+     * Creates the {@code event} option of the subscribe commands, with one choice per event.
+     *
+     * @return the option
+     */
+    private static OptionData eventOption() {
+        OptionData option = new OptionData(OptionType.STRING, "event", "A server event", false);
+        for (NotificationEvent event : NotificationEvent.values()) {
+            option.addChoice(event.displayName(), event.id());
+        }
+        return option;
+    }
+
+    /**
+     * Runs {@code /mc subscribe} and {@code /mc unsubscribe}. The answer is only visible to the user.
+     *
+     * @param event     the command interaction
+     * @param subscribe whether to subscribe or unsubscribe
+     */
+    private void subscribe(SlashCommandInteractionEvent event, boolean subscribe) {
+        long userId = event.getUser().getIdLong();
+        Optional<NotificationEvent> serverEvent = Optional.ofNullable(event.getOption("event",
+                OptionMapping::getAsString)).flatMap(NotificationEvent::byId);
+        String player = event.getOption("player", OptionMapping::getAsString);
+        if (!ConfigManager.get().notifications().enabled()) {
+            replyPrivately(event, CommandEmbeds.error("Notifications are switched off on this server."));
+            return;
+        }
+        if (serverEvent.isPresent() == (player != null)) {
+            replyPrivately(event, CommandEmbeds.error("Choose either an `event` or a `player`."));
+            return;
+        }
+        if (serverEvent.isPresent()) {
+            NotificationEvent chosen = serverEvent.get();
+            boolean changed = subscribe ? subscriptions.subscribe(userId, chosen)
+                    : subscriptions.unsubscribe(userId, chosen);
+            replyPrivately(event, changed
+                    ? CommandEmbeds.success((subscribe ? "You will get a direct message on: **"
+                    : "You will no longer get a direct message on: **") + chosen.displayName() + "**")
+                    : CommandEmbeds.error(subscribe ? "You are already subscribed to this event."
+                    : "You are not subscribed to this event."));
+            return;
+        }
+        event.deferReply(true).queue();
+        CompletableFuture.supplyAsync(() -> server.getProfileCache().get(player)).thenAccept(profile -> {
+            MessageEmbed answer;
+            if (profile.isEmpty()) {
+                answer = CommandEmbeds.error("No Minecraft player named **" + DiscordText.escape(player)
+                        + "** was found.");
+            } else {
+                String name = DiscordText.escape(profile.get().getName());
+                boolean changed = subscribe ? subscriptions.subscribe(userId, profile.get().getId())
+                        : subscriptions.unsubscribe(userId, profile.get().getId());
+                answer = changed
+                        ? CommandEmbeds.success(subscribe ? "You will get a direct message when **" + name
+                        + "** joins." : "You will no longer get a direct message when **" + name + "** joins.")
+                        : CommandEmbeds.error(subscribe ? "You are already subscribed to **" + name + "**."
+                        : "You are not subscribed to **" + name + "**.");
+            }
+            event.getHook().sendMessageEmbeds(answer).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
+                    .queue();
+        });
+    }
+
+    /**
+     * Runs {@code /mc subscriptions}. The answer is only visible to the user.
+     *
+     * @param event the command interaction
+     */
+    private void listSubscriptions(SlashCommandInteractionEvent event) {
+        SubscriptionStore.Subscriptions own = subscriptions.of(event.getUser().getIdLong());
+        event.deferReply(true).queue();
+        server.submit(() -> CommandEmbeds.subscriptions(
+                own.events().stream().map(NotificationEvent::displayName).sorted().toList(),
+                own.players().stream().map(player -> Leaderboards.playerName(server, player))
+                        .sorted(String.CASE_INSENSITIVE_ORDER).toList()))
+                .thenAccept(embed -> event.getHook().sendMessageEmbeds(embed).queue());
+    }
+
+    /**
+     * Answers a command so only the user sees it.
+     *
+     * @param event the command interaction
+     * @param embed the answer
+     */
+    private static void replyPrivately(SlashCommandInteractionEvent event, MessageEmbed embed) {
+        event.replyEmbeds(embed).setEphemeral(true).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
+                .queue();
     }
 
     /**

@@ -29,6 +29,8 @@ installed on the dedicated server – players don't need it.
   switched from Discord or Minecraft, optionally kept after a restart.
 - **Monitoring channel** – lag warnings, crash notices, a daily report and a
   status message that is kept up to date.
+- **Notifications** – Discord users subscribe to server start/stop, the
+  maintenance mode or players coming online and get a direct message.
 - **Leaderboards** – rankings from the vanilla statistics (default: play time
   and deaths) and every player's ranks.
 - **Slash commands** – `/mc online`, `/mc status`, `/mc whois`,
@@ -162,6 +164,7 @@ Admins are operators of level 4 or players with the permission node
 |---|---|
 | `/mc online`, `/mc status`, `/mc whois <name>`, `/mc playtime <player>` | everyone |
 | `/mc top <category>`, `/mc stats <player>` – leaderboards | everyone |
+| `/mc subscribe`, `/mc unsubscribe`, `/mc subscriptions` – DM notifications | everyone |
 | `/mc link <code>` – link with the code from the kick message | everyone |
 | `/mc unlink` | everyone |
 | `/mcadmin kick`, `ban [duration]`, `unban`, `banlist` – reason required except for `banlist` | members with *Administrator* |

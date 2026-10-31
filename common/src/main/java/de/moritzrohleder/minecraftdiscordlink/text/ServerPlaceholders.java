@@ -46,7 +46,8 @@ public final class ServerPlaceholders {
         values.put("last_updated", LocalTime.now().format(TIME));
         values.put("version", server.getServerVersion());
         values.put("motd", server.getMotd());
-        List<String> names = server.getPlayerList().getPlayers().stream().map(player -> player.getGameProfile().getName())
+        List<String> names = server.getPlayerList().getPlayers().stream()
+                .map(player -> player.getGameProfile().getName())
                 .sorted(String.CASE_INSENSITIVE_ORDER).toList();
         values.put("players", names.isEmpty() ? "nobody" : String.join(", ", names));
         double mspt = server.getAverageTickTimeNanos() / 1_000_000.0;

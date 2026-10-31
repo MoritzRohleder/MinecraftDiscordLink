@@ -15,6 +15,7 @@ import de.moritzrohleder.minecraftdiscordlink.moderation.DiscordModeration;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationLog;
 import de.moritzrohleder.minecraftdiscordlink.monitoring.ReportTracker;
+import de.moritzrohleder.minecraftdiscordlink.notifications.SubscriptionStore;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
@@ -115,7 +116,7 @@ public final class MinecraftDiscordLink {
             // kept for crash notices in the monitoring channel
             ConsoleCapture.install(config.console().channelId().isPresent());
             bot = new DiscordBot(token, config, server, startTime, stats, linking, state, moderation, maintenance,
-                    report);
+                    report, new SubscriptionStore(dataDirectory));
             bot.connect();
         });
     }
@@ -215,6 +216,9 @@ public final class MinecraftDiscordLink {
             report.join(player.getUUID(), isNew, online.size());
         }
         accountLinking().ifPresent(accounts -> accounts.sendMentionSuggestions(List.of(player)));
+        if (bot != null) {
+            bot.onPlayerJoin(player.getUUID(), player.getGameProfile().getName());
+        }
         if (ConfigManager.get().chat().events().join()) {
             sendPlayerEvent(player, INBOX_TRAY + " **" + DiscordText.escape(playerName(player)) + "** joined the game",
                     EmbedColors.GREEN);

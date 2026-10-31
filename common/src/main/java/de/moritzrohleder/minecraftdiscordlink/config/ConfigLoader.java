@@ -186,14 +186,16 @@ public final class ConfigLoader {
                 "message that is edited regularly."));
         entry("monitoring.channel_id", "", comment("ID of the monitoring channel. \"\" = monitoring off."));
 
-        section("monitoring.lag", comment("Warning when the TPS stay below a threshold, all-clear when the lag is over."));
+        section("monitoring.lag",
+                comment("Warning when the TPS stay below a threshold, all-clear when the lag is over."));
         entry("monitoring.lag.enabled", true, null);
         entry("monitoring.lag.tps_threshold", 15.0, comment("TPS below this value count as lag. 1 to 20."));
         entry("monitoring.lag.duration_seconds", 60,
                 comment("Seconds the TPS must stay below the threshold. Minimum: 5."));
         entry("monitoring.lag.cooldown_minutes", 5, comment("Minimum minutes between two warnings."));
 
-        section("monitoring.crash", comment("Notice with the reason and the last console lines when the server crashes.",
+        section("monitoring.crash", comment(
+                "Notice with the reason and the last console lines when the server crashes.",
                 "A killed server process cannot be reported."));
         entry("monitoring.crash.enabled", true, null);
         entry("monitoring.crash.log_lines", 20, comment("Number of console lines in the notice. 1 to 50."));
@@ -222,6 +224,12 @@ public final class ConfigLoader {
                         "TPS: {tps} · Uptime: {uptime}",
                         "Version: {version}"),
                 comment("Text of the status message (Discord Markdown). Placeholders: as for the topic."));
+
+        section("notifications", comment("Direct messages to Discord users who subscribed with /mc subscribe to",
+                "server events (start, stop, maintenance) or to players coming online."));
+        entry("notifications.enabled", true, null);
+        entry("notifications.player_cooldown_minutes", 10, comment(
+                "Minimum minutes between two notices about the same player to the same user."));
 
         section("leaderboard", comment(
                 "Leaderboards from the vanilla statistics: /mc top <category> and /mc stats <player>.",
@@ -479,6 +487,8 @@ public final class ConfigLoader {
                             new ModConfig.StatusMessage(bool("monitoring.status_message.enabled"),
                                     integer("monitoring.status_message.interval_minutes", 1),
                                     string("monitoring.status_message.format"))),
+                    new ModConfig.Notifications(bool("notifications.enabled"),
+                            integer("notifications.player_cooldown_minutes", 0)),
                     new ModConfig.Leaderboard(integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()));
         }
 

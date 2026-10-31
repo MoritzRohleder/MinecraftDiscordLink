@@ -9,7 +9,10 @@ import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.DiscordModeration;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.monitoring.ReportTracker;
+import de.moritzrohleder.minecraftdiscordlink.notifications.NotificationEvent;
+import de.moritzrohleder.minecraftdiscordlink.notifications.SubscriptionStore;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
+import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import net.dv8tion.jda.api.EmbedBuilder;
 import com.neovisionaries.ws.client.WebSocketFactory;
 import net.dv8tion.jda.api.JDA;
@@ -33,6 +36,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.OptionalLong;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -78,6 +82,7 @@ public final class DiscordBot {
     private final Moderation moderation;
     private final Maintenance maintenance;
     private final ReportTracker report;
+    private final SubscriptionStore subscriptions;
     private final ScheduledExecutorService executor;
 
     /** The bot, set as soon as it is built. */
@@ -88,6 +93,8 @@ public final class DiscordBot {
     private volatile AccountLinking accountLinking;
     /** The slash commands, set once the bot is ready if one of the channels is available. */
     private volatile SlashCommands slashCommands;
+    /** The notifications of subscribers, set once the bot is ready. */
+    private volatile Notifications notifications;
     /** The monitoring channel, set once both the bot is ready and the server has started. */
     private volatile MonitoringChannel monitoring;
     /** The ban sync, set once the bot is ready if one of the channels is available. */
@@ -100,20 +107,21 @@ public final class DiscordBot {
     /**
      * Creates the bot without connecting yet, see {@link #connect()}.
      *
-     * @param token       the bot token
-     * @param config      the config at server start, for the channel IDs
-     * @param server      the starting server
-     * @param startTime   when the server was started, for {@code {uptime}}
-     * @param stats       the player statistics, for the unique player placeholders
-     * @param linking     the account linking
-     * @param state       the stored state of the mod
-     * @param moderation  the moderation, for the moderation commands and the moderation channel
-     * @param maintenance the maintenance mode, for the topic and the bot status
-     * @param report      the numbers of the daily report
+     * @param token         the bot token
+     * @param config        the config at server start, for the channel IDs
+     * @param server        the starting server
+     * @param startTime     when the server was started, for {@code {uptime}}
+     * @param stats         the player statistics, for the unique player placeholders
+     * @param linking       the account linking
+     * @param state         the stored state of the mod
+     * @param moderation    the moderation, for the moderation commands and the moderation channel
+     * @param maintenance   the maintenance mode, for the topic and the bot status
+     * @param report        the numbers of the daily report
+     * @param subscriptions the subscriptions of the notifications
      */
     public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime, PlayerStats stats,
                       Linking linking, StateStore state, Moderation moderation, Maintenance maintenance,
-                      ReportTracker report) {
+                      ReportTracker report, SubscriptionStore subscriptions) {
         this.token = token;
         this.chatChannelId = config.chat().channelId();
         this.consoleChannelId = config.console().channelId();
@@ -125,6 +133,7 @@ public final class DiscordBot {
         this.moderation = moderation;
         this.maintenance = maintenance;
         this.report = report;
+        this.subscriptions = subscriptions;
         this.executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, Constants.MOD_NAME + " Discord");
             thread.setDaemon(true);
@@ -205,11 +214,13 @@ public final class DiscordBot {
             jda.addEventListener(console);
             console.start();
         });
+        notifications = new Notifications(jda, subscriptions, linking.links());
         ModerationChannel moderationChannel = new ModerationChannel(jda);
         moderation.log().setListener(moderationChannel::send);
         guild().ifPresent(guild -> {
             AccountLinking accounts = new AccountLinking(jda, guild, server, linking, state, executor);
-            SlashCommands commands = new SlashCommands(guild, linking, server, startTime, stats, moderation);
+            SlashCommands commands = new SlashCommands(guild, linking, server, startTime, stats, moderation,
+                    subscriptions);
             BanSync sync = new BanSync(guild, server, linking.links(), executor);
             jda.addEventListener(accounts, commands, sync);
             sync.start();
@@ -249,6 +260,12 @@ public final class DiscordBot {
             chatChannel().ifPresent(channel -> channel.sendMessageEmbeds(
                     embed("✅ Server started", EmbedColors.GREEN)).queue(null, this::logSendError));
         }
+        notifications.onEvent(NotificationEvent.SERVER_START, "✅ The Minecraft server has started.",
+                EmbedColors.GREEN);
+        maintenance.addListener(change -> notifications.onEvent(NotificationEvent.MAINTENANCE, change
+                .map(status -> "🔧 The Minecraft server is now in maintenance mode."
+                        + status.reason().map(reason -> " Reason: " + DiscordText.escape(reason)).orElse(""))
+                .orElse("✅ The maintenance mode of the Minecraft server is over."), EmbedColors.BLURPLE));
         MonitoringChannel monitor = new MonitoringChannel(jda, server, startTime, stats, state, report, executor);
         monitor.start();
         maintenance.addListener(change -> monitor.updateStatusNow());
@@ -324,6 +341,19 @@ public final class DiscordBot {
     }
 
     /**
+     * Notifies the subscribers of a player who came online.
+     *
+     * @param player the player's UUID
+     * @param name   the player's name
+     */
+    public void onPlayerJoin(UUID player, String name) {
+        Notifications notify = notifications;
+        if (notify != null) {
+            notify.onPlayerJoin(player, name);
+        }
+    }
+
+    /**
      * Sends the crash notice to the monitoring channel, waiting a few seconds at most. Called before the server stops
      * after a crash.
      *
@@ -344,7 +374,18 @@ public final class DiscordBot {
         long deadline = System.nanoTime() + SHUTDOWN_TIMEOUT.toNanos();
         MonitoringChannel monitor = monitoring;
         if (monitor != null) {
-            monitor.markOffline(SHUTDOWN_TIMEOUT.dividedBy(2));
+            monitor.markOffline(SHUTDOWN_TIMEOUT.dividedBy(3));
+        }
+        Notifications notify = notifications;
+        if (notify != null && isReady()) {
+            try {
+                notify.onEvent(NotificationEvent.SERVER_STOP, "🛑 The Minecraft server is stopping.", EmbedColors.RED)
+                        .get(SHUTDOWN_TIMEOUT.dividedBy(3).toMillis(), TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                Constants.LOG.warn("Could not send all stop notifications: {}", e.toString());
+            }
         }
         ChatBridge bridge = chatBridge;
         if (bridge != null) {

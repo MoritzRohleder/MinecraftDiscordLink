@@ -135,6 +135,11 @@ interval_minutes = 5     # minimum 1
 # Placeholders: see section 2
 format = "**{online}/{max}** players online: {players}\nTPS: {tps} · Uptime: {uptime}\nVersion: {version}"
 
+[notifications]
+enabled = true
+# Minimum minutes between two notices about the same player to the same user
+player_cooldown_minutes = 10
+
 [leaderboard]
 # Number of players shown by /mc top (1-25)
 size = 10
@@ -204,6 +209,9 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mc playtime <player>` | everyone | Play time from vanilla statistics |
 | `/mc top <category>` | everyone | Best players of a leaderboard category (choices from the config) |
 | `/mc stats <player>` | everyone | The player's value and rank in every leaderboard category |
+| `/mc subscribe [event] [player]` | everyone | Get a DM on a server event or when a player joins (exactly one of both) |
+| `/mc unsubscribe [event] [player]` | everyone | Stop a notification |
+| `/mc subscriptions` | everyone | List the own notifications |
 | `/mc link <code>` | everyone | Complete link with a kick code |
 | `/mc unlink` | everyone | Remove own link |
 | `/mcadmin link <player> <user>` | Administrator | Link accounts manually |
@@ -484,6 +492,24 @@ online at that moment count for the next period too. `{top_players}`:
 `Steve (3h 12m), Alex (45m)`.
 
 The ID of the status message is stored in `state.json` (`status_message`).
+
+## 4e. Notifications
+
+- Events: `server_start` (when the server has started and the bot is
+  ready), `server_stop` (when the server stops, sent within the shutdown
+  timeout), `maintenance` (on and off, with the reason).
+- Players: a DM when the player joins, at most once per
+  `player_cooldown_minutes` per subscriber; users are not told about their
+  own linked player.
+- The answers of the subscribe commands are only visible to the user
+  (ephemeral). DMs are embeds with a footer how to unsubscribe, e.g.
+  `🟢 **Steve** is now online on the Minecraft server.`
+- Users who do not accept DMs are skipped (logged as warning); their
+  subscriptions stay. With `notifications.enabled = false` nothing is sent
+  and the commands answer that notifications are switched off.
+- Stored in `minecraftdiscordlink/subscriptions.json`
+  (`{"subscriptions": [{"discord_id": "…", "events": ["server_start"],
+  "players": ["<uuid>"]}]}`).
 
 ## 5. Data storage
 

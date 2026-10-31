@@ -244,6 +244,25 @@ final class CommandEmbeds {
     }
 
     /**
+     * Builds the answer of {@code /mc subscriptions}.
+     *
+     * @param events  the names of the subscribed events
+     * @param players the names of the subscribed players
+     * @return the embed
+     */
+    static MessageEmbed subscriptions(List<String> events, List<String> players) {
+        EmbedBuilder embed = new EmbedBuilder().setTitle("🔔 Your notifications");
+        if (events.isEmpty() && players.isEmpty()) {
+            return embed.setDescription("You have no notifications. Add one with `/mc subscribe`.")
+                    .setColor(EmbedColors.GRAY).build();
+        }
+        return embed.addField("Events", events.isEmpty() ? "—" : String.join("\n", events), true)
+                .addField("Players", players.isEmpty() ? "—"
+                        : players.stream().map(DiscordText::escape).collect(Collectors.joining("\n")), true)
+                .setColor(EmbedColors.BLURPLE).build();
+    }
+
+    /**
      * Joins lines for an embed description, leaving out lines beyond Discord's limit of 4096 characters.
      *
      * @param lines the lines

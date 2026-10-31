@@ -18,11 +18,13 @@ import java.util.OptionalLong;
  * @param whitelist   whitelist via Discord roles ({@code [whitelist]})
  * @param linking     account linking settings ({@code [linking]})
  * @param moderation  moderation log and ban sync ({@code [moderation]})
- * @param monitoring  monitoring channel ({@code [monitoring]})
- * @param leaderboard leaderboards from the vanilla statistics ({@code [leaderboard]})
+ * @param monitoring    monitoring channel ({@code [monitoring]})
+ * @param notifications direct messages to subscribers ({@code [notifications]})
+ * @param leaderboard   leaderboards from the vanilla statistics ({@code [leaderboard]})
  */
 public record ModConfig(Discord discord, Chat chat, Console console, Whitelist whitelist, Linking linking,
-                        Moderation moderation, Monitoring monitoring, Leaderboard leaderboard) {
+                        Moderation moderation, Monitoring monitoring, Notifications notifications,
+                        Leaderboard leaderboard) {
 
     /**
      * Discord bot settings.
@@ -283,6 +285,15 @@ public record ModConfig(Discord discord, Chat chat, Console console, Whitelist w
      * @param format          text with placeholders such as {@code {players}}
      */
     public record StatusMessage(boolean enabled, int intervalMinutes, String format) {
+    }
+
+    /**
+     * Direct messages to Discord users who subscribed to server events or players.
+     *
+     * @param enabled               whether notifications are sent and the subscribe commands work
+     * @param playerCooldownMinutes minimum minutes between two notices about the same player to the same user
+     */
+    public record Notifications(boolean enabled, int playerCooldownMinutes) {
     }
 
     /**
