@@ -10,8 +10,8 @@ import java.util.Map;
 /**
  * Holds the active config of the mod.
  * <p>
- * The bot token and the channel IDs are only applied on server start. A {@link #reload()} applies every other change
- * but keeps the token and channel IDs from the start.
+ * The bot token and the {@code [server]} section are only applied on server start. A {@link #reload()} applies every
+ * other change but keeps them from the start.
  */
 public final class ConfigManager {
 
@@ -47,43 +47,31 @@ public final class ConfigManager {
     }
 
     /**
-     * Reloads the config file. Changes to the token or the channel IDs are logged and ignored until the next
-     * restart.
+     * Reloads the config file. Changes to the token or the {@code [server]} section are logged and ignored until the
+     * next restart.
      *
-     * @return whether the token or a channel ID changed, which needs a restart
+     * @return whether the token or the {@code [server]} section changed, which needs a restart
      */
     public static synchronized boolean reload() {
         ModConfig current = get();
         ModConfig loaded = ConfigLoader.load(file);
 
         boolean restartNeeded = !loaded.discord().token().equals(current.discord().token())
-                || !loaded.chat().channelId().equals(current.chat().channelId())
-                || !loaded.console().channelId().equals(current.console().channelId())
                 || !loaded.server().equals(current.server());
         if (restartNeeded) {
-            Constants.LOG.warn("The bot token, the channel IDs and the [server] section are only applied after a "
-                    + "server restart.");
+            Constants.LOG.warn("The bot token and the [server] section are only applied after a server restart.");
         }
 
         config = new ModConfig(
                 current.server(),
                 new ModConfig.Discord(current.discord().token(), loaded.discord().status()),
-                new ModConfig.Chat(
-                        current.chat().channelId(),
-                        loaded.chat().webhook(),
-                        loaded.chat().minecraftFormat(),
-                        loaded.chat().linkedNameFormat(),
-                        loaded.chat().avatarUrl(),
-                        loaded.chat().discordFormat(),
-                        loaded.chat().events(),
-                        loaded.chat().topic()),
-                new ModConfig.Console(
-                        current.console().channelId(),
-                        loaded.console().batchIntervalMs(),
-                        loaded.console().permissions()),
+                loaded.chat(),
+                loaded.console(),
                 loaded.whitelist(),
                 loaded.linking(),
                 loaded.moderation(),
+                loaded.maintenance(),
+                loaded.info(),
                 loaded.monitoring(),
                 loaded.notifications(),
                 loaded.leaderboard());
@@ -92,16 +80,14 @@ public final class ConfigManager {
     }
 
     /**
-     * Changes the whitelist via Discord roles, e.g. by a command: writes {@code whitelist.enabled} and
-     * {@code whitelist.role_ids} into the config file and applies them. Other changes in the file are kept but not
-     * applied until the next reload.
+     * Changes the whitelisted Discord roles, e.g. by a command: writes {@code whitelist.role_ids} into the config file
+     * and applies it. Other changes in the file are kept but not applied until the next reload.
      *
-     * @param whitelist the new whitelist settings
+     * @param whitelist the new whitelist settings; only the roles are written
      * @return whether the config file was written; nothing is changed otherwise
      */
     public static synchronized boolean updateWhitelist(ModConfig.Whitelist whitelist) {
         Map<String, Object> values = new LinkedHashMap<>();
-        values.put("whitelist.enabled", whitelist.enabled());
         values.put("whitelist.role_ids", whitelist.roleIds().stream().map(String::valueOf).toList());
         if (!ConfigLoader.update(file, values)) {
             return false;
@@ -109,8 +95,8 @@ public final class ConfigManager {
         ModConfig current = get();
         config = new ModConfig(current.server(), current.discord(), current.chat(), current.console(),
                 new ModConfig.Whitelist(whitelist.enabled(), List.copyOf(whitelist.roleIds())), current.linking(),
-                current.moderation(), current.monitoring(), current.notifications(),
-                current.leaderboard());
+                current.moderation(), current.maintenance(), current.info(), current.monitoring(),
+                current.notifications(), current.leaderboard());
         return true;
     }
 }

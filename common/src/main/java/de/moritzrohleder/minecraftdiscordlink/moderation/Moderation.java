@@ -233,33 +233,8 @@ public final class Moderation {
     }
 
     /**
-     * Switches the whitelist via Discord roles on or off by writing the config file.
-     *
-     * @param on    whether to switch it on
-     * @param scope the moderator and the reason
-     * @return the result
-     */
-    public Reply roleWhitelistSwitch(boolean on, Scope scope) {
-        ModConfig.Whitelist current = ConfigManager.get().whitelist();
-        if (on && current.roleIds().isEmpty()) {
-            return Reply.error("No roles are configured for the role whitelist. Add one first.");
-        }
-        if (current.enabled() == on) {
-            return Reply.error("The role whitelist is already " + (on ? "on." : "off."));
-        }
-        if (!ConfigManager.updateWhitelist(new ModConfig.Whitelist(on, current.roleIds()))) {
-            return Reply.error(CONFIG_ERROR);
-        }
-        record(on ? ModerationAction.ROLE_WHITELIST_ON : ModerationAction.ROLE_WHITELIST_OFF, "", Optional.empty(),
-                scope.moderator(), Optional.empty(), scope.reason());
-        if (on) {
-            linking.recheckAll();
-        }
-        return Reply.success("The role whitelist is now " + (on ? "on." : "off."));
-    }
-
-    /**
-     * Adds a role to the whitelist via Discord roles by writing the config file.
+     * Adds a role to the whitelist by writing the config file: linked members with the role may join while the
+     * whitelist is on.
      *
      * @param roleId the role
      * @param scope  the moderator and the optional reason
@@ -277,13 +252,11 @@ public final class Moderation {
         }
         record(ModerationAction.ROLE_WHITELIST_ADD, roleLabel(roleId), Optional.empty(), scope.moderator(),
                 Optional.empty(), scope.reason());
-        return Reply.success("Added the role " + roleLabel(roleId) + " to the role whitelist."
-                + (current.enabled() ? "" : " Note: the role whitelist is off."));
+        return Reply.success("Added the role " + roleLabel(roleId) + " to the whitelist." + whitelistNote(current));
     }
 
     /**
-     * Removes a role from the whitelist via Discord roles by writing the config file. Online players who lose
-     * access are kicked.
+     * Removes a role from the whitelist by writing the config file. Online players who lose access are kicked.
      *
      * @param roleId the role
      * @param scope  the moderator and the optional reason
@@ -302,9 +275,21 @@ public final class Moderation {
         record(ModerationAction.ROLE_WHITELIST_REMOVE, roleLabel(roleId), Optional.empty(), scope.moderator(),
                 Optional.empty(), scope.reason());
         linking.recheckAll();
-        return Reply.success("Removed the role " + roleLabel(roleId) + " from the role whitelist."
-                + (roles.isEmpty() && current.enabled() ? " No roles are left, so the role whitelist is inactive."
-                : ""));
+        return Reply.success("Removed the role " + roleLabel(roleId) + " from the whitelist."
+                + whitelistNote(current));
+    }
+
+    /**
+     * Notes why whitelisted roles currently have no effect.
+     *
+     * @param whitelist the role settings
+     * @return the note with a leading space, empty if the roles are in effect
+     */
+    private String whitelistNote(ModConfig.Whitelist whitelist) {
+        if (!whitelist.enabled()) {
+            return " Note: whitelisting by roles is switched off in the config (whitelist.enabled).";
+        }
+        return server.getPlayerList().isUsingWhitelist() ? "" : " Note: the whitelist is off.";
     }
 
     /**

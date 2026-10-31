@@ -105,7 +105,8 @@ public final class ConfigLoader {
                 comment("Status text while the maintenance mode is on. Same placeholders."));
 
         section("chat", comment("Bridge between the Minecraft chat and a Discord channel."));
-        entry("chat.channel_id", "", comment("ID of the chat channel. Changes require a server restart."));
+        entry("chat.enabled", true, comment("Switch the chat bridge, the events and the topic on or off."));
+        entry("chat.channel_id", "", comment("ID of the chat channel."));
         entry("chat.webhook", "auto", comment(
                 "How Minecraft messages are sent to Discord:",
                 "  \"auto\"  the bot creates a webhook itself (needs the \"Manage Webhooks\" permission)",
@@ -121,6 +122,8 @@ public final class ConfigLoader {
                 comment("Player head used as webhook avatar. Placeholders: {uuid}, {name}"));
         entry("chat.discord_format", "**{player}**: {message}",
                 comment("Minecraft messages in Discord without webhook. Placeholders: {player}, {message}"));
+        entry("chat.mention_suggestions", true,
+                comment("Players get the Discord usernames as chat suggestions (@ + Tab)."));
 
         section("chat.events", comment("Minecraft events sent to the chat channel."));
         entry("chat.events.join", true, null);
@@ -161,17 +164,22 @@ public final class ConfigLoader {
                 "  id = \"123456789012345678\"",
                 "  mode = \"blacklist\"",
                 "  commands = [\"stop\", \"op\", \"deop\"]"));
-        entry("console.channel_id", "", comment("ID of the console channel. Changes require a server restart."));
+        entry("console.enabled", true, comment("Switch the console channel on or off."));
+        entry("console.channel_id", "", comment("ID of the console channel."));
         entry("console.batch_interval_ms", 2000,
                 comment("Milliseconds between batched console messages. Minimum: 1000."));
 
-        section("whitelist", comment("Whitelist via Discord roles. Works in addition to the vanilla whitelist.",
-                "Also changed by the commands /mcadmin rolewhitelist and /discord rolewhitelist."));
-        entry("whitelist.enabled", true, comment("Switch the whitelist via Discord roles on or off."));
+        section("whitelist", comment(
+                "Discord roles on the whitelist. While the whitelist is on (/whitelist on), linked members with",
+                "one of these roles may join, in addition to operators and the players on the vanilla whitelist.",
+                "The vanilla whitelist is meant for players without a linked Discord account.",
+                "The roles are also changed by /mcadmin rolewhitelist add|remove."));
+        entry("whitelist.enabled", true, comment("Switch whitelisting by roles on or off."));
         entry("whitelist.role_ids", List.of(),
-                comment("Members with one of these roles are whitelisted. Empty = feature disabled."));
+                comment("IDs of the whitelisted roles. Empty = only the vanilla whitelist counts."));
 
         section("linking", comment("Linking of Minecraft and Discord accounts."));
+        entry("linking.enabled", true, comment("Switch the account linking and the linked role on or off."));
         entry("linking.code_validity_minutes", 60, comment("Validity of link codes in minutes. Minimum: 1."));
         entry("linking.linked_role", "auto", comment(
                 "Discord role of members with a linked account:",
@@ -181,6 +189,8 @@ public final class ConfigLoader {
 
         section("moderation", comment("Moderation: every kick, ban and whitelist change is logged to the console and",
                 "to minecraftdiscordlink/moderation.log."));
+        entry("moderation.enabled", true, comment(
+                "Switch the moderation commands of the mod on or off. The moderation log is always written."));
         entry("moderation.channel_id", "", comment(
                 "ID of a channel the moderation log is also sent to. \"\" = only the log file."));
 
@@ -191,8 +201,16 @@ public final class ConfigLoader {
         entry("moderation.ban_sync.discord_action", "ban", comment(
                 "What a Minecraft ban does to the linked Discord account: \"ban\" or \"kick\"."));
 
+        section("maintenance", comment("Maintenance mode: only operators and linked Discord admins may join."));
+        entry("maintenance.enabled", true, comment("Switch the maintenance commands on or off."));
+
+        section("info", comment("Information commands: /mc online, /mc status, /mc whois, /mc playtime and",
+                "/discord whois."));
+        entry("info.enabled", true, comment("Switch the information commands on or off."));
+
         section("monitoring", comment("Monitoring channel: lag warnings, crash notices, a daily report and a status",
                 "message that is edited regularly."));
+        entry("monitoring.enabled", true, comment("Switch the monitoring channel on or off."));
         entry("monitoring.channel_id", "", comment("ID of the monitoring channel. \"\" = monitoring off."));
 
         section("monitoring.lag",
@@ -247,6 +265,7 @@ public final class ConfigLoader {
                 "  name   name shown in Discord (optional, default: the vanilla name of the statistic)",
                 "  order  \"highest\" = the highest value is ranked first, \"lowest\" = the lowest (e.g. deaths)",
                 "At most 25 categories. With \"categories = []\" the leaderboard commands are not available."));
+        entry("leaderboard.enabled", true, comment("Switch the leaderboard commands on or off."));
         entry("leaderboard.size", 10, comment("Number of players shown by /mc top. Minimum: 1, maximum: "
                 + MAX_LEADERBOARD_SIZE + "."));
         entry("leaderboard.categories", List.of(
@@ -453,6 +472,7 @@ public final class ConfigLoader {
                                     string("discord.status.format"),
                                     string("discord.status.maintenance_format"))),
                     new ModConfig.Chat(
+                            bool("chat.enabled"),
                             channel("chat.channel_id", "chat bridge"),
                             webhook(),
                             string("chat.minecraft_format"),
@@ -470,17 +490,24 @@ public final class ConfigLoader {
                                     bool("chat.topic.enabled"),
                                     integer("chat.topic.interval_minutes", 5),
                                     string("chat.topic.format"),
-                                    string("chat.topic.maintenance_format"))),
+                                    string("chat.topic.maintenance_format")),
+                            bool("chat.mention_suggestions")),
                     new ModConfig.Console(
+                            bool("console.enabled"),
                             channel("console.channel_id", "console channel"),
                             integer("console.batch_interval_ms", 1000),
                             permissions()),
                     new ModConfig.Whitelist(bool("whitelist.enabled"), roleIds()),
-                    new ModConfig.Linking(integer("linking.code_validity_minutes", 1), linkedRole()),
+                    new ModConfig.Linking(bool("linking.enabled"), integer("linking.code_validity_minutes", 1),
+                            linkedRole()),
                     new ModConfig.Moderation(
+                            bool("moderation.enabled"),
                             optionalChannel("moderation.channel_id", "moderation channel"),
                             new ModConfig.BanSync(bool("moderation.ban_sync.enabled"), discordAction())),
+                    new ModConfig.Maintenance(bool("maintenance.enabled")),
+                    new ModConfig.Info(bool("info.enabled")),
                     new ModConfig.Monitoring(
+                            bool("monitoring.enabled"),
                             optionalChannel("monitoring.channel_id", "monitoring channel"),
                             new ModConfig.Lag(bool("monitoring.lag.enabled"),
                                     decimal("monitoring.lag.tps_threshold", 1, 20),
@@ -494,7 +521,8 @@ public final class ConfigLoader {
                                     integer("monitoring.status_message.interval_minutes", 1),
                                     string("monitoring.status_message.format"))),
                     new ModConfig.Notifications(bool("notifications.enabled")),
-                    new ModConfig.Leaderboard(integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()));
+                    new ModConfig.Leaderboard(bool("leaderboard.enabled"),
+                            integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()));
         }
 
         /**

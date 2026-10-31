@@ -55,6 +55,8 @@ public final class Linking {
             You are not whitelisted on this server.
             Link your Discord account by running /mc link {code} on the Discord server.
             The code is valid for {minutes} minutes.""";
+    /** Answer while {@code linking.enabled} is off. */
+    private static final String SWITCHED_OFF = "Account linking is switched off on this server.";
     private static final String KICK_NOT_WHITELISTED = "You are not whitelisted on this server.";
     private static final String KICK_NO_LONGER_WHITELISTED = "You are no longer whitelisted on this server.";
 
@@ -101,6 +103,10 @@ public final class Linking {
      * @param reply       receives the messages for the player, called on the server thread
      */
     public void requestLink(ServerPlayer player, String discordName, Consumer<Component> reply) {
+        if (!enabled()) {
+            reply.accept(error(SWITCHED_OFF));
+            return;
+        }
         if (links.discordId(player.getUUID()).isPresent()) {
             reply.accept(error("Your account is already linked. Use /discord unlink first."));
             return;
@@ -135,6 +141,10 @@ public final class Linking {
      * @param reply  receives the message for the player
      */
     public void confirm(ServerPlayer player, String code, Consumer<Component> reply) {
+        if (!enabled()) {
+            reply.accept(error(SWITCHED_OFF));
+            return;
+        }
         Optional<Long> discordId = codes.redeemDmCode(player.getUUID(), code);
         if (discordId.isEmpty()) {
             reply.accept(error("This code is invalid or has expired."));
@@ -155,6 +165,10 @@ public final class Linking {
      * @param reply  receives the message for the player
      */
     public void unlink(ServerPlayer player, Consumer<Component> reply) {
+        if (!enabled()) {
+            reply.accept(error(SWITCHED_OFF));
+            return;
+        }
         OptionalLong discordId = links.unlinkPlayer(player.getUUID());
         if (discordId.isEmpty()) {
             reply.accept(error("Your account is not linked."));
@@ -173,6 +187,9 @@ public final class Linking {
      * @return the result for the admin
      */
     public Reply adminLink(String playerName, long discordId) {
+        if (!enabled()) {
+            return Reply.error(SWITCHED_OFF);
+        }
         Optional<GameProfile> profile = server.getProfileCache().get(playerName);
         if (profile.isEmpty()) {
             return Reply.error("No Minecraft player named " + playerName + " was found.");
@@ -198,6 +215,9 @@ public final class Linking {
      * @return the result for the Discord user, with Discord Markdown
      */
     public Reply linkWithKickCode(long discordId, String code) {
+        if (!enabled()) {
+            return Reply.error(SWITCHED_OFF);
+        }
         if (links.player(discordId).isPresent()) {
             return Reply.error("Your Discord account is already linked. Use `/mc unlink` first.");
         }
@@ -226,12 +246,34 @@ public final class Linking {
     }
 
     /**
+     * Checks whether the whitelisted Discord roles count: the whitelist is on, whitelisting by roles is switched on
+     * and at least one role is configured. Otherwise only the vanilla whitelist decides.
+     *
+     * @return whether the roles count
+     */
+    public boolean rolesInEffect() {
+        return ConfigManager.get().whitelist().active() && server.getPlayerList().isUsingWhitelist();
+    }
+
+    /**
+     * Checks whether account linking is switched on ({@code linking.enabled}).
+     *
+     * @return whether players can link their accounts
+     */
+    private static boolean enabled() {
+        return ConfigManager.get().linking().enabled();
+    }
+
+    /**
      * Removes the link of a Discord user ({@code /mc unlink}).
      *
      * @param discordId the Discord user's ID
      * @return the result for the Discord user, with Discord Markdown
      */
     public Reply unlinkDiscord(long discordId) {
+        if (!enabled()) {
+            return Reply.error(SWITCHED_OFF);
+        }
         Optional<UUID> player = links.unlinkDiscord(discordId);
         if (player.isEmpty()) {
             return Reply.error("Your Discord account is not linked.");
@@ -371,7 +413,9 @@ public final class Linking {
     public Component checkLogin(GameProfile profile) {
         return switch (whitelistStatus(profile)) {
             case ALLOWED -> null;
-            case NOT_LINKED -> Component.literal(Placeholders.resolve(KICK_NOT_LINKED, Map.of(
+            // Without account linking an unlinked player cannot get access by linking
+            case NOT_LINKED -> !enabled() ? Component.literal(KICK_NOT_WHITELISTED)
+                    : Component.literal(Placeholders.resolve(KICK_NOT_LINKED, Map.of(
                     "code", codes.kickCode(profile.getId(), profile.getName()),
                     "minutes", String.valueOf(ConfigManager.get().linking().codeValidityMinutes()))));
             case DENIED -> Component.literal(KICK_NOT_WHITELISTED);
@@ -423,7 +467,7 @@ public final class Linking {
      */
     private WhitelistStatus whitelistStatus(GameProfile profile) {
         ModConfig.Whitelist config = ConfigManager.get().whitelist();
-        if (!config.active()) {
+        if (!rolesInEffect()) {
             return WhitelistStatus.ALLOWED;
         }
         PlayerList playerList = server.getPlayerList();

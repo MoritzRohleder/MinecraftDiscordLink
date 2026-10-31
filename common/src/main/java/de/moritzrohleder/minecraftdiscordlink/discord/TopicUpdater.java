@@ -53,7 +53,7 @@ final class TopicUpdater extends PeriodicUpdater {
     @Override
     protected void update(Map<String, String> placeholders) {
         ModConfig.Topic config = ConfigManager.get().chat().topic();
-        if (!config.enabled()) {
+        if (!config.enabled() || !ConfigManager.get().chat().enabled()) {
             return;
         }
         String topic = Placeholders.resolve(MinecraftDiscordLink.maintenanceActive() ? config.maintenanceFormat()

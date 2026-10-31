@@ -165,19 +165,15 @@ final class SlashCommands extends ListenerAdapter {
                                                 .addOption(OptionType.STRING, "reason", "Why", true),
                                         new SubcommandData("off", "Switch the whitelist off")
                                                 .addOption(OptionType.STRING, "reason", "Why", false)),
-                                new SubcommandGroupData("rolewhitelist", "The whitelist via Discord roles")
+                                new SubcommandGroupData("rolewhitelist", "Discord roles on the whitelist")
                                         .addSubcommands(
-                                        new SubcommandData("on", "Switch the role whitelist on")
-                                                .addOption(OptionType.STRING, "reason", "Why", true),
-                                        new SubcommandData("off", "Switch the role whitelist off")
-                                                .addOption(OptionType.STRING, "reason", "Why", false),
                                         new SubcommandData("add", "Whitelist the members of a role")
                                                 .addOption(OptionType.ROLE, "role", "The role", true)
                                                 .addOption(OptionType.STRING, "reason", "Why", false),
                                         new SubcommandData("remove", "Remove a role from the role whitelist")
                                                 .addOption(OptionType.ROLE, "role", "The role", true)
                                                 .addOption(OptionType.STRING, "reason", "Why", false),
-                                        new SubcommandData("status", "Show whether the role whitelist is on")),
+                                        new SubcommandData("status", "Show the whitelisted roles")),
                                 new SubcommandGroupData("maintenance", "The maintenance mode").addSubcommands(
                                         new SubcommandData("on", "Switch the maintenance mode on")
                                                 .addOption(OptionType.BOOLEAN, "keep_after_restart",
@@ -260,6 +256,28 @@ final class SlashCommands extends ListenerAdapter {
     }
 
     /**
+     * Checks whether the feature of a command is switched on in the config. Switched off commands stay registered,
+     * as all servers sharing the Discord server register the same commands.
+     *
+     * @param command the full command name, e.g. {@code mcadmin ban}
+     * @return whether the command may run
+     */
+    private static boolean featureEnabled(String command) {
+        ModConfig config = ConfigManager.get();
+        if (command.startsWith("mcadmin maintenance")) {
+            return config.maintenance().enabled();
+        }
+        return switch (command) {
+            case "mc online", "mc status", "mc whois", "mc playtime" -> config.info().enabled();
+            case "mc top", "mc stats" -> config.leaderboard().enabled();
+            case "mc unlink", "mcadmin link" -> config.linking().enabled();
+            case "mc subscribe", "mc unsubscribe", "mc subscriptions" -> config.notifications().enabled();
+            case "mcadmin reload" -> true;
+            default -> !command.startsWith("mcadmin") || config.moderation().enabled();
+        };
+    }
+
+    /**
      * Suggests the leaderboard categories of the answering server for {@code /mc top}.
      *
      * @param event the autocomplete interaction
@@ -267,7 +285,8 @@ final class SlashCommands extends ListenerAdapter {
     @Override
     public void onCommandAutoCompleteInteraction(CommandAutoCompleteInteractionEvent event) {
         if (event.getGuild() == null || event.getGuild().getIdLong() != guild.getIdLong()
-                || !event.getFullCommandName().equals("mc top") || !answers(event)) {
+                || !event.getFullCommandName().equals("mc top") || !answers(event)
+                || !ConfigManager.get().leaderboard().enabled()) {
             return;
         }
         String typed = event.getFocusedOption().getValue().toLowerCase(Locale.ROOT);
@@ -300,6 +319,10 @@ final class SlashCommands extends ListenerAdapter {
             answerUnknownServer(event);
             return;
         }
+        if (!featureEnabled(command)) {
+            replyPrivately(event, CommandEmbeds.error("This feature is switched off on this server."));
+            return;
+        }
         switch (command) {
             case "mc online" -> deferred(event, onServerThread(() ->
                     List.of(CommandEmbeds.online(ServerInfo.online(server, linking.links()::discordId)))));
@@ -322,8 +345,8 @@ final class SlashCommands extends ListenerAdapter {
             }
             case "mcadmin kick", "mcadmin ban", "mcadmin unban", "mcadmin banlist", "mcadmin whitelist add",
                  "mcadmin whitelist remove", "mcadmin whitelist list", "mcadmin whitelist on",
-                 "mcadmin whitelist off", "mcadmin rolewhitelist on", "mcadmin rolewhitelist off",
-                 "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove", "mcadmin rolewhitelist status",
+                 "mcadmin whitelist off", "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove",
+                 "mcadmin rolewhitelist status",
                  "mcadmin maintenance on", "mcadmin maintenance off", "mcadmin maintenance status" ->
                     moderate(event, command);
             case "mc subscribe", "mc unsubscribe" -> subscribe(event, command.equals("mc subscribe"));
@@ -472,8 +495,6 @@ final class SlashCommands extends ListenerAdapter {
                     withPlayer(event, profile -> moderation.whitelistRemove(profile, scope));
             case "mcadmin whitelist on", "mcadmin whitelist off" -> deferred(event, onServerThread(() ->
                     answer(moderation.whitelistSwitch(command.endsWith("on"), scope))));
-            case "mcadmin rolewhitelist on", "mcadmin rolewhitelist off" -> deferred(event, onServerThread(() ->
-                    answer(moderation.roleWhitelistSwitch(command.endsWith("on"), scope))));
             case "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove" -> {
                 long roleId = event.getOption("role", OptionMapping::getAsRole).getIdLong();
                 boolean add = command.endsWith("add");
@@ -484,8 +505,8 @@ final class SlashCommands extends ListenerAdapter {
                     List.of(CommandEmbeds.banlist(moderation.bans()))));
             case "mcadmin whitelist list" -> deferred(event, onServerThread(() ->
                     List.of(CommandEmbeds.whitelist(moderation.whitelisted(), moderation.whitelistOn()))));
-            case "mcadmin rolewhitelist status" -> reply(event,
-                    CommandEmbeds.roleWhitelist(ConfigManager.get().whitelist()));
+            case "mcadmin rolewhitelist status" -> deferred(event, onServerThread(() -> List.of(
+                    CommandEmbeds.roleWhitelist(ConfigManager.get().whitelist(), moderation.whitelistOn()))));
             case "mcadmin maintenance on", "mcadmin maintenance off" -> {
                 boolean on = command.endsWith("on");
                 boolean persistent = Boolean.TRUE.equals(event.getOption("keep_after_restart",

@@ -263,7 +263,7 @@ public final class DiscordBot {
      * the channel topic.
      */
     private void start() {
-        if (ConfigManager.get().chat().events().serverStart()) {
+        if (ConfigManager.get().chat().enabled() && ConfigManager.get().chat().events().serverStart()) {
             chatChannel().ifPresent(channel -> channel.sendMessageEmbeds(
                     embed("✅ Server started", EmbedColors.GREEN)).queue(null, this::logSendError));
         }
@@ -427,7 +427,8 @@ public final class DiscordBot {
                 // The stop message and the offline status first, the notifications get the remaining time
                 List<CompletableFuture<?>> first = new ArrayList<>();
                 Optional<GuildMessageChannel> channel = chatChannel();
-                if (ConfigManager.get().chat().events().serverStop() && channel.isPresent()) {
+                if (ConfigManager.get().chat().enabled() && ConfigManager.get().chat().events().serverStop()
+                        && channel.isPresent()) {
                     first.add(channel.get().sendMessageEmbeds(embed("🛑 Server stopped", EmbedColors.RED)).submit());
                 }
                 MonitoringChannel monitor = monitoring;

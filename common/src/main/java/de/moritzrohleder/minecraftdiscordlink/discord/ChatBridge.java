@@ -132,6 +132,15 @@ public final class ChatBridge extends ListenerAdapter {
     }
 
     /**
+     * Checks whether messages are forwarded: the bridge was not deactivated and {@code chat.enabled} is on.
+     *
+     * @return whether the bridge is active
+     */
+    private boolean isActive() {
+        return active && ConfigManager.get().chat().enabled();
+    }
+
+    /**
      * Stops forwarding messages, e.g. when the bot shuts down.
      */
     void deactivate() {
@@ -146,7 +155,7 @@ public final class ChatBridge extends ListenerAdapter {
      * @param message the message text as written in Minecraft; Discord Markdown is kept
      */
     public void sendPlayerMessage(UUID uuid, String name, String message) {
-        if (!active) {
+        if (!isActive()) {
             return;
         }
         String text = limit(toDiscord(message));
@@ -176,7 +185,7 @@ public final class ChatBridge extends ListenerAdapter {
      * @param text the message; Discord Markdown is kept
      */
     public void sendBotMessage(String text) {
-        if (!active) {
+        if (!isActive()) {
             return;
         }
         String converted = limit(toDiscord(text));
@@ -195,7 +204,7 @@ public final class ChatBridge extends ListenerAdapter {
      * @param color       the color of the embed bar
      */
     public void sendPlayerEvent(UUID uuid, String name, String description, Color color) {
-        if (!active) {
+        if (!isActive()) {
             return;
         }
         MessageEmbed embed = new EmbedBuilder().setDescription(toDiscordEmojis(description)).setColor(color).build();
@@ -218,7 +227,7 @@ public final class ChatBridge extends ListenerAdapter {
     @Override
     public void onMessageReceived(MessageReceivedEvent event) {
         Message message = event.getMessage();
-        if (!active || event.getChannel().getIdLong() != channel.getIdLong()
+        if (!isActive() || event.getChannel().getIdLong() != channel.getIdLong()
                 || event.getAuthor().isBot() || event.getAuthor().isSystem() || message.isWebhookMessage()
                 || message.getType().isSystem()) {
             return;

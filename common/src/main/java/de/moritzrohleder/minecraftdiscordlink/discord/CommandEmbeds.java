@@ -208,19 +208,22 @@ final class CommandEmbeds {
     }
 
     /**
-     * Builds the answer of {@code /mcadmin rolewhitelist status}.
+     * Builds the answer of {@code /mcadmin rolewhitelist status}: whether the whitelist is on and which roles it
+     * contains.
      *
-     * @param whitelist the role whitelist settings
+     * @param whitelist   the role settings
+     * @param whitelistOn whether the whitelist is on
      * @return the embed
      */
-    static MessageEmbed roleWhitelist(ModConfig.Whitelist whitelist) {
-        String state = whitelist.active() ? "on"
-                : whitelist.enabled() ? "on, but inactive without roles"
-                : "off";
+    static MessageEmbed roleWhitelist(ModConfig.Whitelist whitelist, boolean whitelistOn) {
         String roles = whitelist.roleIds().isEmpty() ? "No roles configured."
                 : whitelist.roleIds().stream().map(id -> "<@&" + id + ">").collect(Collectors.joining("\n"));
-        return new EmbedBuilder().setTitle("🛡️ Role whitelist " + state).setDescription(roles)
-                .setColor(whitelist.active() ? EmbedColors.BLUE : EmbedColors.GRAY).build();
+        EmbedBuilder embed = new EmbedBuilder().setTitle("🛡️ Whitelist " + (whitelistOn ? "on" : "off"))
+                .addField("Whitelisted roles", roles, false);
+        if (!whitelist.enabled()) {
+            embed.setDescription("Whitelisting by roles is switched off in the config (`whitelist.enabled`).");
+        }
+        return embed.setColor(whitelistOn && whitelist.active() ? EmbedColors.BLUE : EmbedColors.GRAY).build();
     }
 
     /**

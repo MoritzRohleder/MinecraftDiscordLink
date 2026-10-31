@@ -73,6 +73,11 @@ final class LinkedRoles {
      */
     void apply() {
         run(() -> {
+            if (!ConfigManager.get().linking().enabled()) {
+                // Account linking is switched off: the role is left as it is
+                role = null;
+                return;
+            }
             ModConfig.LinkedRole config = ConfigManager.get().linking().linkedRole();
             if (config.mode() != ModConfig.LinkedRoleMode.AUTO) {
                 deleteCreatedRole();

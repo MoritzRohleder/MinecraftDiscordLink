@@ -26,13 +26,9 @@ public enum ModerationAction {
     WHITELIST_ON("WHITELIST ON", "Whitelist switched on"),
     /** The vanilla whitelist was switched off. */
     WHITELIST_OFF("WHITELIST OFF", "Whitelist switched off"),
-    /** The whitelist via Discord roles was switched on. */
-    ROLE_WHITELIST_ON("ROLE WHITELIST ON", "Role whitelist switched on"),
-    /** The whitelist via Discord roles was switched off. */
-    ROLE_WHITELIST_OFF("ROLE WHITELIST OFF", "Role whitelist switched off"),
-    /** A role was added to the whitelist via Discord roles. */
+    /** A Discord role was added to the whitelist. */
     ROLE_WHITELIST_ADD("ROLE WHITELIST ADD", "Role added to the whitelist:"),
-    /** A role was removed from the whitelist via Discord roles. */
+    /** A Discord role was removed from the whitelist. */
     ROLE_WHITELIST_REMOVE("ROLE WHITELIST REMOVE", "Role removed from the whitelist:"),
     /** The ban sync could not change the linked Discord account; moderators have to do it by hand. */
     SYNC_FAILED("SYNC FAILED", "Ban sync failed:"),
@@ -82,7 +78,6 @@ public enum ModerationAction {
      * @return {@code false} for switching a whitelist or the maintenance mode on or off
      */
     public boolean hasTarget() {
-        return this != WHITELIST_ON && this != WHITELIST_OFF && this != ROLE_WHITELIST_ON
-                && this != ROLE_WHITELIST_OFF && this != MAINTENANCE_ON && this != MAINTENANCE_OFF;
+        return this != WHITELIST_ON && this != WHITELIST_OFF && this != MAINTENANCE_ON && this != MAINTENANCE_OFF;
     }
 }

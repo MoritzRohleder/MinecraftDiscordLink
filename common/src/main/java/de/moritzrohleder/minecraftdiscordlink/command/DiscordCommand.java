@@ -42,7 +42,7 @@ import java.util.function.Consumer;
  *     <li>{@code /discord reload}: reloads the config (admins only)</li>
  *     <li>{@code /discord admin link <player> <discordname>}: links accounts manually (admins only)</li>
  *     <li>{@code /discord tempban <player> <duration> <reason>}: bans a player for a time (admins only)</li>
- *     <li>{@code /discord rolewhitelist on|off|status}: switches the whitelist via Discord roles (admins only)</li>
+ *     <li>{@code /discord rolewhitelist status}: shows the whitelisted Discord roles (admins only)</li>
  *     <li>{@code /discord maintenance on [persistent] [reason]|off [reason]|status}: switches the maintenance mode
  *     (admins only)</li>
  * </ul>
@@ -86,13 +86,6 @@ public final class DiscordCommand {
                                                 .executes(DiscordCommand::tempban)))))
                 .then(Commands.literal("rolewhitelist")
                         .requires(Services.PLATFORM::isAdmin)
-                        .then(Commands.literal("on")
-                                .then(Commands.argument("reason", StringArgumentType.greedyString())
-                                        .executes(context -> roleWhitelist(context, true, true))))
-                        .then(Commands.literal("off")
-                                .executes(context -> roleWhitelist(context, false, false))
-                                .then(Commands.argument("reason", StringArgumentType.greedyString())
-                                        .executes(context -> roleWhitelist(context, false, true))))
                         .then(Commands.literal("status")
                                 .executes(DiscordCommand::roleWhitelistStatus)))
                 .then(Commands.literal("maintenance")
@@ -168,6 +161,9 @@ public final class DiscordCommand {
      * @return the command result
      */
     private static int whois(CommandContext<CommandSourceStack> context) {
+        if (switchedOff(context, ConfigManager.get().info().enabled())) {
+            return 0;
+        }
         String name = StringArgumentType.getString(context, "name");
         CommandSourceStack source = context.getSource();
         MinecraftServer server = source.getServer();
@@ -226,6 +222,9 @@ public final class DiscordCommand {
      * @throws CommandSyntaxException if the player or the duration is invalid
      */
     private static int tempban(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        if (switchedOff(context, ConfigManager.get().moderation().enabled())) {
+            return 0;
+        }
         Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(context, "player");
         Duration duration = Durations.parse(StringArgumentType.getString(context, "duration"))
                 .orElseThrow(INVALID_DURATION::create);
@@ -251,44 +250,23 @@ public final class DiscordCommand {
     }
 
     /**
-     * Runs {@code /discord rolewhitelist on <reason>} and {@code /discord rolewhitelist off [reason]}.
-     *
-     * @param context   the command context
-     * @param on        whether to switch the role whitelist on
-     * @param hasReason whether the command has a reason argument
-     * @return 1 on success, otherwise 0
-     */
-    private static int roleWhitelist(CommandContext<CommandSourceStack> context, boolean on, boolean hasReason) {
-        CommandSourceStack source = context.getSource();
-        String reason = hasReason ? StringArgumentType.getString(context, "reason") : null;
-        Optional<Moderation> moderation = MinecraftDiscordLink.moderation();
-        if (moderation.isEmpty()) {
-            source.sendFailure(Component.literal("The moderation is not available right now."));
-            return 0;
-        }
-        Linking.Reply reply = moderation.get().roleWhitelistSwitch(on,
-                ModerationContext.Scope.of(source.getTextName(), reason));
-        if (reply.success()) {
-            source.sendSuccess(() -> Component.literal(reply.message()), true);
-            return 1;
-        }
-        source.sendFailure(Component.literal(reply.message()));
-        return 0;
-    }
-
-    /**
      * Runs {@code /discord rolewhitelist status}.
      *
      * @param context the command context
      * @return 1
      */
     private static int roleWhitelistStatus(CommandContext<CommandSourceStack> context) {
+        if (switchedOff(context, ConfigManager.get().moderation().enabled())) {
+            return 0;
+        }
         ModConfig.Whitelist whitelist = ConfigManager.get().whitelist();
-        String state = whitelist.active() ? "on" : whitelist.enabled() ? "on, but inactive without roles" : "off";
+        boolean on = context.getSource().getServer().getPlayerList().isUsingWhitelist();
         String roles = whitelist.roleIds().isEmpty() ? "none"
                 : String.join(", ", whitelist.roleIds().stream().map(id -> MinecraftDiscordLink.moderation()
                         .map(moderation -> moderation.roleLabel(id)).orElse(String.valueOf(id))).toList());
-        context.getSource().sendSystemMessage(Component.literal("Role whitelist: " + state + ". Roles: " + roles));
+        context.getSource().sendSystemMessage(Component.literal("Whitelist: " + (on ? "on" : "off")
+                + ". Whitelisted roles: " + roles + (whitelist.enabled() ? "."
+                : " (whitelisting by roles is switched off in the config).")));
         return 1;
     }
 
@@ -303,6 +281,9 @@ public final class DiscordCommand {
      */
     private static int maintenance(CommandContext<CommandSourceStack> context, boolean on, boolean persistent,
                                    boolean hasReason) {
+        if (switchedOff(context, ConfigManager.get().maintenance().enabled())) {
+            return 0;
+        }
         CommandSourceStack source = context.getSource();
         String reason = hasReason ? StringArgumentType.getString(context, "reason") : null;
         Optional<Moderation> moderation = MinecraftDiscordLink.moderation();
@@ -328,6 +309,9 @@ public final class DiscordCommand {
      * @return 1
      */
     private static int maintenanceStatus(CommandContext<CommandSourceStack> context) {
+        if (switchedOff(context, ConfigManager.get().maintenance().enabled())) {
+            return 0;
+        }
         Optional<Maintenance.Status> status = MinecraftDiscordLink.maintenance().flatMap(Maintenance::status);
         context.getSource().sendSystemMessage(Component.literal(status
                 .map(current -> "Maintenance mode is on since " + current.since() + " by " + current.moderator()
@@ -335,6 +319,20 @@ public final class DiscordCommand {
                         + current.reason().map(reason -> ". Reason: " + reason).orElse("."))
                 .orElse("Maintenance mode is off.")));
         return 1;
+    }
+
+    /**
+     * Reports a command whose feature is switched off in the config.
+     *
+     * @param context the command context
+     * @param enabled whether the feature is switched on
+     * @return whether the feature is switched off, so the command must stop
+     */
+    private static boolean switchedOff(CommandContext<CommandSourceStack> context, boolean enabled) {
+        if (!enabled) {
+            context.getSource().sendFailure(Component.literal("This feature is switched off on this server."));
+        }
+        return !enabled;
     }
 
     /**

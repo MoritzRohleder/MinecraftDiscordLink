@@ -332,8 +332,9 @@ final class MonitoringChannel {
      * @return the channel, empty if none is configured or it is not available
      */
     private Optional<GuildMessageChannel> channel() {
-        OptionalLong channelId = ConfigManager.get().monitoring().channelId();
-        if (channelId.isEmpty()) {
+        ModConfig.Monitoring config = ConfigManager.get().monitoring();
+        OptionalLong channelId = config.channelId();
+        if (!config.enabled() || channelId.isEmpty()) {
             return Optional.empty();
         }
         GuildMessageChannel channel = jda.getChannelById(GuildMessageChannel.class, channelId.getAsLong());

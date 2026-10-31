@@ -155,6 +155,9 @@ public final class AccountLinking extends ListenerAdapter {
      * @param players the players
      */
     public void sendMentionSuggestions(Collection<ServerPlayer> players) {
+        if (!ConfigManager.get().chat().mentionSuggestions()) {
+            return;
+        }
         List<String> mentions = guild.getMemberCache().stream()
                 .filter(member -> !member.getUser().isBot())
                 .map(member -> "@" + member.getUser().getName())

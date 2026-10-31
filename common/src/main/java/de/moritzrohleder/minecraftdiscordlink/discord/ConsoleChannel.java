@@ -74,7 +74,8 @@ final class ConsoleChannel extends ListenerAdapter {
     public void onMessageReceived(MessageReceivedEvent event) {
         Message message = event.getMessage();
         Member member = event.getMember();
-        if (event.getChannel().getIdLong() != channel.getIdLong() || member == null || event.getAuthor().isBot()
+        if (!ConfigManager.get().console().enabled()
+                || event.getChannel().getIdLong() != channel.getIdLong() || member == null || event.getAuthor().isBot()
                 || message.isWebhookMessage() || message.getType().isSystem()) {
             return;
         }
@@ -121,7 +122,9 @@ final class ConsoleChannel extends ListenerAdapter {
      */
     private void flush() {
         try {
-            for (String text : ConsoleFormat.messages(ConsoleCapture.drain())) {
+            List<String> lines = ConsoleCapture.drain();
+            // Switched off: the lines are dropped, so they do not pile up
+            for (String text : ConsoleFormat.messages(ConfigManager.get().console().enabled() ? lines : List.of())) {
                 channel.sendMessage(text).setAllowedMentions(EnumSet.noneOf(Message.MentionType.class))
                         .queue(null, error -> ConsoleCapture.LOG.error("Could not send console output: {}",
                                 error.getMessage()));

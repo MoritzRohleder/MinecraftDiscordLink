@@ -143,7 +143,8 @@ public final class MinecraftDiscordLink {
     }
 
     /**
-     * Reloads the config and applies it to the running bot. Token and channel IDs stay unchanged until a restart.
+     * Reloads the config and applies it to the running bot. Token and {@code [server]} stay unchanged until a
+     * restart.
      * Must be called on the server thread.
      *
      * @return the result message for the user who reloaded
@@ -154,8 +155,7 @@ public final class MinecraftDiscordLink {
             bot.onConfigReloaded();
         }
         return restartNeeded
-                ? "Config reloaded. Changes to the bot token, the channel IDs and the [server] section need a "
-                        + "server restart."
+                ? "Config reloaded. Changes to the bot token and the [server] section need a server restart."
                 : "Config reloaded.";
     }
 
@@ -353,7 +353,7 @@ public final class MinecraftDiscordLink {
         if (maintenanceActive()) {
             return maintenance.hasAccess(profile);
         }
-        if (linking == null || !ConfigManager.get().whitelist().active()) {
+        if (linking == null || !linking.rolesInEffect()) {
             return vanillaAllowed;
         }
         return linking.isWhitelisted(profile);

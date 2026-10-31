@@ -19,13 +19,15 @@ import java.util.OptionalLong;
  * @param whitelist     whitelist via Discord roles ({@code [whitelist]})
  * @param linking       account linking settings ({@code [linking]})
  * @param moderation    moderation log and ban sync ({@code [moderation]})
+ * @param maintenance   the maintenance mode ({@code [maintenance]})
+ * @param info          the information commands ({@code [info]})
  * @param monitoring    monitoring channel ({@code [monitoring]})
  * @param notifications direct messages to subscribers ({@code [notifications]})
  * @param leaderboard   leaderboards from the vanilla statistics ({@code [leaderboard]})
  */
 public record ModConfig(Server server, Discord discord, Chat chat, Console console, Whitelist whitelist,
-                        Linking linking, Moderation moderation, Monitoring monitoring, Notifications notifications,
-                        Leaderboard leaderboard) {
+                        Linking linking, Moderation moderation, Maintenance maintenance, Info info,
+                        Monitoring monitoring, Notifications notifications, Leaderboard leaderboard) {
 
     /**
      * This Minecraft server, for several servers sharing one Discord server.
@@ -86,18 +88,21 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
     /**
      * Settings of the chat bridge between Minecraft and the chat channel.
      *
-     * @param channelId        ID of the chat channel, empty if not configured; the bridge is inactive then
-     * @param webhook          how Minecraft messages are sent to Discord
-     * @param minecraftFormat  format of Discord messages in Minecraft, placeholders {@code {name}}, {@code {message}}
-     * @param linkedNameFormat name of linked players, placeholders {@code {mc}}, {@code {discord}}
-     * @param avatarUrl        URL of the webhook avatar, placeholders {@code {uuid}}, {@code {name}}
-     * @param discordFormat    format of Minecraft messages without webhook, placeholders {@code {player}},
-     *                         {@code {message}}
-     * @param events           Minecraft events sent to the chat channel
-     * @param topic            settings of the channel topic
+     * @param enabled            whether the chat bridge, the events and the topic are active
+     * @param channelId          ID of the chat channel, empty if not configured; the bridge is inactive then
+     * @param webhook            how Minecraft messages are sent to Discord
+     * @param minecraftFormat    format of Discord messages in Minecraft, placeholders {@code {name}}, {@code {message}}
+     * @param linkedNameFormat   name of linked players, placeholders {@code {mc}}, {@code {discord}}
+     * @param avatarUrl          URL of the webhook avatar, placeholders {@code {uuid}}, {@code {name}}
+     * @param discordFormat      format of Minecraft messages without webhook, placeholders {@code {player}},
+     *                           {@code {message}}
+     * @param events             Minecraft events sent to the chat channel
+     * @param topic              settings of the channel topic
+     * @param mentionSuggestions whether players get the Discord usernames as chat suggestions ({@code @} + Tab)
      */
-    public record Chat(OptionalLong channelId, Webhook webhook, String minecraftFormat, String linkedNameFormat,
-                       String avatarUrl, String discordFormat, Events events, Topic topic) {
+    public record Chat(boolean enabled, OptionalLong channelId, Webhook webhook, String minecraftFormat,
+                       String linkedNameFormat, String avatarUrl, String discordFormat, Events events, Topic topic,
+                       boolean mentionSuggestions) {
     }
 
     /**
@@ -149,11 +154,13 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
     /**
      * Settings of the console channel.
      *
+     * @param enabled         whether the console channel is active
      * @param channelId       ID of the console channel, empty if not configured; the channel is inactive then
      * @param batchIntervalMs milliseconds between batched console messages, at least 1000
      * @param permissions     who may run which commands from Discord; nobody may if empty
      */
-    public record Console(OptionalLong channelId, int batchIntervalMs, List<Permission> permissions) {
+    public record Console(boolean enabled, OptionalLong channelId, int batchIntervalMs,
+                          List<Permission> permissions) {
     }
 
     /**
@@ -178,17 +185,19 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
     }
 
     /**
-     * Whitelist via Discord roles, in addition to the vanilla whitelist.
+     * Discord roles on the whitelist: while the vanilla whitelist is on, linked members with one of the roles may
+     * join in addition to operators and the players on the vanilla whitelist.
      *
-     * @param enabled whether the whitelist via Discord roles is switched on
-     * @param roleIds IDs of the roles whose members are whitelisted; the feature is inactive if empty
+     * @param enabled whether whitelisting by roles is used
+     * @param roleIds IDs of the whitelisted roles; without roles only the vanilla whitelist counts
      */
     public record Whitelist(boolean enabled, List<Long> roleIds) {
 
         /**
-         * Checks whether the whitelist via Discord roles is active: switched on and at least one role configured.
+         * Checks whether whitelisting by roles is in effect while the whitelist is on: switched on and at least one
+         * role configured.
          *
-         * @return whether the whitelist via Discord roles is active
+         * @return whether the roles count
          */
         public boolean active() {
             return enabled && !roleIds.isEmpty();
@@ -198,10 +207,11 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
     /**
      * Settings of the account linking.
      *
+     * @param enabled             whether players can link their accounts and the linked role is managed
      * @param codeValidityMinutes how long a link code stays valid, at least 1 minute
      * @param linkedRole          the Discord role of members with a linked account
      */
-    public record Linking(int codeValidityMinutes, LinkedRole linkedRole) {
+    public record Linking(boolean enabled, int codeValidityMinutes, LinkedRole linkedRole) {
     }
 
     /**
@@ -228,10 +238,27 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
     /**
      * Moderation settings.
      *
+     * @param enabled   whether the moderation commands of the mod are available; the log is always written
      * @param channelId ID of the moderation log channel, empty if moderation actions are only logged to the file
      * @param banSync   bans across Minecraft and Discord
      */
-    public record Moderation(OptionalLong channelId, BanSync banSync) {
+    public record Moderation(boolean enabled, OptionalLong channelId, BanSync banSync) {
+    }
+
+    /**
+     * Settings of the maintenance mode.
+     *
+     * @param enabled whether the maintenance commands are available
+     */
+    public record Maintenance(boolean enabled) {
+    }
+
+    /**
+     * Settings of the information commands {@code online}, {@code status}, {@code whois} and {@code playtime}.
+     *
+     * @param enabled whether the information commands are available
+     */
+    public record Info(boolean enabled) {
     }
 
     /**
@@ -256,13 +283,14 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
     /**
      * Settings of the monitoring channel.
      *
+     * @param enabled       whether the monitoring channel is active
      * @param channelId     ID of the monitoring channel, empty if monitoring is off
      * @param lag           lag warnings
      * @param crash         crash notices
      * @param dailyReport   the daily report
      * @param statusMessage the status message that is edited regularly
      */
-    public record Monitoring(OptionalLong channelId, Lag lag, Crash crash, DailyReport dailyReport,
+    public record Monitoring(boolean enabled, OptionalLong channelId, Lag lag, Crash crash, DailyReport dailyReport,
                              StatusMessage statusMessage) {
     }
 
@@ -316,10 +344,11 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
     /**
      * Leaderboards from the vanilla statistics.
      *
+     * @param enabled    whether the leaderboard commands are available
      * @param size       number of players shown by {@code /mc top}, 1 to {@link ConfigLoader#MAX_LEADERBOARD_SIZE}
      * @param categories the ranked statistics, in the configured order; no leaderboards if empty
      */
-    public record Leaderboard(int size, List<Category> categories) {
+    public record Leaderboard(boolean enabled, int size, List<Category> categories) {
     }
 
     /**
