@@ -1,6 +1,7 @@
 package de.moritzrohleder.minecraftdiscordlink.discord;
 
 import de.moritzrohleder.minecraftdiscordlink.Constants;
+import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
@@ -55,7 +56,8 @@ final class TopicUpdater extends PeriodicUpdater {
         if (!config.enabled()) {
             return;
         }
-        String topic = Placeholders.resolve(config.format(), placeholders).strip();
+        String topic = Placeholders.resolve(MinecraftDiscordLink.maintenanceActive() ? config.maintenanceFormat()
+                : config.format(), placeholders).strip();
         if (topic.length() > MAX_LENGTH) {
             topic = topic.substring(0, MAX_LENGTH);
         }

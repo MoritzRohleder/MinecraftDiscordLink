@@ -74,7 +74,33 @@ abstract class PeriodicUpdater {
     /**
      * Runs one update and schedules the next one. Stops silently once the executor is shut down.
      */
+    /**
+     * Updates once now, in addition to the regular updates, e.g. when the maintenance mode changes.
+     */
+    final void updateNow() {
+        try {
+            executor.execute(this::updateOnce);
+        } catch (RejectedExecutionException ignored) {
+            // The bot is shutting down
+        }
+    }
+
+    /**
+     * Updates and schedules the next update.
+     */
     private void run() {
+        updateOnce();
+        try {
+            executor.schedule(this::run, intervalMinutes(), TimeUnit.MINUTES);
+        } catch (RejectedExecutionException ignored) {
+            // The bot is shutting down
+        }
+    }
+
+    /**
+     * Collects the placeholder values on the server thread and updates once.
+     */
+    private void updateOnce() {
         try {
             update(server.submit(() -> ServerPlaceholders.values(server, startTime, stats))
                     .get(PLACEHOLDER_TIMEOUT_SECONDS, TimeUnit.SECONDS));
@@ -83,12 +109,6 @@ abstract class PeriodicUpdater {
             return;
         } catch (ExecutionException | TimeoutException | RuntimeException e) {
             Constants.LOG.error("Could not update {}: {}", getClass().getSimpleName(), e.toString());
-        }
-
-        try {
-            executor.schedule(this::run, intervalMinutes(), TimeUnit.MINUTES);
-        } catch (RejectedExecutionException ignored) {
-            // The bot is shutting down
         }
     }
 }

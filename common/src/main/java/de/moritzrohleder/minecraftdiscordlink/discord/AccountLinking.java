@@ -126,6 +126,17 @@ public final class AccountLinking extends ListenerAdapter {
     }
 
     /**
+     * Checks whether a member has the Administrator permission on the Discord server.
+     *
+     * @param discordId the member's ID
+     * @return whether the member is an administrator; {@code false} if not a member
+     */
+    public boolean isAdministrator(long discordId) {
+        Member member = guild.getMemberById(discordId);
+        return member != null && member.hasPermission(net.dv8tion.jda.api.Permission.ADMINISTRATOR);
+    }
+
+    /**
      * Returns the display name of a member: server nickname, global display name or username.
      *
      * @param discordId the member's ID

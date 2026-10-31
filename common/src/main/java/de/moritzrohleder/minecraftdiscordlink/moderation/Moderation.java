@@ -5,6 +5,7 @@ import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.Reply;
+import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.mixin.StoredUserEntryAccessor;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext.Scope;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
@@ -355,6 +356,24 @@ public final class Moderation {
                 .filter(user -> user != null)
                 .toList();
         expired.forEach(list::remove);
+    }
+
+    /**
+     * Switches the maintenance mode and logs it.
+     *
+     * @param maintenance the maintenance mode
+     * @param on          whether to switch it on
+     * @param persistent  whether it stays on after a restart, only used when switching it on
+     * @param scope       the moderator and the optional reason
+     * @return the result
+     */
+    public Reply maintenance(Maintenance maintenance, boolean on, boolean persistent, Scope scope) {
+        Reply reply = on ? maintenance.enable(persistent, scope) : maintenance.disable();
+        if (reply.success()) {
+            record(on ? ModerationAction.MAINTENANCE_ON : ModerationAction.MAINTENANCE_OFF, "", Optional.empty(),
+                    scope.moderator(), Optional.empty(), scope.reason());
+        }
+        return reply;
     }
 
     // ---- Hooks ----

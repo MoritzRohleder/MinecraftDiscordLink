@@ -1,5 +1,6 @@
 package de.moritzrohleder.minecraftdiscordlink.discord;
 
+import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
@@ -57,7 +58,8 @@ final class StatusUpdater extends PeriodicUpdater {
      * @return the activity, or {@code null} if the resolved text is blank
      */
     private static Activity activity(ModConfig.Status config, Map<String, String> placeholders) {
-        String text = Placeholders.resolve(config.format(), placeholders).strip();
+        String text = Placeholders.resolve(MinecraftDiscordLink.maintenanceActive() ? config.maintenanceFormat()
+                : config.format(), placeholders).strip();
         if (text.isEmpty()) {
             return null;
         }

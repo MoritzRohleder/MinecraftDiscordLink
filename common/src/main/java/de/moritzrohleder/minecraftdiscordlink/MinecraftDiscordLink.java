@@ -10,6 +10,7 @@ import de.moritzrohleder.minecraftdiscordlink.discord.ChatBridge;
 import de.moritzrohleder.minecraftdiscordlink.discord.DiscordBot;
 import de.moritzrohleder.minecraftdiscordlink.discord.EmbedColors;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.DiscordModeration;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationLog;
@@ -67,6 +68,8 @@ public final class MinecraftDiscordLink {
     private static Linking linking;
     /** When the server was started, {@code null} while the server is not running. */
     private static Instant startTime;
+    /** The maintenance mode, {@code null} while the server is not running. */
+    private static Maintenance maintenance;
     /** The moderation, {@code null} while the server is not running. */
     private static Moderation moderation;
     /** Whether the server has finished starting; list changes before are loading, not moderation. */
@@ -97,6 +100,8 @@ public final class MinecraftDiscordLink {
         stats = new PlayerStats(dataDirectory, Clock.systemDefaultZone());
         linking = new Linking(server, dataDirectory, MinecraftDiscordLink::accountLinking, stats);
         StateStore state = new StateStore(dataDirectory);
+        maintenance = new Maintenance(server, state, linking.links(), discordId -> accountLinking()
+                .map(accounts -> accounts.isAdministrator(discordId)).orElse(false));
         moderation = new Moderation(server, new ModerationLog(dataDirectory, ZoneId.systemDefault()), linking,
                 MinecraftDiscordLink::discordModeration);
         ModConfig config = ConfigManager.get();
@@ -105,7 +110,7 @@ public final class MinecraftDiscordLink {
                 // Captured from the start, so the console channel also shows the server start
                 ConsoleCapture.install();
             }
-            bot = new DiscordBot(token, config, server, startTime, stats, linking, state, moderation);
+            bot = new DiscordBot(token, config, server, startTime, stats, linking, state, moderation, maintenance);
             bot.connect();
         });
     }
@@ -315,6 +320,10 @@ public final class MinecraftDiscordLink {
      * @return the kick message, or {@code null} if the player may join
      */
     public static Component checkLogin(GameProfile profile) {
+        Component maintenanceKick = maintenance != null ? maintenance.checkLogin(profile) : null;
+        if (maintenanceKick != null) {
+            return maintenanceKick;
+        }
         return linking != null ? linking.checkLogin(profile) : null;
     }
 
@@ -331,6 +340,24 @@ public final class MinecraftDiscordLink {
             return vanillaAllowed;
         }
         return linking.isWhitelisted(profile);
+    }
+
+    /**
+     * Returns the maintenance mode.
+     *
+     * @return the maintenance mode, empty while the server is not running
+     */
+    public static Optional<Maintenance> maintenance() {
+        return Optional.ofNullable(maintenance);
+    }
+
+    /**
+     * Checks whether the maintenance mode is on.
+     *
+     * @return whether the maintenance mode is on
+     */
+    public static boolean maintenanceActive() {
+        return maintenance != null && maintenance.status().isPresent();
     }
 
     /**

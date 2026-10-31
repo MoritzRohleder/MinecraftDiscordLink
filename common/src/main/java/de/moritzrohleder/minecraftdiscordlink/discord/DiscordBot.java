@@ -5,6 +5,7 @@ import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.DiscordModeration;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
@@ -74,6 +75,7 @@ public final class DiscordBot {
     private final Linking linking;
     private final StateStore state;
     private final Moderation moderation;
+    private final Maintenance maintenance;
     private final ScheduledExecutorService executor;
 
     /** The bot, set as soon as it is built. */
@@ -94,17 +96,18 @@ public final class DiscordBot {
     /**
      * Creates the bot without connecting yet, see {@link #connect()}.
      *
-     * @param token      the bot token
-     * @param config     the config at server start, for the channel IDs
-     * @param server     the starting server
-     * @param startTime  when the server was started, for {@code {uptime}}
-     * @param stats      the player statistics, for the unique player placeholders
-     * @param linking    the account linking
-     * @param state      the stored state of the mod
-     * @param moderation the moderation, for the moderation commands and the moderation channel
+     * @param token       the bot token
+     * @param config      the config at server start, for the channel IDs
+     * @param server      the starting server
+     * @param startTime   when the server was started, for {@code {uptime}}
+     * @param stats       the player statistics, for the unique player placeholders
+     * @param linking     the account linking
+     * @param state       the stored state of the mod
+     * @param moderation  the moderation, for the moderation commands and the moderation channel
+     * @param maintenance the maintenance mode, for the topic and the bot status
      */
     public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime, PlayerStats stats,
-                      Linking linking, StateStore state, Moderation moderation) {
+                      Linking linking, StateStore state, Moderation moderation, Maintenance maintenance) {
         this.token = token;
         this.chatChannelId = config.chat().channelId();
         this.consoleChannelId = config.console().channelId();
@@ -114,6 +117,7 @@ public final class DiscordBot {
         this.linking = linking;
         this.state = state;
         this.moderation = moderation;
+        this.maintenance = maintenance;
         this.executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, Constants.MOD_NAME + " Discord");
             thread.setDaemon(true);
@@ -238,10 +242,14 @@ public final class DiscordBot {
             chatChannel().ifPresent(channel -> channel.sendMessageEmbeds(
                     embed("✅ Server started", EmbedColors.GREEN)).queue(null, this::logSendError));
         }
-        new StatusUpdater(jda, server, startTime, stats, executor).start();
+        StatusUpdater status = new StatusUpdater(jda, server, startTime, stats, executor);
+        status.start();
+        maintenance.addListener(change -> status.updateNow());
         chatChannel().ifPresent(channel -> {
             if (channel instanceof StandardGuildMessageChannel topicChannel) {
-                new TopicUpdater(topicChannel, server, startTime, stats, executor).start();
+                TopicUpdater topic = new TopicUpdater(topicChannel, server, startTime, stats, executor);
+                topic.start();
+                maintenance.addListener(change -> topic.updateNow());
             } else {
                 Constants.LOG.error("The chat channel has no topic. The topic updates stay inactive.");
             }

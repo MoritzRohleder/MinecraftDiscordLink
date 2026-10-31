@@ -31,7 +31,11 @@ public enum ModerationAction {
     /** A role was added to the whitelist via Discord roles. */
     ROLE_WHITELIST_ADD("ROLE WHITELIST ADD", "Role added to the whitelist:"),
     /** A role was removed from the whitelist via Discord roles. */
-    ROLE_WHITELIST_REMOVE("ROLE WHITELIST REMOVE", "Role removed from the whitelist:");
+    ROLE_WHITELIST_REMOVE("ROLE WHITELIST REMOVE", "Role removed from the whitelist:"),
+    /** The maintenance mode was switched on. */
+    MAINTENANCE_ON("MAINTENANCE ON", "Maintenance mode switched on"),
+    /** The maintenance mode was switched off. */
+    MAINTENANCE_OFF("MAINTENANCE OFF", "Maintenance mode switched off");
 
     private final String label;
     private final String title;
@@ -62,10 +66,10 @@ public enum ModerationAction {
     /**
      * Checks whether the action has a target (a player, an IP address or a role).
      *
-     * @return {@code false} for switching a whitelist on or off
+     * @return {@code false} for switching a whitelist or the maintenance mode on or off
      */
     public boolean hasTarget() {
         return this != WHITELIST_ON && this != WHITELIST_OFF && this != ROLE_WHITELIST_ON
-                && this != ROLE_WHITELIST_OFF;
+                && this != ROLE_WHITELIST_OFF && this != MAINTENANCE_ON && this != MAINTENANCE_OFF;
     }
 }

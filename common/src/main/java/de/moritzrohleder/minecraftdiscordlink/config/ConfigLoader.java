@@ -88,6 +88,8 @@ public final class ConfigLoader {
                 comment("Activity type: \"playing\", \"watching\", \"listening\", \"competing\" or \"custom\"."));
         entry("discord.status.interval_minutes", 5, comment("Minutes between status updates. Minimum: 1."));
         entry("discord.status.format", "{online}/{max} online", PLACEHOLDERS);
+        entry("discord.status.maintenance_format", "Maintenance",
+                comment("Status text while the maintenance mode is on. Same placeholders."));
 
         section("chat", comment("Bridge between the Minecraft chat and a Discord channel."));
         entry("chat.channel_id", "", comment("ID of the chat channel. Changes require a server restart."));
@@ -123,6 +125,9 @@ public final class ConfigLoader {
                 "{online}/{max} online | {unique_today} players today | Uptime: {uptime} "
                         + "| Last updated: {last_updated}",
                 PLACEHOLDERS);
+        entry("chat.topic.maintenance_format",
+                "\uD83D\uDD27 Maintenance | {online}/{max} online | Last updated: {last_updated}",
+                comment("Topic while the maintenance mode is on. Same placeholders."));
 
         section("console", comment(
                 "Live server console in a Discord channel.",
@@ -385,7 +390,8 @@ public final class ConfigLoader {
                                     bool("discord.status.enabled"),
                                     activityType(),
                                     integer("discord.status.interval_minutes", 1),
-                                    string("discord.status.format"))),
+                                    string("discord.status.format"),
+                                    string("discord.status.maintenance_format"))),
                     new ModConfig.Chat(
                             channel("chat.channel_id", "chat bridge"),
                             webhook(),
@@ -403,7 +409,8 @@ public final class ConfigLoader {
                             new ModConfig.Topic(
                                     bool("chat.topic.enabled"),
                                     integer("chat.topic.interval_minutes", 5),
-                                    string("chat.topic.format"))),
+                                    string("chat.topic.format"),
+                                    string("chat.topic.maintenance_format"))),
                     new ModConfig.Console(
                             channel("console.channel_id", "console channel"),
                             integer("console.batch_interval_ms", 1000),

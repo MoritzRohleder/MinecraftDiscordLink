@@ -101,12 +101,14 @@ final class ModerationChannel {
             case KICK -> "👢";
             case BAN, IP_BAN -> "🔨";
             case UNBAN, IP_UNBAN, BAN_EXPIRED -> "🔓";
+            case MAINTENANCE_ON, MAINTENANCE_OFF -> "🔧";
             default -> "📋";
         };
     }
 
     /**
-     * Returns the color of an action: kicks yellow, bans red, unbans green, whitelist changes blue.
+     * Returns the color of an action: kicks yellow, bans red, unbans green, whitelist changes blue, maintenance
+     * blurple.
      *
      * @param action the action
      * @return the color
@@ -116,6 +118,7 @@ final class ModerationChannel {
             case KICK -> EmbedColors.YELLOW;
             case BAN, IP_BAN -> EmbedColors.RED;
             case UNBAN, IP_UNBAN, BAN_EXPIRED -> EmbedColors.GREEN;
+            case MAINTENANCE_ON, MAINTENANCE_OFF -> EmbedColors.BLURPLE;
             default -> EmbedColors.BLUE;
         };
     }

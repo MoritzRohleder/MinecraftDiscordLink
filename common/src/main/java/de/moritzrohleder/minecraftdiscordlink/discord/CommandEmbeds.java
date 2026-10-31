@@ -7,6 +7,7 @@ import de.moritzrohleder.minecraftdiscordlink.leaderboard.Leaderboards.Category;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Ranking;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.Reply;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.WhoisEntry;
+import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
@@ -220,6 +221,26 @@ final class CommandEmbeds {
                 : whitelist.roleIds().stream().map(id -> "<@&" + id + ">").collect(Collectors.joining("\n"));
         return new EmbedBuilder().setTitle("🛡️ Role whitelist " + state).setDescription(roles)
                 .setColor(whitelist.active() ? EmbedColors.BLUE : EmbedColors.GRAY).build();
+    }
+
+    /**
+     * Builds the answer of {@code /mcadmin maintenance status}.
+     *
+     * @param status the maintenance status, empty if off
+     * @return the embed
+     */
+    static MessageEmbed maintenance(Optional<Maintenance.Status> status) {
+        if (status.isEmpty()) {
+            return new EmbedBuilder().setTitle("🔧 Maintenance mode off").setColor(EmbedColors.GRAY).build();
+        }
+        Maintenance.Status current = status.get();
+        return new EmbedBuilder().setTitle("🔧 Maintenance mode on")
+                .addField("Since", "<t:" + current.since().getEpochSecond() + ":R>", true)
+                .addField("By", DiscordText.escape(current.moderator()), true)
+                .addField("After a restart", current.persistent() ? "stays on" : "ends", true)
+                .addField("Reason", current.reason().map(DiscordText::escape).orElse("no reason given"), false)
+                .setColor(EmbedColors.BLURPLE)
+                .build();
     }
 
     /**

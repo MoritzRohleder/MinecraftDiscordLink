@@ -7,6 +7,7 @@ import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Leaderboards;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
@@ -150,7 +151,15 @@ final class SlashCommands extends ListenerAdapter {
                                         new SubcommandData("remove", "Remove a role from the role whitelist")
                                                 .addOption(OptionType.ROLE, "role", "The role", true)
                                                 .addOption(OptionType.STRING, "reason", "Why", false),
-                                        new SubcommandData("status", "Show whether the role whitelist is on")))
+                                        new SubcommandData("status", "Show whether the role whitelist is on")),
+                                new SubcommandGroupData("maintenance", "The maintenance mode").addSubcommands(
+                                        new SubcommandData("on", "Switch the maintenance mode on")
+                                                .addOption(OptionType.BOOLEAN, "keep_after_restart",
+                                                        "Stay on after a restart (default: no)", false)
+                                                .addOption(OptionType.STRING, "reason", "Why", false),
+                                        new SubcommandData("off", "Switch the maintenance mode off")
+                                                .addOption(OptionType.STRING, "reason", "Why", false),
+                                        new SubcommandData("status", "Show whether the maintenance mode is on")))
         ).queue(null, error -> Constants.LOG.error("Could not register the Discord slash commands: {}",
                 error.getMessage()));
     }
@@ -190,7 +199,8 @@ final class SlashCommands extends ListenerAdapter {
             case "mcadmin kick", "mcadmin ban", "mcadmin unban", "mcadmin banlist", "mcadmin whitelist add",
                  "mcadmin whitelist remove", "mcadmin whitelist list", "mcadmin whitelist on",
                  "mcadmin whitelist off", "mcadmin rolewhitelist on", "mcadmin rolewhitelist off",
-                 "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove", "mcadmin rolewhitelist status" ->
+                 "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove", "mcadmin rolewhitelist status",
+                 "mcadmin maintenance on", "mcadmin maintenance off", "mcadmin maintenance status" ->
                     moderate(event, command);
             case "mc top" -> top(event);
             case "mc stats" -> stats(event);
@@ -258,6 +268,16 @@ final class SlashCommands extends ListenerAdapter {
                     List.of(CommandEmbeds.whitelist(moderation.whitelisted(), moderation.whitelistOn()))));
             case "mcadmin rolewhitelist status" -> reply(event,
                     CommandEmbeds.roleWhitelist(ConfigManager.get().whitelist()));
+            case "mcadmin maintenance on", "mcadmin maintenance off" -> {
+                boolean on = command.endsWith("on");
+                boolean persistent = Boolean.TRUE.equals(event.getOption("keep_after_restart",
+                        OptionMapping::getAsBoolean));
+                deferred(event, onServerThread(() -> answer(MinecraftDiscordLink.maintenance()
+                        .map(maintenance -> moderation.maintenance(maintenance, on, persistent, scope))
+                        .orElse(Linking.Reply.error("The server is not running.")))));
+            }
+            case "mcadmin maintenance status" -> reply(event, CommandEmbeds.maintenance(
+                    MinecraftDiscordLink.maintenance().flatMap(Maintenance::status)));
             default -> {
                 // Not a moderation command
             }

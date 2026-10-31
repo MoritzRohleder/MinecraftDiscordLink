@@ -1,6 +1,7 @@
 package de.moritzrohleder.minecraftdiscordlink.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.authlib.GameProfile;
@@ -11,6 +12,7 @@ import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.info.InfoText;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
+import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
@@ -41,6 +43,8 @@ import java.util.function.Consumer;
  *     <li>{@code /discord admin link <player> <discordname>}: links accounts manually (admins only)</li>
  *     <li>{@code /discord tempban <player> <duration> <reason>}: bans a player for a time (admins only)</li>
  *     <li>{@code /discord rolewhitelist on|off|status}: switches the whitelist via Discord roles (admins only)</li>
+ *     <li>{@code /discord maintenance on [persistent] [reason]|off [reason]|status}: switches the maintenance mode
+ *     (admins only)</li>
  * </ul>
  * Admins are operators of level 4 or players with the permission node {@code minecraftdiscordlink.admin}.
  */
@@ -91,6 +95,22 @@ public final class DiscordCommand {
                                         .executes(context -> roleWhitelist(context, false, true))))
                         .then(Commands.literal("status")
                                 .executes(DiscordCommand::roleWhitelistStatus)))
+                .then(Commands.literal("maintenance")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.literal("on")
+                                .executes(context -> maintenance(context, true, false, false))
+                                .then(Commands.argument("persistent", BoolArgumentType.bool())
+                                        .executes(context -> maintenance(context, true,
+                                                BoolArgumentType.getBool(context, "persistent"), false))
+                                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                                .executes(context -> maintenance(context, true,
+                                                        BoolArgumentType.getBool(context, "persistent"), true)))))
+                        .then(Commands.literal("off")
+                                .executes(context -> maintenance(context, false, false, false))
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(context -> maintenance(context, false, false, true))))
+                        .then(Commands.literal("status")
+                                .executes(DiscordCommand::maintenanceStatus)))
                 .then(Commands.literal("admin")
                         .requires(Services.PLATFORM::isAdmin)
                         .then(Commands.literal("link")
@@ -269,6 +289,51 @@ public final class DiscordCommand {
                 : String.join(", ", whitelist.roleIds().stream().map(id -> MinecraftDiscordLink.moderation()
                         .map(moderation -> moderation.roleLabel(id)).orElse(String.valueOf(id))).toList());
         context.getSource().sendSystemMessage(Component.literal("Role whitelist: " + state + ". Roles: " + roles));
+        return 1;
+    }
+
+    /**
+     * Runs {@code /discord maintenance on [persistent] [reason]} and {@code /discord maintenance off [reason]}.
+     *
+     * @param context    the command context
+     * @param on         whether to switch the maintenance mode on
+     * @param persistent whether it stays on after a restart
+     * @param hasReason  whether the command has a reason argument
+     * @return 1 on success, otherwise 0
+     */
+    private static int maintenance(CommandContext<CommandSourceStack> context, boolean on, boolean persistent,
+                                   boolean hasReason) {
+        CommandSourceStack source = context.getSource();
+        String reason = hasReason ? StringArgumentType.getString(context, "reason") : null;
+        Optional<Moderation> moderation = MinecraftDiscordLink.moderation();
+        Optional<Maintenance> maintenance = MinecraftDiscordLink.maintenance();
+        if (moderation.isEmpty() || maintenance.isEmpty()) {
+            source.sendFailure(Component.literal("The maintenance mode is not available right now."));
+            return 0;
+        }
+        Linking.Reply reply = moderation.get().maintenance(maintenance.get(), on, persistent,
+                ModerationContext.Scope.of(source.getTextName(), reason));
+        if (reply.success()) {
+            source.sendSuccess(() -> Component.literal(reply.message()), true);
+            return 1;
+        }
+        source.sendFailure(Component.literal(reply.message()));
+        return 0;
+    }
+
+    /**
+     * Runs {@code /discord maintenance status}.
+     *
+     * @param context the command context
+     * @return 1
+     */
+    private static int maintenanceStatus(CommandContext<CommandSourceStack> context) {
+        Optional<Maintenance.Status> status = MinecraftDiscordLink.maintenance().flatMap(Maintenance::status);
+        context.getSource().sendSystemMessage(Component.literal(status
+                .map(current -> "Maintenance mode is on since " + current.since() + " by " + current.moderator()
+                        + (current.persistent() ? ", stays on after a restart" : ", ends with the restart")
+                        + current.reason().map(reason -> ". Reason: " + reason).orElse("."))
+                .orElse("Maintenance mode is off.")));
         return 1;
     }
 

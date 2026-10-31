@@ -156,6 +156,9 @@ order = "lowest"
 | `/discord rolewhitelist on <reason>` | admin | Switch the whitelist via Discord roles on |
 | `/discord rolewhitelist off [reason]` | admin | Switch the whitelist via Discord roles off |
 | `/discord rolewhitelist status` | admin | Show whether it is on and its roles |
+| `/discord maintenance on [persistent] [reason]` | admin | Switch the maintenance mode on; `persistent` = `true` keeps it after a restart |
+| `/discord maintenance off [reason]` | admin | Switch the maintenance mode off |
+| `/discord maintenance status` | admin | Show the maintenance mode |
 | `/discord reload` | admin | Reload config |
 
 Admin = OP level 4 **or** permission node `minecraftdiscordlink.admin`.
@@ -190,6 +193,9 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mcadmin rolewhitelist add <role> [reason]` | Administrator | Add a whitelisted role |
 | `/mcadmin rolewhitelist remove <role> [reason]` | Administrator | Remove a whitelisted role |
 | `/mcadmin rolewhitelist status` | Administrator | Show whether it is on and its roles |
+| `/mcadmin maintenance on [keep_after_restart] [reason]` | Administrator | Switch the maintenance mode on |
+| `/mcadmin maintenance off [reason]` | Administrator | Switch the maintenance mode off |
+| `/mcadmin maintenance status` | Administrator | Show since when, by whom, why and whether it survives a restart |
 
 `whois` searches Minecraft and Discord names. Minecraft names only count for
 players who have played on the server or are linked. If a name matches
@@ -410,6 +416,23 @@ Discord answers are embeds as usual: green on success, e.g.
 `✅ Banned **Steve** for 7d (until <date>): Griefing`, red on errors, e.g.
 `❌ Steve is not banned.` `banlist` and `whitelist list` show one player per
 line (`**Steve** · by Discord @anedhel · until <date> · Griefing`).
+
+## 4c. Maintenance mode
+
+- While it is on, only operators and players linked to a Discord member with
+  the *Administrator* permission may join (while Discord is unavailable only
+  operators). Bans still apply.
+- Switching it on kicks all other online players. Kick and login message:
+  `The server is in maintenance mode. Please try again later.` plus
+  `Reason: …` if a reason was given.
+- By default it ends with the next restart; with `keep_after_restart` /
+  `persistent` it is stored in `state.json` and active again after a restart.
+- The reason is optional. Switching on and off is logged in the moderation
+  log (`MAINTENANCE ON`, `MAINTENANCE OFF`).
+- While it is on, the channel topic uses `chat.topic.maintenance_format`
+  (default `🔧 Maintenance | {online}/{max} online | Last updated:
+  {last_updated}`) and the bot status `discord.status.maintenance_format`
+  (default `Maintenance`); both are updated immediately when it changes.
 
 ## 5. Data storage
 

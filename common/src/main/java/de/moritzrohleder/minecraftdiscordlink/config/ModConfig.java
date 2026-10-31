@@ -37,9 +37,11 @@ public record ModConfig(Discord discord, Chat chat, Console console, Whitelist w
      * @param enabled         whether a status is shown at all
      * @param type            the kind of activity
      * @param intervalMinutes minutes between status updates, at least 1
-     * @param format          status text with placeholders such as {@code {online}}
+     * @param format            status text with placeholders such as {@code {online}}
+     * @param maintenanceFormat status text while the maintenance mode is on
      */
-    public record Status(boolean enabled, ActivityType type, int intervalMinutes, String format) {
+    public record Status(boolean enabled, ActivityType type, int intervalMinutes, String format,
+                         String maintenanceFormat) {
     }
 
     /**
@@ -115,9 +117,10 @@ public record ModConfig(Discord discord, Chat chat, Console console, Whitelist w
      *
      * @param enabled         whether the topic is updated
      * @param intervalMinutes minutes between topic updates, at least 5 because of Discord's rate limit
-     * @param format          topic text with placeholders such as {@code {online}}
+     * @param format            topic text with placeholders such as {@code {online}}
+     * @param maintenanceFormat topic text while the maintenance mode is on
      */
-    public record Topic(boolean enabled, int intervalMinutes, String format) {
+    public record Topic(boolean enabled, int intervalMinutes, String format, String maintenanceFormat) {
     }
 
     /**
