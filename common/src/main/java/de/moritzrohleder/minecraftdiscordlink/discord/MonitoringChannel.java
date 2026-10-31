@@ -11,6 +11,7 @@ import de.moritzrohleder.minecraftdiscordlink.monitoring.ReportTracker;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
+import de.moritzrohleder.minecraftdiscordlink.text.Messages;
 import de.moritzrohleder.minecraftdiscordlink.text.Placeholders;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
@@ -123,14 +124,17 @@ final class MonitoringChannel {
         double tps = Math.min(server.tickRateManager().tickrate(), 1000.0 / Math.max(mspt, 0.001));
         lag.update(Instant.now(), tps, config.tpsThreshold(), Duration.ofSeconds(config.durationSeconds()),
                 Duration.ofMinutes(config.cooldownMinutes())).ifPresent(event -> send(event.warning()
-                ? new EmbedBuilder().setTitle("⚠️ Lag: " + tps(event.tps()) + " TPS")
-                        .setDescription("The TPS are below " + tps(config.tpsThreshold()) + " for "
-                                + duration(event.duration()) + ".")
+                ? new EmbedBuilder().setTitle(Messages.discord(ModConfig.Messages::lagWarningTitle,
+                                Map.of("tps", tps(event.tps()))))
+                        .setDescription(Messages.discord(ModConfig.Messages::lagWarning, Map.of(
+                                "threshold", tps(config.tpsThreshold()), "duration", duration(event.duration()))))
                         .addField("Lowest", tps(event.lowest()) + " TPS", true)
                         .addField("MSPT", tps(mspt), true)
                         .setColor(EmbedColors.YELLOW).setTimestamp(Instant.now()).build()
-                : new EmbedBuilder().setTitle("✅ Lag over: " + tps(event.tps()) + " TPS")
-                        .setDescription("The lag lasted " + duration(event.duration()) + ".")
+                : new EmbedBuilder().setTitle(Messages.discord(ModConfig.Messages::lagOverTitle,
+                                Map.of("tps", tps(event.tps()))))
+                        .setDescription(Messages.discord(ModConfig.Messages::lagOver,
+                                Map.of("duration", duration(event.duration()))))
                         .addField("Lowest", tps(event.lowest()) + " TPS", true)
                         .setColor(EmbedColors.GREEN).setTimestamp(Instant.now()).build()));
     }
@@ -171,7 +175,7 @@ final class MonitoringChannel {
             return;
         }
         // Only the reason: the console lines are in the console channel and the crash report
-        MessageEmbed embed = new EmbedBuilder().setTitle("💥 Server crashed")
+        MessageEmbed embed = new EmbedBuilder().setTitle(Messages.discord(ModConfig.Messages::crashTitle, Map.of()))
                 .setDescription(truncate("**" + DiscordText.escape(title) + "**\n" + DiscordText.escape(exception)))
                 .setColor(EmbedColors.RED).setTimestamp(Instant.now())
                 .build();

@@ -19,6 +19,7 @@ import de.moritzrohleder.minecraftdiscordlink.notifications.SubscriptionStore;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
+import de.moritzrohleder.minecraftdiscordlink.text.Messages;
 import net.minecraft.CrashReport;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.DisplayInfo;
@@ -41,6 +42,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -58,10 +60,6 @@ import java.util.concurrent.TimeUnit;
 public final class MinecraftDiscordLink {
 
     private static final String LOUDSPEAKER = "\uD83D\uDCE2";
-    private static final String INBOX_TRAY = "\uD83D\uDCE5";
-    private static final String OUTBOX_TRAY = "\uD83D\uDCE4";
-    private static final String SKULL = "\uD83D\uDC80";
-    private static final String TROPHY = "\uD83C\uDFC6";
 
     /** The Discord bot, {@code null} while the server is not running or the mod is inactive. */
     private static DiscordBot bot;
@@ -222,8 +220,8 @@ public final class MinecraftDiscordLink {
             bot.onPlayerJoin(player.getUUID(), player.getGameProfile().getName());
         }
         if (ConfigManager.get().chat().events().join()) {
-            sendPlayerEvent(player, INBOX_TRAY + " **" + DiscordText.escape(playerName(player)) + "** joined the game",
-                    EmbedColors.GREEN);
+            sendPlayerEvent(player, Messages.discord(ModConfig.Messages::join,
+                    Map.of("player", DiscordText.escape(playerName(player)))), EmbedColors.GREEN);
         }
     }
 
@@ -238,8 +236,8 @@ public final class MinecraftDiscordLink {
             report.leave(player.getUUID());
         }
         if (ConfigManager.get().chat().events().leave()) {
-            sendPlayerEvent(player, OUTBOX_TRAY + " **" + DiscordText.escape(playerName(player)) + "** left the game",
-                    EmbedColors.RED);
+            sendPlayerEvent(player, Messages.discord(ModConfig.Messages::leave,
+                    Map.of("player", DiscordText.escape(playerName(player)))), EmbedColors.RED);
         }
     }
 
@@ -259,7 +257,9 @@ public final class MinecraftDiscordLink {
             return;
         }
         String message = player.getCombatTracker().getDeathMessage().getString();
-        sendPlayerEvent(player, SKULL + " " + DiscordText.boldName(message, playerName(player)), EmbedColors.BLACK);
+        sendPlayerEvent(player, Messages.discord(ModConfig.Messages::death, Map.of(
+                "message", DiscordText.boldName(message, playerName(player)),
+                "player", DiscordText.escape(playerName(player)))), EmbedColors.BLACK);
     }
 
     /**
@@ -282,7 +282,10 @@ public final class MinecraftDiscordLink {
         String text = String.format(format,
                 "**" + DiscordText.escape(playerName(player)) + "**",
                 "**[" + DiscordText.escape(display.get().getTitle().getString()) + "]**");
-        sendPlayerEvent(player, TROPHY + " " + text, EmbedColors.GOLD);
+        sendPlayerEvent(player, Messages.discord(ModConfig.Messages::advancement, Map.of(
+                "message", text,
+                "player", DiscordText.escape(playerName(player)),
+                "advancement", DiscordText.escape(display.get().getTitle().getString()))), EmbedColors.GOLD);
     }
 
     /**

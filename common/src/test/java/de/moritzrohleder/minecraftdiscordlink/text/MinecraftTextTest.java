@@ -6,6 +6,7 @@ import net.minecraft.network.chat.TextColor;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -29,5 +30,15 @@ class MinecraftTextTest {
 
         component.getSiblings().forEach(part ->
                 assertEquals(TextColor.fromLegacyFormat(ChatFormatting.WHITE), part.getStyle().getColor()));
+    }
+
+    @Test
+    void formatsConfiguredTexts() {
+        Component component = MinecraftText.formatted("&cKicked&r: {reason} {unknown}\nCode: {code}",
+                Map.of("reason", "&lnot bold", "code", "AB12CD"));
+
+        assertEquals("Kicked: &lnot bold {unknown}\nCode: AB12CD", component.getString());
+        assertEquals(TextColor.fromLegacyFormat(ChatFormatting.RED),
+                component.getSiblings().getFirst().getStyle().getColor());
     }
 }

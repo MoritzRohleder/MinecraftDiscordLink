@@ -257,6 +257,62 @@ public final class ConfigLoader {
                 "server events (start, stop, maintenance) or to players coming online."));
         entry("notifications.enabled", true, null);
 
+        section("messages", comment("Texts players and Discord members see. Discord texts: Discord Markdown and emojis",
+                "as :name:. Minecraft texts: formatting codes with & as in chat.minecraft_format."));
+        entry("messages.join", ":inbox_tray: **{player}** joined the game",
+                comment("Chat channel: a player joined. {player}"));
+        entry("messages.leave", ":outbox_tray: **{player}** left the game",
+                comment("Chat channel: a player left. {player}"));
+        entry("messages.death", ":skull: {message}",
+                comment("Chat channel: a player died. {message} = vanilla death message (name in bold), {player}"));
+        entry("messages.advancement", ":trophy: {message}",
+                comment("Chat channel: an advancement. {message} = vanilla wording, {player}, {advancement}"));
+        entry("messages.server_start", ":white_check_mark: Server started",
+                comment("Chat channel: the server started."));
+        entry("messages.server_stop", ":octagonal_sign: Server stopped",
+                comment("Chat channel: the server stopped."));
+        entry("messages.kick_not_linked", String.join("\n",
+                        "You are not whitelisted on this server.",
+                        "Link your Discord account by running /mc link {code} on the Discord server.",
+                        "The code is valid for {minutes} minutes."),
+                comment("Minecraft: kick message of unlinked players. {code}, {minutes}"));
+        entry("messages.kick_not_whitelisted", "You are not whitelisted on this server.",
+                comment("Minecraft: kick message of linked players without a whitelisted role."));
+        entry("messages.kick_no_longer_whitelisted", "You are no longer whitelisted on this server.",
+                comment("Minecraft: kick message when a player loses access."));
+        entry("messages.kick_maintenance", String.join("\n",
+                        "The server is in maintenance mode. Please try again later.",
+                        "Reason: {reason}"),
+                comment("Minecraft: kick message during maintenance. {reason}"));
+        entry("messages.link_dm", String.join("\n",
+                        "The Minecraft player **{player}** wants to link their account to yours.",
+                        "Your code: **{code}** (valid for {minutes} minutes)",
+                        "Enter it in Minecraft with `/discord confirm {code}`.",
+                        "Reply `refresh` to get a new code.",
+                        "If this wasn't you, ignore this message."),
+                comment("Discord DM with a link code. {player}, {code}, {minutes}"));
+        entry("messages.notify_server_start", ":white_check_mark: {Server} has started.",
+                comment("Notification DMs. {server} = \"the Minecraft server\" (with its name if set),",
+                        "{Server} = the same with a capital letter."));
+        entry("messages.notify_server_stop", ":octagonal_sign: {Server} is stopping.",
+                null);
+        entry("messages.notify_maintenance_on", ":wrench: {Server} is now in maintenance mode. Reason: {reason}",
+                comment("{reason}"));
+        entry("messages.notify_maintenance_off", ":white_check_mark: The maintenance mode of {server} is over.",
+                null);
+        entry("messages.notify_player_online", ":green_circle: **{player}** is now online on {server}.",
+                comment("{player}"));
+        entry("messages.lag_warning_title", ":warning: Lag: {tps} TPS",
+                comment("Monitoring channel. {tps}"));
+        entry("messages.lag_warning", "The TPS are below {threshold} for {duration}.",
+                comment("{threshold}, {duration}"));
+        entry("messages.lag_over_title", ":white_check_mark: Lag over: {tps} TPS",
+                comment("{tps}"));
+        entry("messages.lag_over", "The lag lasted {duration}.",
+                comment("{duration}"));
+        entry("messages.crash_title", ":boom: Server crashed",
+                null);
+
         section("leaderboard", comment(
                 "Leaderboards from the vanilla statistics: /mc top <category> and /mc stats <player>.",
                 "",
@@ -525,7 +581,29 @@ public final class ConfigLoader {
                                     bool("monitoring.status_message.pin"))),
                     new ModConfig.Notifications(bool("notifications.enabled")),
                     new ModConfig.Leaderboard(bool("leaderboard.enabled"),
-                            integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()));
+                            integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()),
+                    new ModConfig.Messages(
+                            string("messages.join"),
+                            string("messages.leave"),
+                            string("messages.death"),
+                            string("messages.advancement"),
+                            string("messages.server_start"),
+                            string("messages.server_stop"),
+                            string("messages.kick_not_linked"),
+                            string("messages.kick_not_whitelisted"),
+                            string("messages.kick_no_longer_whitelisted"),
+                            string("messages.kick_maintenance"),
+                            string("messages.link_dm"),
+                            string("messages.notify_server_start"),
+                            string("messages.notify_server_stop"),
+                            string("messages.notify_maintenance_on"),
+                            string("messages.notify_maintenance_off"),
+                            string("messages.notify_player_online"),
+                            string("messages.lag_warning_title"),
+                            string("messages.lag_warning"),
+                            string("messages.lag_over_title"),
+                            string("messages.lag_over"),
+                            string("messages.crash_title")));
         }
 
         /**

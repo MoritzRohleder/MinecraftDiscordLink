@@ -6,6 +6,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,6 +20,8 @@ public final class MinecraftText {
      * formatting codes such as {@code &9}.
      */
     private static final Pattern FORMAT_PARTS = Pattern.compile("\\{name}|\\{message}|&([0-9a-fk-orA-FK-OR])");
+    /** Placeholders and formatting codes of configured texts. */
+    private static final Pattern TEXT_PARTS = Pattern.compile("\\{(\\w+)}|&([0-9a-fk-orA-FK-OR])");
 
     private MinecraftText() {
     }
@@ -50,6 +53,33 @@ public final class MinecraftText {
                 case "{message}" -> append(result, message, style);
                 default -> style = applyCode(style,
                         ChatFormatting.getByCode(matcher.group(1).toLowerCase(Locale.ROOT).charAt(0)));
+            }
+            end = matcher.end();
+        }
+        append(result, format.substring(end), style);
+        return result;
+    }
+
+    /**
+     * Formats a configured Minecraft text, e.g. a kick message: formatting codes with {@code &} as in
+     * {@link #discordMessage(String, String, String)}, placeholders such as {@code {code}} inserted as plain text.
+     * Unknown placeholders are kept as written. Line breaks are kept.
+     *
+     * @param format the configured text
+     * @param values the placeholder values by name
+     * @return the component
+     */
+    public static Component formatted(String format, Map<String, String> values) {
+        MutableComponent result = Component.empty();
+        Style style = Style.EMPTY.withColor(ChatFormatting.WHITE);
+        Matcher matcher = TEXT_PARTS.matcher(format);
+        int end = 0;
+        while (matcher.find()) {
+            append(result, format.substring(end, matcher.start()), style);
+            if (matcher.group(1) != null) {
+                append(result, values.getOrDefault(matcher.group(1), matcher.group()), style);
+            } else {
+                style = applyCode(style, ChatFormatting.getByCode(matcher.group(2).toLowerCase(Locale.ROOT).charAt(0)));
             }
             end = matcher.end();
         }

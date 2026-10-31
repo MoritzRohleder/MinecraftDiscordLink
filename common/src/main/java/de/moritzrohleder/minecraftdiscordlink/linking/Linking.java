@@ -9,6 +9,7 @@ import de.moritzrohleder.minecraftdiscordlink.discord.AccountLinking;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
+import de.moritzrohleder.minecraftdiscordlink.text.Messages;
 import de.moritzrohleder.minecraftdiscordlink.text.Placeholders;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -45,20 +46,8 @@ import java.util.function.Supplier;
  */
 public final class Linking {
 
-    private static final String DM_TEXT = """
-            The Minecraft player **{player}** wants to link their account to yours.
-            Your code: **{code}** (valid for {minutes} minutes)
-            Enter it in Minecraft with `/discord confirm {code}`.
-            Reply `refresh` to get a new code.
-            If this wasn't you, ignore this message.""";
-    private static final String KICK_NOT_LINKED = """
-            You are not whitelisted on this server.
-            Link your Discord account by running /mc link {code} on the Discord server.
-            The code is valid for {minutes} minutes.""";
     /** Answer while {@code linking.enabled} is off. */
     private static final String SWITCHED_OFF = "Account linking is switched off on this server.";
-    private static final String KICK_NOT_WHITELISTED = "You are not whitelisted on this server.";
-    private static final String KICK_NO_LONGER_WHITELISTED = "You are no longer whitelisted on this server.";
 
     private final MinecraftServer server;
     private final LinkStore links;
@@ -414,11 +403,11 @@ public final class Linking {
         return switch (whitelistStatus(profile)) {
             case ALLOWED -> null;
             // Without account linking an unlinked player cannot get access by linking
-            case NOT_LINKED -> !enabled() ? Component.literal(KICK_NOT_WHITELISTED)
-                    : Component.literal(Placeholders.resolve(KICK_NOT_LINKED, Map.of(
+            case NOT_LINKED -> !enabled() ? Messages.minecraft(ModConfig.Messages::kickNotWhitelisted, Map.of())
+                    : Messages.minecraft(ModConfig.Messages::kickNotLinked, Map.of(
                     "code", codes.kickCode(profile.getId(), profile.getName()),
-                    "minutes", String.valueOf(ConfigManager.get().linking().codeValidityMinutes()))));
-            case DENIED -> Component.literal(KICK_NOT_WHITELISTED);
+                    "minutes", String.valueOf(ConfigManager.get().linking().codeValidityMinutes())));
+            case DENIED -> Messages.minecraft(ModConfig.Messages::kickNotWhitelisted, Map.of());
         };
     }
 
@@ -446,7 +435,7 @@ public final class Linking {
         ServerPlayer online = server.getPlayerList().getPlayer(player);
         if (online != null && !isWhitelisted(online.getGameProfile())) {
             Constants.LOG.info("Kicking {}: no longer whitelisted via Discord", online.getGameProfile().getName());
-            online.connection.disconnect(Component.literal(KICK_NO_LONGER_WHITELISTED));
+            online.connection.disconnect(Messages.minecraft(ModConfig.Messages::kickNoLongerWhitelisted, Map.of()));
         }
     }
 
@@ -594,8 +583,8 @@ public final class Linking {
      * @return the DM text
      */
     private static String dmText(String playerName, String code) {
-        return Placeholders.resolve(DM_TEXT, Map.of(
-                "player", playerName,
+        return Messages.discord(ModConfig.Messages::linkDm, Map.of(
+                "player", DiscordText.escape(playerName),
                 "code", code,
                 "minutes", String.valueOf(ConfigManager.get().linking().codeValidityMinutes())));
     }

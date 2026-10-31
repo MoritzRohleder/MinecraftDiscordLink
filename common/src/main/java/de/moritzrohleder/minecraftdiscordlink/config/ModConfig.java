@@ -24,10 +24,12 @@ import java.util.OptionalLong;
  * @param monitoring    monitoring channel ({@code [monitoring]})
  * @param notifications direct messages to subscribers ({@code [notifications]})
  * @param leaderboard   leaderboards from the vanilla statistics ({@code [leaderboard]})
+ * @param messages      the texts players and Discord members see ({@code [messages]})
  */
 public record ModConfig(Server server, Discord discord, Chat chat, Console console, Whitelist whitelist,
                         Linking linking, Moderation moderation, Maintenance maintenance, Info info,
-                        Monitoring monitoring, Notifications notifications, Leaderboard leaderboard) {
+                        Monitoring monitoring, Notifications notifications, Leaderboard leaderboard,
+                        Messages messages) {
 
     /**
      * This Minecraft server, for several servers sharing one Discord server.
@@ -340,6 +342,45 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
      * @param enabled whether notifications are sent and the subscribe commands work
      */
     public record Notifications(boolean enabled) {
+    }
+
+    /**
+     * The texts players and Discord members see, with placeholders. Discord texts may contain emoji shortcodes such
+     * as {@code :skull:}, Minecraft texts formatting codes with {@code &}.
+     *
+     * @param join                   join event; {@code {player}}
+     * @param leave                  leave event; {@code {player}}
+     * @param death                  death event; {@code {message}} (vanilla death message), {@code {player}}
+     * @param advancement            advancement event; {@code {message}} (vanilla wording), {@code {player}},
+     *                               {@code {advancement}}
+     * @param serverStart            server start message in the chat channel
+     * @param serverStop             server stop message in the chat channel
+     * @param kickNotLinked          kick message of unlinked players; {@code {code}}, {@code {minutes}}
+     * @param kickNotWhitelisted     kick message of linked players without a whitelisted role
+     * @param kickNoLongerWhitelisted kick message when a player loses access
+     * @param kickMaintenance        kick message during maintenance; {@code {reason}}
+     * @param linkDm                 direct message with a link code; {@code {player}}, {@code {code}},
+     *                               {@code {minutes}}
+     * @param notifyServerStart      notification on server start; {@code {server}}, {@code {Server}}
+     * @param notifyServerStop       notification on server stop; {@code {server}}, {@code {Server}}
+     * @param notifyMaintenanceOn    notification when the maintenance mode is switched on; {@code {server}},
+     *                               {@code {Server}}, {@code {reason}}
+     * @param notifyMaintenanceOff   notification when the maintenance mode is switched off; {@code {server}},
+     *                               {@code {Server}}
+     * @param notifyPlayerOnline     notification when a player joins; {@code {player}}, {@code {server}},
+     *                               {@code {Server}}
+     * @param lagWarningTitle        title of a lag warning; {@code {tps}}
+     * @param lagWarning             text of a lag warning; {@code {threshold}}, {@code {duration}}
+     * @param lagOverTitle           title of an all-clear; {@code {tps}}
+     * @param lagOver                text of an all-clear; {@code {duration}}
+     * @param crashTitle             title of a crash notice
+     */
+    public record Messages(String join, String leave, String death, String advancement, String serverStart,
+                           String serverStop, String kickNotLinked, String kickNotWhitelisted,
+                           String kickNoLongerWhitelisted, String kickMaintenance, String linkDm,
+                           String notifyServerStart, String notifyServerStop, String notifyMaintenanceOn,
+                           String notifyMaintenanceOff, String notifyPlayerOnline, String lagWarningTitle,
+                           String lagWarning, String lagOverTitle, String lagOver, String crashTitle) {
     }
 
     /**

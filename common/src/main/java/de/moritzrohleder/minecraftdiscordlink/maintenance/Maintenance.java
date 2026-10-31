@@ -2,11 +2,13 @@ package de.moritzrohleder.minecraftdiscordlink.maintenance;
 
 import com.mojang.authlib.GameProfile;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
+import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
 import de.moritzrohleder.minecraftdiscordlink.data.StateStore.StoredMaintenance;
 import de.moritzrohleder.minecraftdiscordlink.linking.LinkStore;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.Reply;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext.Scope;
+import de.moritzrohleder.minecraftdiscordlink.text.Messages;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -15,6 +17,7 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -31,9 +34,6 @@ import java.util.function.LongPredicate;
  * The state can be read from any thread; changes must be made on the server thread.
  */
 public final class Maintenance {
-
-    /** Kick message of players without access. */
-    private static final String KICK_MESSAGE = "The server is in maintenance mode. Please try again later.";
 
     private final MinecraftServer server;
     private final StateStore state;
@@ -158,8 +158,8 @@ public final class Maintenance {
      */
     private Component kickMessage() {
         Status current = status;
-        return Component.literal(KICK_MESSAGE + (current == null ? "" : current.reason()
-                .map(reason -> "\nReason: " + reason).orElse("")));
+        String reason = current == null ? "" : current.reason().orElse("no reason given");
+        return Messages.minecraft(ModConfig.Messages::kickMaintenance, Map.of("reason", reason));
     }
 
     /**

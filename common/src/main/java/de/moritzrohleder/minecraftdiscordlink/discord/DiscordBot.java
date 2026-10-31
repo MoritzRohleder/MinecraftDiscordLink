@@ -14,6 +14,7 @@ import de.moritzrohleder.minecraftdiscordlink.notifications.NotificationEvent;
 import de.moritzrohleder.minecraftdiscordlink.notifications.SubscriptionStore;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
+import de.moritzrohleder.minecraftdiscordlink.text.Messages;
 import net.dv8tion.jda.api.EmbedBuilder;
 import com.neovisionaries.ws.client.WebSocketFactory;
 import net.dv8tion.jda.api.JDA;
@@ -37,7 +38,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
@@ -303,16 +306,20 @@ public final class DiscordBot {
     private void start() {
         if (ConfigManager.get().chat().enabled() && ConfigManager.get().chat().events().serverStart()) {
             chatChannel().ifPresent(channel -> channel.sendMessageEmbeds(
-                    embed("✅ Server started", EmbedColors.GREEN)).queue(null, this::logSendError));
+                    embed(Messages.discord(ModConfig.Messages::serverStart, Map.of()), EmbedColors.GREEN))
+                    .queue(null, this::logSendError));
         }
-        notifications.onEvent(NotificationEvent.SERVER_START, "✅ " + capitalize(Notifications.serverLabel())
-                        + " has started.",
+        notifications.onEvent(NotificationEvent.SERVER_START,
+                Messages.discord(ModConfig.Messages::notifyServerStart, Notifications.serverValues()),
                 EmbedColors.GREEN);
-        maintenance.addListener(change -> notifications.onEvent(NotificationEvent.MAINTENANCE, change
-                .map(status -> "🔧 " + capitalize(Notifications.serverLabel()) + " is now in maintenance mode."
-                        + status.reason().map(reason -> " Reason: " + DiscordText.escape(reason)).orElse(""))
-                .orElse("✅ The maintenance mode of " + Notifications.serverLabel() + " is over."),
-                EmbedColors.BLURPLE));
+        maintenance.addListener(change -> {
+            Map<String, String> values = new HashMap<>(Notifications.serverValues());
+            change.ifPresent(status -> values.put("reason", status.reason().map(DiscordText::escape)
+                    .orElse("no reason given")));
+            notifications.onEvent(NotificationEvent.MAINTENANCE, Messages.discord(change.isPresent()
+                    ? ModConfig.Messages::notifyMaintenanceOn : ModConfig.Messages::notifyMaintenanceOff, values),
+                    EmbedColors.BLURPLE);
+        });
         NetworkBans network = networkBans;
         if (network != null) {
             try {
@@ -469,16 +476,6 @@ public final class DiscordBot {
     }
 
     /**
-     * Capitalizes the first letter of a text.
-     *
-     * @param text the text
-     * @return the text starting with an upper case letter
-     */
-    private static String capitalize(String text) {
-        return text.isEmpty() ? text : Character.toUpperCase(text.charAt(0)) + text.substring(1);
-    }
-
-    /**
      * Notifies the subscribers of a player who came online.
      *
      * @param player the player's UUID
@@ -533,7 +530,8 @@ public final class DiscordBot {
                 Optional<GuildMessageChannel> channel = chatChannel();
                 if (ConfigManager.get().chat().enabled() && ConfigManager.get().chat().events().serverStop()
                         && channel.isPresent()) {
-                    first.add(channel.get().sendMessageEmbeds(embed("🛑 Server stopped", EmbedColors.RED)).submit());
+                    first.add(channel.get().sendMessageEmbeds(embed(Messages.discord(
+                            ModConfig.Messages::serverStop, Map.of()), EmbedColors.RED)).submit());
                 }
                 MonitoringChannel monitor = monitoring;
                 if (monitor != null) {
@@ -542,8 +540,9 @@ public final class DiscordBot {
                 waitFor(CompletableFuture.allOf(first.toArray(CompletableFuture[]::new)), deadline);
                 Notifications notify = notifications;
                 if (notify != null) {
-                    waitFor(notify.onEvent(NotificationEvent.SERVER_STOP, "🛑 "
-                            + capitalize(Notifications.serverLabel()) + " is stopping.", EmbedColors.RED), deadline);
+                    waitFor(notify.onEvent(NotificationEvent.SERVER_STOP, Messages.discord(
+                            ModConfig.Messages::notifyServerStop, Notifications.serverValues()), EmbedColors.RED),
+                            deadline);
                 }
             }
             moderation.log().setListener(entry -> { });

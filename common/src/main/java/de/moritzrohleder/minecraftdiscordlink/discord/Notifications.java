@@ -7,6 +7,7 @@ import de.moritzrohleder.minecraftdiscordlink.linking.LinkStore;
 import de.moritzrohleder.minecraftdiscordlink.notifications.NotificationEvent;
 import de.moritzrohleder.minecraftdiscordlink.notifications.SubscriptionStore;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
+import de.moritzrohleder.minecraftdiscordlink.text.Messages;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -14,6 +15,8 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 import java.awt.Color;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -77,20 +80,37 @@ final class Notifications {
                 .filter(id -> ownAccount.isEmpty() || ownAccount.getAsLong() != id)
                 .toList();
         MessageEmbed embed = new EmbedBuilder()
-                .setDescription("🟢 **" + DiscordText.escape(name) + "** is now online on " + serverLabel() + ".")
+                .setDescription(Messages.discord(ModConfig.Messages::notifyPlayerOnline,
+                        withPlayer(DiscordText.escape(name))))
                 .setColor(EmbedColors.GREEN).setTimestamp(now)
                 .setFooter("Unsubscribe with /mc unsubscribe player:" + name + serverOption()).build();
         sendAll(recipients, embed);
     }
 
     /**
-     * Names this server in notification texts.
+     * Returns the placeholders naming this server in notification texts: {@code {server}} is
+     * {@code the Minecraft server}, or with {@code server.name} e.g. {@code the Minecraft server **Survival**};
+     * {@code {Server}} is the same with a capital letter.
      *
-     * @return {@code the Minecraft server}, or with {@code server.name} e.g. {@code the Minecraft server **Survival**}
+     * @return the placeholder values
      */
-    static String serverLabel() {
+    static Map<String, String> serverValues() {
         ModConfig.Server server = ConfigManager.get().server();
-        return "the Minecraft server" + (server.named() ? " **" + DiscordText.escape(server.name()) + "**" : "");
+        String label = "the Minecraft server" + (server.named() ? " **" + DiscordText.escape(server.name()) + "**"
+                : "");
+        return Map.of("server", label, "Server", "T" + label.substring(1));
+    }
+
+    /**
+     * Returns the server placeholders plus {@code {player}}.
+     *
+     * @param player the player's name, escaped
+     * @return the placeholder values
+     */
+    private static Map<String, String> withPlayer(String player) {
+        Map<String, String> values = new HashMap<>(serverValues());
+        values.put("player", player);
+        return values;
     }
 
     /**
