@@ -55,6 +55,11 @@ public final class Moderation {
     /** Answer when the config file could not be written. */
     private static final String CONFIG_ERROR =
             "The config file could not be changed. See the server log for details.";
+    /** Marks the source of bans on all servers in {@code banned-players.json}. */
+    public static final String ALL_SERVERS_SUFFIX = " (all servers)";
+    /** Error when a ban on all servers is not possible. */
+    private static final String NETWORK_UNAVAILABLE = "Bans on all servers need a server.name, a moderation "
+            + "channel (moderation.channel_id) shared by all servers and a connected bot.";
     /** Reason of expired temporary bans in the moderation log. */
     private static final String EXPIRED_REASON = "Temporary ban expired";
     /** Shown as moderator when nobody is known, e.g. for changes by other mods. */
@@ -123,18 +128,37 @@ public final class Moderation {
      * @return the result
      */
     public Reply ban(GameProfile profile, String reason, Optional<Duration> duration, Scope scope) {
+        return banUntil(profile, reason, duration.map(length -> Instant.now().plus(length)), scope);
+    }
+
+    /**
+     * Bans a player until a given time, see {@link #ban(GameProfile, String, Optional, Scope)}. Used for bans on all
+     * servers received from another server, which keep the end the other server set.
+     *
+     * @param profile the player
+     * @param reason  the reason
+     * @param until   the end of a temporary ban, empty for a permanent ban
+     * @param scope   the moderator and the ban options
+     * @return the result
+     */
+    public Reply banUntil(GameProfile profile, String reason, Optional<Instant> until, Scope scope) {
+        if (scope.network() == ModerationEntry.Network.ALL_SERVERS && !networkReady()) {
+            return Reply.error(NETWORK_UNAVAILABLE);
+        }
         UserBanList bans = server.getPlayerList().getBans();
         boolean update = bans.isBanned(profile);
-        Optional<Instant> until = duration.map(length -> Instant.now().plus(length).truncatedTo(ChronoUnit.SECONDS));
-        UserBanListEntry ban = new UserBanListEntry(profile, null, scope.moderator(),
-                until.map(Date::from).orElse(null), reason);
+        Optional<Instant> end = until.map(time -> time.truncatedTo(ChronoUnit.SECONDS));
+        UserBanListEntry ban = new UserBanListEntry(profile, null,
+                scope.moderator() + (scope.allServers() ? ALL_SERVERS_SUFFIX : ""), end.map(Date::from).orElse(null),
+                reason);
         ModerationContext.run(scope, () -> bans.add(ban));
         ServerPlayer online = server.getPlayerList().getPlayer(profile.getId());
         if (online != null) {
             online.connection.disconnect(banMessage(ban));
         }
         announce(scope, Component.translatable("commands.ban.success", profile.getName(), reason));
-        String length = duration.map(value -> " for " + Durations.formatCompact(value)).orElse(" permanently");
+        String length = end.map(time -> " for " + Durations.formatCompact(Duration.between(Instant.now(), time)
+                .plusSeconds(30))).orElse(" permanently");
         return Reply.success((update ? "Updated the ban of " + profile.getName() + ": now" + length
                 : "Banned " + profile.getName() + length) + ": " + reason
                 + (scope.allServers() ? " (on all servers)" : ""));
@@ -165,13 +189,17 @@ public final class Moderation {
      * @return the result
      */
     public Reply unban(GameProfile profile, String reason, Scope scope) {
+        if (scope.network() == ModerationEntry.Network.ALL_SERVERS && !networkReady()) {
+            return Reply.error(NETWORK_UNAVAILABLE);
+        }
         UserBanList bans = server.getPlayerList().getBans();
         if (!bans.isBanned(profile)) {
             return Reply.error(profile.getName() + " is not banned.");
         }
         ModerationContext.run(scope, () -> bans.remove(profile));
         announce(scope, Component.translatable("commands.pardon.success", profile.getName()));
-        return Reply.success("Unbanned " + profile.getName() + ": " + reason);
+        return Reply.success("Unbanned " + profile.getName() + ": " + reason
+                + (scope.allServers() ? " (on all servers)" : ""));
     }
 
     /**
@@ -401,7 +429,8 @@ public final class Moderation {
                 && user instanceof GameProfile profile) {
             record(replaces ? ModerationAction.BAN_UPDATED : ModerationAction.BAN, profile.getName(),
                     Optional.of(profile.getId()), moderator(scope, ban),
-                    Optional.ofNullable(ban.getExpires()).map(Date::toInstant), reason(ban.getReason()));
+                    Optional.ofNullable(ban.getExpires()).map(Date::toInstant), reason(ban.getReason()),
+                    scope.map(Scope::network).orElse(ModerationEntry.Network.LOCAL));
             if (scope.map(Scope::fromSync).orElse(false)) {
                 return;
             }
@@ -433,11 +462,14 @@ public final class Moderation {
                 && ban.getExpires().before(new Date());
         if (list instanceof UserBanList && user instanceof GameProfile profile) {
             if (expired) {
+                // Every server removes an expired ban on all servers itself; only the one that made it reports it
                 record(ModerationAction.BAN_EXPIRED, profile.getName(), Optional.of(profile.getId()),
-                        Constants.MOD_NAME, Optional.empty(), Optional.of(EXPIRED_REASON));
+                        Constants.MOD_NAME, Optional.empty(), Optional.of(EXPIRED_REASON),
+                        entry instanceof BanListEntry<?> ban ? network(ban) : ModerationEntry.Network.LOCAL);
             } else {
                 record(ModerationAction.UNBAN, profile.getName(), Optional.of(profile.getId()), moderator(scope),
-                        Optional.empty(), scope.flatMap(Scope::reason));
+                        Optional.empty(), scope.flatMap(Scope::reason),
+                        scope.map(Scope::network).orElse(ModerationEntry.Network.LOCAL));
             }
             if (scope.map(Scope::fromSync).orElse(false)) {
                 return;
@@ -502,8 +534,49 @@ public final class Moderation {
      */
     private void record(ModerationAction action, String target, Optional<UUID> player, String moderator,
                         Optional<Instant> until, Optional<String> reason) {
+        record(action, target, player, moderator, until, reason, ModerationEntry.Network.LOCAL);
+    }
+
+    /**
+     * Writes an entry to the moderation log.
+     *
+     * @param action    the kind of action
+     * @param target    the player name, IP address or role
+     * @param player    the target player's UUID
+     * @param moderator who did it
+     * @param until     the end of a temporary ban
+     * @param reason    the reason
+     * @param network   whether the action applies to all servers
+     */
+    private void record(ModerationAction action, String target, Optional<UUID> player, String moderator,
+                        Optional<Instant> until, Optional<String> reason, ModerationEntry.Network network) {
         log.record(new ModerationEntry(Instant.now().truncatedTo(ChronoUnit.SECONDS), action, target, player,
-                moderator, until, reason));
+                moderator, until, reason, network));
+    }
+
+    /**
+     * Determines whether a stored ban applies to all servers, from its source.
+     *
+     * @param ban the ban
+     * @return {@code LOCAL}, {@code ALL_SERVERS} for a ban made here or {@code RECEIVED} for one from another server
+     */
+    private static ModerationEntry.Network network(BanListEntry<?> ban) {
+        if (!ban.getSource().endsWith(ALL_SERVERS_SUFFIX)) {
+            return ModerationEntry.Network.LOCAL;
+        }
+        return ban.getSource().contains(VIA) ? ModerationEntry.Network.RECEIVED : ModerationEntry.Network.ALL_SERVERS;
+    }
+
+    /** Joins the moderator and the server a ban on all servers was made on. */
+    public static final String VIA = " via ";
+
+    /**
+     * Checks whether bans on all servers can be sent to the other servers.
+     *
+     * @return whether the Discord side is ready for them
+     */
+    private boolean networkReady() {
+        return discord.get().map(DiscordModeration::networkReady).orElse(false);
     }
 
     /**

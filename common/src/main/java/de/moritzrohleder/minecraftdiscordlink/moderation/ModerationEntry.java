@@ -19,9 +19,38 @@ import java.util.UUID;
  * @param moderator who did it, e.g. {@code Discord @anedhel}, {@code Steve} or {@code Server}
  * @param until     when a temporary ban ends, empty otherwise
  * @param reason    the reason, empty if none was given
+ * @param network   whether the action applies to all servers sharing the Discord server
  */
 public record ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
-                              String moderator, Optional<Instant> until, Optional<String> reason) {
+                              String moderator, Optional<Instant> until, Optional<String> reason, Network network) {
+
+    /**
+     * Creates an entry of an action on this server only.
+     *
+     * @param time      when the action happened
+     * @param action    the kind of action
+     * @param target    the player name, IP address or role, empty for switching a whitelist on or off
+     * @param player    the UUID of the target player, if the target is a player
+     * @param moderator who did it
+     * @param until     when a temporary ban ends, empty otherwise
+     * @param reason    the reason, empty if none was given
+     */
+    public ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
+                           String moderator, Optional<Instant> until, Optional<String> reason) {
+        this(time, action, target, player, moderator, until, reason, Network.LOCAL);
+    }
+
+    /**
+     * Whether a ban or unban applies to all servers sharing the Discord server.
+     */
+    public enum Network {
+        /** Only this server. */
+        LOCAL,
+        /** All servers; made on this server, which tells the others through the moderation channel. */
+        ALL_SERVERS,
+        /** All servers; made on another server and received through the moderation channel. */
+        RECEIVED
+    }
 
     /** Format of times in the log file, in the server's time zone. */
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -57,6 +86,9 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
         line.append(" | by ").append(moderator);
         if (action.hasDuration()) {
             line.append(" | ").append(durationText(zone));
+        }
+        if (network != Network.LOCAL) {
+            line.append(" | all servers");
         }
         return line.append(" | ").append(reason.orElse(NO_REASON)).toString();
     }

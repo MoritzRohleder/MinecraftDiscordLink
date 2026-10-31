@@ -98,10 +98,10 @@ public final class ModerationContext {
      * @param fromSync       whether the action is caused by the ban sync or by a ban on all servers made on another
      *                       server, which must not be synchronized again
      * @param deleteMessages whether the ban sync also deletes the Discord messages of the last 7 days
-     * @param allServers     whether a ban or unban is applied on all servers sharing the Discord server
+     * @param network        whether a ban or unban applies to all servers sharing the Discord server
      */
     public record Scope(String moderator, Optional<String> reason, boolean fromSync, boolean deleteMessages,
-                        boolean allServers) {
+                        ModerationEntry.Network network) {
 
         /**
          * Creates a scope for an action of a moderator.
@@ -112,7 +112,7 @@ public final class ModerationContext {
          */
         public static Scope of(String moderator, String reason) {
             return new Scope(moderator, Optional.ofNullable(reason).map(String::strip).filter(text -> !text.isEmpty()),
-                    false, false, false);
+                    false, false, ModerationEntry.Network.LOCAL);
         }
 
         /**
@@ -123,7 +123,18 @@ public final class ModerationContext {
          * @return the scope
          */
         public static Scope synced(String moderator, String reason) {
-            return new Scope(moderator, Optional.ofNullable(reason), true, false, false);
+            return new Scope(moderator, Optional.ofNullable(reason), true, false, ModerationEntry.Network.LOCAL);
+        }
+
+        /**
+         * Creates a scope for a ban or unban on all servers that was made on another server.
+         *
+         * @param moderator who did it, with the server it was made on
+         * @param reason    the reason, {@code null} if none was given
+         * @return the scope
+         */
+        public static Scope received(String moderator, String reason) {
+            return new Scope(moderator, Optional.ofNullable(reason), true, false, ModerationEntry.Network.RECEIVED);
         }
 
         /**
@@ -134,7 +145,17 @@ public final class ModerationContext {
          * @return the scope
          */
         public Scope withBanOptions(boolean deleteMessages, boolean allServers) {
-            return new Scope(moderator, reason, fromSync, deleteMessages, allServers);
+            return new Scope(moderator, reason, fromSync, deleteMessages,
+                    allServers ? ModerationEntry.Network.ALL_SERVERS : ModerationEntry.Network.LOCAL);
+        }
+
+        /**
+         * Checks whether the action applies to all servers.
+         *
+         * @return whether it is a ban or unban on all servers
+         */
+        public boolean allServers() {
+            return network != ModerationEntry.Network.LOCAL;
         }
     }
 }

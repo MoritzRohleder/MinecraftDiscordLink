@@ -111,6 +111,8 @@ public final class DiscordBot {
     private volatile Notifications notifications;
     /** The monitoring channel, set once both the bot is ready and the server has started. */
     private volatile MonitoringChannel monitoring;
+    /** Bans on all servers, set once the bot is ready. */
+    private volatile NetworkBans networkBans;
     /** The ban sync, set once the bot is ready if one of the channels is available. */
     private volatile BanSync banSync;
     /** Whether the bot is connected and ready. */
@@ -220,6 +222,8 @@ public final class DiscordBot {
         setUpChat();
         setUpConsole();
         notifications = new Notifications(jda, subscriptions, linking.links());
+        networkBans = new NetworkBans(jda, server, moderation, state);
+        jda.addEventListener(networkBans);
         ModerationChannel moderationChannel = new ModerationChannel(jda);
         moderation.log().setListener(moderationChannel::send);
         setUpGuildFeatures();
@@ -309,6 +313,14 @@ public final class DiscordBot {
                         + status.reason().map(reason -> " Reason: " + DiscordText.escape(reason)).orElse(""))
                 .orElse("✅ The maintenance mode of " + Notifications.serverLabel() + " is over."),
                 EmbedColors.BLURPLE));
+        NetworkBans network = networkBans;
+        if (network != null) {
+            try {
+                executor.execute(network::catchUp);
+            } catch (RejectedExecutionException ignored) {
+                // The bot is shutting down
+            }
+        }
         MonitoringChannel monitor = new MonitoringChannel(jda, server, startTime, stats, state, report, executor);
         monitor.start();
         maintenance.addListener(change -> monitor.updateStatusNow());

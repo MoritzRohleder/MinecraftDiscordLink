@@ -44,7 +44,8 @@ final class ModerationChannel {
      */
     void send(ModerationEntry entry) {
         OptionalLong channelId = ConfigManager.get().moderation().channelId();
-        if (channelId.isEmpty()) {
+        if (channelId.isEmpty() || entry.network() == ModerationEntry.Network.RECEIVED) {
+            // A ban on all servers is posted only by the server it was made on
             return;
         }
         GuildMessageChannel channel = jda.getChannelById(GuildMessageChannel.class, channelId.getAsLong());
@@ -73,7 +74,7 @@ final class ModerationChannel {
         String title = emoji(action) + " " + action.title()
                 + (action.hasTarget() ? " " + DiscordText.escape(entry.target()) : "");
         EmbedBuilder embed = new EmbedBuilder()
-                .setTitle(title)
+                .setTitle(title, NetworkBans.dataUrl(entry).orElse(null))
                 .setColor(color(action))
                 .setTimestamp(entry.time());
         entry.player().ifPresent(uuid -> embed.setThumbnail(
@@ -86,6 +87,9 @@ final class ModerationChannel {
                     .orElse("permanent"), true);
         }
         embed.addField("Reason", entry.reason().map(DiscordText::escape).orElse(ModerationEntry.NO_REASON), false);
+        if (entry.network() == ModerationEntry.Network.ALL_SERVERS) {
+            embed.setFooter("All servers");
+        }
         return embed.build();
     }
 

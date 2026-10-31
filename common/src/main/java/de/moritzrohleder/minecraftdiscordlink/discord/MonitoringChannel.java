@@ -18,6 +18,7 @@ import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import net.dv8tion.jda.api.exceptions.ErrorResponseException;
+import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.requests.ErrorResponse;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -324,8 +325,13 @@ final class MonitoringChannel {
      */
     private static void pin(Message message, ModConfig.StatusMessage config) {
         if (config.pin() && !message.isPinned()) {
-            message.pin().queue(null, error -> Constants.LOG.error(
-                    "Could not pin the status message (needs the 'Pin Messages' permission): {}", error.getMessage()));
+            try {
+                message.pin().queue(null, error -> Constants.LOG.error("Could not pin the status message: {}",
+                        error.getMessage()));
+            } catch (InsufficientPermissionException e) {
+                Constants.LOG.error("Could not pin the status message: the bot needs the 'Pin Messages' permission "
+                        + "in the monitoring channel.");
+            }
         }
     }
 

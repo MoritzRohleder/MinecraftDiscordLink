@@ -42,6 +42,9 @@ import java.util.function.Consumer;
  *     <li>{@code /discord reload}: reloads the config (admins only)</li>
  *     <li>{@code /discord admin link <player> <discordname>}: links accounts manually (admins only)</li>
  *     <li>{@code /discord tempban <player> <duration> <reason>}: bans a player for a time (admins only)</li>
+ *     <li>{@code /discord networkban <player> <reason>}, {@code /discord networktempban <player> <duration> <reason>}
+ *     and {@code /discord networkunban <player> <reason>}: the same on all servers sharing the Discord server
+ *     (admins only)</li>
  *     <li>{@code /discord rolewhitelist status}: shows the whitelisted Discord roles (admins only)</li>
  *     <li>{@code /discord maintenance on [persistent] [reason]|off [reason]|status}: switches the maintenance mode
  *     (admins only)</li>
@@ -83,7 +86,23 @@ public final class DiscordCommand {
                         .then(Commands.argument("player", GameProfileArgument.gameProfile())
                                 .then(Commands.argument("duration", StringArgumentType.word())
                                         .then(Commands.argument("reason", StringArgumentType.greedyString())
-                                                .executes(DiscordCommand::tempban)))))
+                                                .executes(context -> ban(context, true, false))))))
+                .then(Commands.literal("networkban")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(context -> ban(context, false, true)))))
+                .then(Commands.literal("networktempban")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .then(Commands.argument("duration", StringArgumentType.word())
+                                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                                .executes(context -> ban(context, true, true))))))
+                .then(Commands.literal("networkunban")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(DiscordCommand::networkUnban))))
                 .then(Commands.literal("rolewhitelist")
                         .requires(Services.PLATFORM::isAdmin)
                         .then(Commands.literal("status")
@@ -215,19 +234,22 @@ public final class DiscordCommand {
     }
 
     /**
-     * Runs {@code /discord tempban <player> <duration> <reason>}.
+     * Runs {@code /discord tempban}, {@code /discord networkban} and {@code /discord networktempban}.
      *
-     * @param context the command context
+     * @param context    the command context
+     * @param temporary  whether the command has a duration
+     * @param allServers whether the ban applies to all servers sharing the Discord server
      * @return the number of banned players
      * @throws CommandSyntaxException if the player or the duration is invalid
      */
-    private static int tempban(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+    private static int ban(CommandContext<CommandSourceStack> context, boolean temporary, boolean allServers)
+            throws CommandSyntaxException {
         if (switchedOff(context, ConfigManager.get().moderation().enabled())) {
             return 0;
         }
         Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(context, "player");
-        Duration duration = Durations.parse(StringArgumentType.getString(context, "duration"))
-                .orElseThrow(INVALID_DURATION::create);
+        Optional<Duration> duration = temporary ? Optional.of(Durations.parse(StringArgumentType.getString(context,
+                "duration")).orElseThrow(INVALID_DURATION::create)) : Optional.empty();
         String reason = StringArgumentType.getString(context, "reason");
         CommandSourceStack source = context.getSource();
         Optional<Moderation> moderation = MinecraftDiscordLink.moderation();
@@ -235,10 +257,11 @@ public final class DiscordCommand {
             source.sendFailure(Component.literal("The moderation is not available right now."));
             return 0;
         }
-        ModerationContext.Scope scope = ModerationContext.Scope.of(source.getTextName(), reason);
+        ModerationContext.Scope scope = ModerationContext.Scope.of(source.getTextName(), reason)
+                .withBanOptions(false, allServers);
         int banned = 0;
         for (GameProfile profile : profiles) {
-            Linking.Reply reply = moderation.get().ban(profile, reason, Optional.of(duration), scope);
+            Linking.Reply reply = moderation.get().ban(profile, reason, duration, scope);
             if (reply.success()) {
                 banned++;
                 source.sendSuccess(() -> Component.literal(reply.message()), true);
@@ -247,6 +270,40 @@ public final class DiscordCommand {
             }
         }
         return banned;
+    }
+
+    /**
+     * Runs {@code /discord networkunban <player> <reason>}: lifts the ban on all servers.
+     *
+     * @param context the command context
+     * @return the number of unbanned players
+     * @throws CommandSyntaxException if the player is invalid
+     */
+    private static int networkUnban(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        if (switchedOff(context, ConfigManager.get().moderation().enabled())) {
+            return 0;
+        }
+        Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(context, "player");
+        String reason = StringArgumentType.getString(context, "reason");
+        CommandSourceStack source = context.getSource();
+        Optional<Moderation> moderation = MinecraftDiscordLink.moderation();
+        if (moderation.isEmpty()) {
+            source.sendFailure(Component.literal("The moderation is not available right now."));
+            return 0;
+        }
+        ModerationContext.Scope scope = ModerationContext.Scope.of(source.getTextName(), reason)
+                .withBanOptions(false, true);
+        int unbanned = 0;
+        for (GameProfile profile : profiles) {
+            Linking.Reply reply = moderation.get().unban(profile, reason, scope);
+            if (reply.success()) {
+                unbanned++;
+                source.sendSuccess(() -> Component.literal(reply.message()), true);
+            } else {
+                source.sendFailure(Component.literal(reply.message()));
+            }
+        }
+        return unbanned;
     }
 
     /**

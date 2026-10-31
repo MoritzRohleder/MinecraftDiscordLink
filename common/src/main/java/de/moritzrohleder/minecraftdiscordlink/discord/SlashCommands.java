@@ -157,10 +157,15 @@ final class SlashCommands extends ListenerAdapter {
                                                 "e.g. 30m, 12h, 7d, 2w or 1d12h; permanent without", false)
                                         .addOption(OptionType.BOOLEAN, "delete_messages",
                                                 "Ban sync: also delete the Discord messages of the last 7 days",
-                                                false),
+                                                false)
+                                        .addOption(OptionType.BOOLEAN, "all_servers",
+                                                "Ban on all Minecraft servers sharing this Discord server", false),
                                 new SubcommandData("unban", "Lift the ban of a player")
                                         .addOption(OptionType.STRING, "player", "The Minecraft name", true)
-                                        .addOption(OptionType.STRING, "reason", "Why the ban is lifted", true),
+                                        .addOption(OptionType.STRING, "reason", "Why the ban is lifted", true)
+                                        .addOption(OptionType.BOOLEAN, "all_servers",
+                                                "Lift the ban on all Minecraft servers sharing this Discord server",
+                                                false),
                                 new SubcommandData("banlist", "List the banned players")
                                         .addOptions(pageOption()))
                         .addSubcommandGroups(
@@ -498,10 +503,15 @@ final class SlashCommands extends ListenerAdapter {
                 }
                 boolean deleteMessages = Boolean.TRUE.equals(event.getOption("delete_messages",
                         OptionMapping::getAsBoolean));
+                boolean allServers = Boolean.TRUE.equals(event.getOption("all_servers", OptionMapping::getAsBoolean));
                 withPlayer(event, profile -> moderation.ban(profile, reason, duration,
-                        scope.withBanOptions(deleteMessages, false)));
+                        scope.withBanOptions(deleteMessages, allServers)));
             }
-            case "mcadmin unban" -> withPlayer(event, profile -> moderation.unban(profile, reason, scope));
+            case "mcadmin unban" -> {
+                boolean allServers = Boolean.TRUE.equals(event.getOption("all_servers", OptionMapping::getAsBoolean));
+                withPlayer(event, profile -> moderation.unban(profile, reason, scope.withBanOptions(false,
+                        allServers)));
+            }
             case "mcadmin whitelist add" -> withPlayer(event, profile -> moderation.whitelistAdd(profile, scope));
             case "mcadmin whitelist remove" ->
                     withPlayer(event, profile -> moderation.whitelistRemove(profile, scope));

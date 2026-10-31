@@ -14,9 +14,12 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Role;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.UserSnowflake;
+import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import net.dv8tion.jda.api.events.guild.GuildBanEvent;
 import net.dv8tion.jda.api.events.guild.GuildUnbanEvent;
 import net.dv8tion.jda.api.exceptions.ErrorResponseException;
+import net.dv8tion.jda.api.exceptions.HierarchyException;
+import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.ErrorResponse;
 import net.minecraft.server.MinecraftServer;
@@ -99,15 +102,21 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
         UserSnowflake user = UserSnowflake.fromId(discordId.getAsLong());
         String auditReason = truncate("Minecraft ban: " + reason);
         pendingUnbans.remove(discordId.getAsLong());
-        if (config.discordAction() == ModConfig.DiscordAction.BAN) {
-            guild.ban(user, deleteMessages ? 7 : 0, TimeUnit.DAYS).reason(auditReason)
-                    .queue(null, error -> failed(player, discordId.getAsLong(), "ban", error));
-        } else {
-            guild.kick(user).reason(auditReason).queue(null, error -> {
-                if (!isError(error, ErrorResponse.UNKNOWN_MEMBER)) {
-                    failed(player, discordId.getAsLong(), "kick", error);
-                }
-            });
+        try {
+            if (config.discordAction() == ModConfig.DiscordAction.BAN) {
+                guild.ban(user, deleteMessages ? 7 : 0, TimeUnit.DAYS).reason(auditReason)
+                        .queue(null, error -> failed(player, discordId.getAsLong(), "ban", error));
+            } else {
+                guild.kick(user).reason(auditReason).queue(null, error -> {
+                    if (!isError(error, ErrorResponse.UNKNOWN_MEMBER)) {
+                        failed(player, discordId.getAsLong(), "kick", error);
+                    }
+                });
+            }
+        } catch (InsufficientPermissionException | HierarchyException e) {
+            // Checked by JDA before sending, e.g. without "Ban Members" or for members above the bot
+            failed(player, discordId.getAsLong(), config.discordAction() == ModConfig.DiscordAction.BAN ? "ban"
+                    : "kick", e);
         }
     }
 
@@ -118,6 +127,13 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
         if (config.enabled() && config.discordAction() == ModConfig.DiscordAction.BAN && discordId.isPresent()) {
             unban(discordId.getAsLong(), player);
         }
+    }
+
+    @Override
+    public boolean networkReady() {
+        OptionalLong channel = ConfigManager.get().moderation().channelId();
+        return ConfigManager.get().server().named() && channel.isPresent()
+                && guild.getJDA().getChannelById(GuildMessageChannel.class, channel.getAsLong()) != null;
     }
 
     @Override
@@ -132,15 +148,21 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
      * @param player    the UUID of the linked player
      */
     private void unban(long discordId, UUID player) {
-        guild.unban(UserSnowflake.fromId(discordId)).reason("Minecraft unban").queue(
-                done -> pendingUnbans.remove(discordId),
-                error -> {
-                    if (isError(error, ErrorResponse.UNKNOWN_BAN)) {
-                        pendingUnbans.remove(discordId);
-                    } else if (pendingUnbans.put(discordId, player) == null) {
-                        failed(player, discordId, "unban (retrying every minute)", error);
-                    }
-                });
+        try {
+            guild.unban(UserSnowflake.fromId(discordId)).reason("Minecraft unban").queue(
+                    done -> pendingUnbans.remove(discordId),
+                    error -> {
+                        if (isError(error, ErrorResponse.UNKNOWN_BAN)) {
+                            pendingUnbans.remove(discordId);
+                        } else if (pendingUnbans.put(discordId, player) == null) {
+                            failed(player, discordId, "unban (retrying every minute)", error);
+                        }
+                    });
+        } catch (InsufficientPermissionException e) {
+            if (pendingUnbans.put(discordId, player) == null) {
+                failed(player, discordId, "unban (retrying every minute)", e);
+            }
+        }
     }
 
     /**

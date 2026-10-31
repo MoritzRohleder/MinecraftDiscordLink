@@ -11,7 +11,8 @@ import java.util.OptionalLong;
  * <p>
  * This is the ID of the linked role the bot created itself for {@code linking.linked_role = "auto"} (stored so the
  * bot only ever deletes a role it created, never a role with the same name made by someone else), a maintenance mode
- * that survives restarts and the ID of the status message in the monitoring channel.
+ * that survives restarts, the ID of the status message in the monitoring channel and the last message checked for
+ * bans on all servers.
  * <p>
  * All methods are thread-safe.
  */
@@ -31,7 +32,7 @@ public final class StateStore {
     public StateStore(Path dataDirectory) {
         this.file = new JsonFile<>(dataDirectory.resolve(FILE_NAME), Data.class);
         Data loaded = file.read();
-        this.data = loaded != null ? loaded : new Data(null, null, null);
+        this.data = loaded != null ? loaded : new Data(null, null, null, null);
     }
 
     /**
@@ -56,7 +57,7 @@ public final class StateStore {
      */
     public synchronized void setCreatedLinkedRole(OptionalLong roleId) {
         data = new Data(roleId.isPresent() ? String.valueOf(roleId.getAsLong()) : null, data.maintenance(),
-                data.statusMessage());
+                data.statusMessage(), data.networkMessage());
         file.write(data);
     }
 
@@ -75,7 +76,8 @@ public final class StateStore {
      * @param maintenance the maintenance mode, empty if none
      */
     public synchronized void setMaintenance(Optional<StoredMaintenance> maintenance) {
-        data = new Data(data.createdLinkedRole(), maintenance.orElse(null), data.statusMessage());
+        data = new Data(data.createdLinkedRole(), maintenance.orElse(null), data.statusMessage(),
+                data.networkMessage());
         file.write(data);
     }
 
@@ -101,7 +103,33 @@ public final class StateStore {
      */
     public synchronized void setStatusMessage(OptionalLong messageId) {
         data = new Data(data.createdLinkedRole(), data.maintenance(),
-                messageId.isPresent() ? String.valueOf(messageId.getAsLong()) : null);
+                messageId.isPresent() ? String.valueOf(messageId.getAsLong()) : null, data.networkMessage());
+        file.write(data);
+    }
+
+    /**
+     * Returns the ID of the last message of the moderation channel checked for bans on all servers.
+     *
+     * @return the message ID, empty if none was checked yet
+     */
+    public synchronized OptionalLong networkMessage() {
+        try {
+            return data.networkMessage() != null
+                    ? OptionalLong.of(Long.parseLong(data.networkMessage()))
+                    : OptionalLong.empty();
+        } catch (NumberFormatException e) {
+            return OptionalLong.empty();
+        }
+    }
+
+    /**
+     * Stores the ID of the last message of the moderation channel checked for bans on all servers.
+     *
+     * @param messageId the message ID
+     */
+    public synchronized void setNetworkMessage(long messageId) {
+        data = new Data(data.createdLinkedRole(), data.maintenance(), data.statusMessage(),
+                String.valueOf(messageId));
         file.write(data);
     }
 
@@ -121,10 +149,12 @@ public final class StateStore {
      * @param createdLinkedRole ID of the linked role created by the bot, as string
      * @param maintenance       the maintenance mode that survives restarts, {@code null} if none
      * @param statusMessage     ID of the status message in the monitoring channel, as string
+     * @param networkMessage    ID of the last message checked for bans on all servers, as string
      */
     private record Data(@SerializedName(value = "created_linked_role", alternate = "createdLinkedRole")
                         String createdLinkedRole,
                         StoredMaintenance maintenance,
-                        @SerializedName("status_message") String statusMessage) {
+                        @SerializedName("status_message") String statusMessage,
+                        @SerializedName("network_message") String networkMessage) {
     }
 }

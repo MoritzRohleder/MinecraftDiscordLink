@@ -27,6 +27,14 @@ public interface DiscordModeration {
     void onMinecraftUnban(UUID player);
 
     /**
+     * Checks whether bans on all servers can be sent to the other servers: this server has a name, the moderation
+     * channel is available and the bot is connected.
+     *
+     * @return whether bans on all servers are possible
+     */
+    boolean networkReady();
+
+    /**
      * Looks up the name of a role of the Discord server.
      *
      * @param roleId the role ID
