@@ -134,7 +134,8 @@ public final class ConfigLoader {
                 "Bans across Minecraft and linked Discord accounts, in both directions.",
                 "Needs the bot permissions \"Ban Members\", \"Kick Members\" and \"View Audit Log\"."));
 
-        section("features.maintenance", comment("Maintenance mode: only operators and linked Discord admins may join."));
+        section("features.maintenance",
+                comment("Maintenance mode: only operators and linked Discord admins may join."));
         entry("features.maintenance.enabled", true, null);
 
         section("features.info", comment(
