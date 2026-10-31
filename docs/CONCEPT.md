@@ -155,6 +155,12 @@ excepted.
   Minecraft ban bans or only kicks from Discord. Built together with the
   moderation commands; temporary bans are lifted on both sides when they
   expire.
+- **Bans on all servers** – with several servers, a ban or unban can apply
+  to all of them (`all_servers` option, `/discord networkban` & co.); sent
+  through the shared moderation channel.
+- **Review round** – one whitelist switch with Discord roles, `enabled` in
+  every config section, configurable texts in `[messages]`, reloadable
+  channels, paged lists, pinned status message.
 - **Notifications** – subscription system: Discord users subscribe to events
   (server start, server stop, …) or to players coming online and get a DM.
 - **Leaderboards** – configurable rankings from the vanilla statistics,
