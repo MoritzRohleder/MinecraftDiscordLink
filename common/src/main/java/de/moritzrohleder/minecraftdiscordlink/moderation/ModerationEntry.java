@@ -43,8 +43,7 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
     /**
      * Formats the line of the moderation log file, e.g.
      * {@code 2026-10-30 15:40:12 | BAN | Steve | by Discord @anedhel | 7d (until 2026-11-06 15:40) | Griefing}.
-     * Permanent bans show {@code permanent}; actions without duration leave that column out. Expired bans have
-     * neither moderator nor reason: {@code 2026-11-06 15:40:30 | BAN EXPIRED | Steve}.
+     * Permanent bans show {@code permanent}; actions without duration leave that column out.
      *
      * @param zone the time zone of the server
      * @return the line, without line break
@@ -55,11 +54,8 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
         if (action.hasTarget()) {
             line.append(" | ").append(target);
         }
-        if (action == ModerationAction.BAN_EXPIRED) {
-            return line.toString();
-        }
         line.append(" | by ").append(moderator);
-        if (action == ModerationAction.BAN || action == ModerationAction.IP_BAN) {
+        if (action.hasDuration()) {
             line.append(" | ").append(durationText(zone));
         }
         return line.append(" | ").append(reason.orElse(NO_REASON)).toString();

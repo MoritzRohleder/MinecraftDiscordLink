@@ -41,8 +41,9 @@ class ModerationTest {
                 whitelistOn.toLogLine(ZoneOffset.UTC));
 
         ModerationEntry expired = new ModerationEntry(TIME, ModerationAction.BAN_EXPIRED, "Steve", Optional.of(STEVE),
-                "", Optional.empty(), Optional.empty());
-        assertEquals("2026-10-30 15:40:12 | BAN EXPIRED | Steve", expired.toLogLine(ZoneOffset.UTC));
+                "MinecraftDiscordLink", Optional.empty(), Optional.of("Temporary ban expired"));
+        assertEquals("2026-10-30 15:40:12 | BAN EXPIRED | Steve | by MinecraftDiscordLink | Temporary ban expired",
+                expired.toLogLine(ZoneOffset.UTC));
     }
 
     @Test

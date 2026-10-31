@@ -4,7 +4,6 @@ import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
-import de.moritzrohleder.minecraftdiscordlink.console.ConsoleCapture;
 import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Leaderboards;
 import de.moritzrohleder.minecraftdiscordlink.monitoring.LagDetector;
@@ -34,6 +33,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -169,16 +169,10 @@ final class MonitoringChannel {
         if (!config.enabled() || channel.isEmpty()) {
             return;
         }
-        String lines = String.join("\n", ConsoleCapture.recent(config.logLines()));
-        String header = "**" + DiscordText.escape(title) + "**\n" + DiscordText.escape(exception) + "\n";
-        String log = lines.isEmpty() ? "" : "```\n" + lines.replace("```", "'''") + "\n```";
-        if (header.length() + log.length() > MAX_DESCRIPTION) {
-            // Keeps the end of the log, which is closest to the crash
-            int keep = Math.max(0, MAX_DESCRIPTION - header.length() - 9);
-            log = "```\n" + lines.substring(Math.max(0, lines.length() - keep)).replace("```", "'''") + "\n```";
-        }
+        // Only the reason: the console lines are in the console channel and the crash report
         MessageEmbed embed = new EmbedBuilder().setTitle("💥 Server crashed")
-                .setDescription(truncate(header + log)).setColor(EmbedColors.RED).setTimestamp(Instant.now())
+                .setDescription(truncate("**" + DiscordText.escape(title) + "**\n" + DiscordText.escape(exception)))
+                .setColor(EmbedColors.RED).setTimestamp(Instant.now())
                 .build();
         try {
             channel.get().sendMessageEmbeds(SlashCommands.tag(List.of(embed)))
@@ -238,28 +232,25 @@ final class MonitoringChannel {
     // ---- Status message ----
 
     /**
-     * Marks the status message as offline and waits for it, when the server stops.
+     * Marks the status message as offline, when the server stops.
      *
-     * @param timeout how long to wait at most
+     * @return completes when the message was edited or editing failed
      */
-    void markOffline(Duration timeout) {
+    CompletableFuture<?> markOffline() {
         Optional<GuildMessageChannel> channel = channel();
         OptionalLong messageId = state.statusMessage();
         if (!ConfigManager.get().monitoring().statusMessage().enabled() || channel.isEmpty()
                 || messageId.isEmpty()) {
-            return;
+            return CompletableFuture.completedFuture(null);
         }
         MessageEmbed embed = new EmbedBuilder().setTitle("🔴 Server offline")
                 .setDescription("Stopped <t:" + Instant.now().getEpochSecond() + ":R>.")
                 .setColor(EmbedColors.RED).setTimestamp(Instant.now()).build();
-        try {
-            channel.get().editMessageEmbedsById(messageId.getAsLong(), SlashCommands.tag(List.of(embed))).submit()
-                    .get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } catch (Exception e) {
-            Constants.LOG.warn("Could not mark the status message as offline: {}", e.toString());
-        }
+        return channel.get().editMessageEmbedsById(messageId.getAsLong(), SlashCommands.tag(List.of(embed)))
+                .submit().exceptionally(error -> {
+                    Constants.LOG.warn("Could not mark the status message as offline: {}", error.toString());
+                    return null;
+                });
     }
 
     /**

@@ -39,14 +39,17 @@ public abstract class StoredUserListMixin<K, V extends StoredUserEntry<K>> {
     protected abstract String getKeyForUser(K user);
 
     /**
-     * Called after an entry was added.
+     * Called before an entry is added. A new ban of a player who is already banned replaces the old one.
      *
      * @param entry the new entry
      * @param ci    the callback info
      */
-    @Inject(method = "add", at = @At("TAIL"))
+    @Inject(method = "add", at = @At("HEAD"))
+    @SuppressWarnings("unchecked")
     private void minecraftdiscordlink$onAdd(V entry, CallbackInfo ci) {
-        MinecraftDiscordLink.onUserListAdded((StoredUserList<?, ?>) (Object) this, entry);
+        K user = (K) ((StoredUserEntryAccessor) entry).minecraftdiscordlink$getUser();
+        boolean replaces = user != null && map.containsKey(getKeyForUser(user));
+        MinecraftDiscordLink.onUserListAdded((StoredUserList<?, ?>) (Object) this, entry, replaces);
     }
 
     /**

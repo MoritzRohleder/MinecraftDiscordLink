@@ -1,6 +1,7 @@
 package de.moritzrohleder.minecraftdiscordlink.moderation;
 
 import com.mojang.authlib.GameProfile;
+import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
@@ -11,6 +12,7 @@ import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext.Scope
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.BanListEntry;
@@ -24,6 +26,7 @@ import net.minecraft.server.players.UserWhiteList;
 import net.minecraft.server.players.UserWhiteListEntry;
 import net.minecraft.world.level.GameRules;
 
+import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -52,6 +55,8 @@ public final class Moderation {
     /** Answer when the config file could not be written. */
     private static final String CONFIG_ERROR =
             "The config file could not be changed. See the server log for details.";
+    /** Reason of expired temporary bans in the moderation log. */
+    private static final String EXPIRED_REASON = "Temporary ban expired";
     /** Shown as moderator when nobody is known, e.g. for changes by other mods. */
     private static final String UNKNOWN = "unknown";
 
@@ -108,29 +113,47 @@ public final class Moderation {
     }
 
     /**
-     * Bans a player. An online player is kicked with the vanilla ban message.
+     * Bans a player. A player who is already banned gets the new ban instead, with the duration counted from now. An
+     * online player is kicked with the vanilla ban message including the reason.
      *
      * @param profile  the player
      * @param reason   the reason
      * @param duration the duration of a temporary ban, empty for a permanent ban
-     * @param scope    the moderator
+     * @param scope    the moderator and the ban options
      * @return the result
      */
     public Reply ban(GameProfile profile, String reason, Optional<Duration> duration, Scope scope) {
         UserBanList bans = server.getPlayerList().getBans();
-        if (bans.isBanned(profile)) {
-            return Reply.error(profile.getName() + " is already banned.");
-        }
+        boolean update = bans.isBanned(profile);
         Optional<Instant> until = duration.map(length -> Instant.now().plus(length).truncatedTo(ChronoUnit.SECONDS));
-        ModerationContext.run(scope, () -> bans.add(new UserBanListEntry(profile, null, scope.moderator(),
-                until.map(Date::from).orElse(null), reason)));
+        UserBanListEntry ban = new UserBanListEntry(profile, null, scope.moderator(),
+                until.map(Date::from).orElse(null), reason);
+        ModerationContext.run(scope, () -> bans.add(ban));
         ServerPlayer online = server.getPlayerList().getPlayer(profile.getId());
         if (online != null) {
-            online.connection.disconnect(Component.translatable("multiplayer.disconnect.banned"));
+            online.connection.disconnect(banMessage(ban));
         }
         announce(scope, Component.translatable("commands.ban.success", profile.getName(), reason));
-        return Reply.success("Banned " + profile.getName() + duration.map(length -> " for "
-                + Durations.formatCompact(length)).orElse(" permanently") + ": " + reason);
+        String length = duration.map(value -> " for " + Durations.formatCompact(value)).orElse(" permanently");
+        return Reply.success((update ? "Updated the ban of " + profile.getName() + ": now" + length
+                : "Banned " + profile.getName() + length) + ": " + reason
+                + (scope.allServers() ? " (on all servers)" : ""));
+    }
+
+    /**
+     * Builds the message a banned player sees, as vanilla shows it on login: the reason and, for a temporary ban,
+     * its end.
+     *
+     * @param ban the ban
+     * @return the message
+     */
+    public static Component banMessage(UserBanListEntry ban) {
+        MutableComponent message = Component.translatable("multiplayer.disconnect.banned.reason", ban.getReason());
+        if (ban.getExpires() != null) {
+            message.append(Component.translatable("multiplayer.disconnect.banned.expiration",
+                    new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z").format(ban.getExpires())));
+        }
+        return message;
     }
 
     /**
@@ -379,23 +402,29 @@ public final class Moderation {
     // ---- Hooks ----
 
     /**
-     * Called by a hook when an entry was added to a vanilla list: logs bans, IP bans and whitelist additions and
+     * Called by a hook when an entry is added to a vanilla list: logs bans, IP bans and whitelist additions and
      * starts the ban sync.
      *
-     * @param list  the list
-     * @param entry the new entry
+     * @param list     the list
+     * @param entry    the new entry
+     * @param replaces whether the entry replaces one of the same user, e.g. an updated ban
      */
-    public void onAdded(StoredUserList<?, ?> list, StoredUserEntry<?> entry) {
+    public void onAdded(StoredUserList<?, ?> list, StoredUserEntry<?> entry, boolean replaces) {
         Object user = ((StoredUserEntryAccessor) entry).minecraftdiscordlink$getUser();
         Optional<Scope> scope = ModerationContext.current();
         if (list instanceof UserBanList && entry instanceof UserBanListEntry ban
                 && user instanceof GameProfile profile) {
-            record(ModerationAction.BAN, profile.getName(), Optional.of(profile.getId()), moderator(scope, ban),
+            record(replaces ? ModerationAction.BAN_UPDATED : ModerationAction.BAN, profile.getName(),
+                    Optional.of(profile.getId()), moderator(scope, ban),
                     Optional.ofNullable(ban.getExpires()).map(Date::toInstant), reason(ban.getReason()));
             if (scope.map(Scope::fromSync).orElse(false)) {
                 return;
             }
-            discord.get().ifPresent(bot -> bot.onMinecraftBan(profile.getId(), ban.getReason()));
+            boolean deleteMessages = scope.map(Scope::deleteMessages).orElse(false);
+            if (!replaces) {
+                discord.get().ifPresent(bot -> bot.onMinecraftBan(profile.getId(), ban.getReason(),
+                        deleteMessages));
+            }
         } else if (list instanceof IpBanList && entry instanceof BanListEntry<?> ban && user instanceof String ip) {
             record(ModerationAction.IP_BAN, ip, Optional.empty(), moderator(scope, ban),
                     Optional.ofNullable(ban.getExpires()).map(Date::toInstant), reason(ban.getReason()));
@@ -419,8 +448,8 @@ public final class Moderation {
                 && ban.getExpires().before(new Date());
         if (list instanceof UserBanList && user instanceof GameProfile profile) {
             if (expired) {
-                record(ModerationAction.BAN_EXPIRED, profile.getName(), Optional.of(profile.getId()), "",
-                        Optional.empty(), Optional.empty());
+                record(ModerationAction.BAN_EXPIRED, profile.getName(), Optional.of(profile.getId()),
+                        Constants.MOD_NAME, Optional.empty(), Optional.of(EXPIRED_REASON));
             } else {
                 record(ModerationAction.UNBAN, profile.getName(), Optional.of(profile.getId()), moderator(scope),
                         Optional.empty(), scope.flatMap(Scope::reason));
@@ -431,8 +460,8 @@ public final class Moderation {
             discord.get().ifPresent(bot -> bot.onMinecraftUnban(profile.getId()));
         } else if (list instanceof IpBanList && user instanceof String ip) {
             record(expired ? ModerationAction.BAN_EXPIRED : ModerationAction.IP_UNBAN, ip, Optional.empty(),
-                    expired ? "" : moderator(scope), Optional.empty(), expired ? Optional.empty()
-                            : scope.flatMap(Scope::reason));
+                    expired ? Constants.MOD_NAME : moderator(scope), Optional.empty(), expired
+                            ? Optional.of(EXPIRED_REASON) : scope.flatMap(Scope::reason));
         } else if (list instanceof UserWhiteList && user instanceof GameProfile profile) {
             record(ModerationAction.WHITELIST_REMOVE, profile.getName(), Optional.of(profile.getId()),
                     moderator(scope), Optional.empty(), scope.flatMap(Scope::reason));
@@ -460,6 +489,18 @@ public final class Moderation {
     public void onVanillaKick(String moderator, ServerPlayer player, String reason) {
         record(ModerationAction.KICK, player.getGameProfile().getName(), Optional.of(player.getUUID()), moderator,
                 Optional.empty(), reason(reason));
+    }
+
+    /**
+     * Logs that the ban sync could not change a Discord account, so moderators can do it by hand.
+     *
+     * @param player the player's name
+     * @param uuid   the player's UUID
+     * @param detail what failed and what to do
+     */
+    public void recordSyncFailure(String player, UUID uuid, String detail) {
+        record(ModerationAction.SYNC_FAILED, player, Optional.of(uuid), Constants.MOD_NAME, Optional.empty(),
+                Optional.of(detail));
     }
 
     // ---- Helpers ----

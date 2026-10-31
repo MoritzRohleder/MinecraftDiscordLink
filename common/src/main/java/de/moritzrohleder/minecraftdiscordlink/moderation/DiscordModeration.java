@@ -12,10 +12,11 @@ public interface DiscordModeration {
      * Called when a player was banned in Minecraft, not by the ban sync itself. Bans or kicks the linked Discord
      * account if the ban sync is enabled.
      *
-     * @param player the player's UUID
-     * @param reason the reason of the ban
+     * @param player         the player's UUID
+     * @param reason         the reason of the ban
+     * @param deleteMessages whether the Discord messages of the last 7 days are deleted as well
      */
-    void onMinecraftBan(UUID player, String reason);
+    void onMinecraftBan(UUID player, String reason, boolean deleteMessages);
 
     /**
      * Called when a player's ban was lifted or expired in Minecraft, not by the ban sync itself. Lifts the Discord

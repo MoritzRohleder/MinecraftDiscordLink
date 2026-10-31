@@ -19,16 +19,15 @@ import net.dv8tion.jda.api.events.guild.GuildUnbanEvent;
 import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.requests.ErrorResponse;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.UserBanList;
 import net.minecraft.server.players.UserBanListEntry;
 
 import java.util.Comparator;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
@@ -55,8 +54,9 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
     private final MinecraftServer server;
     private final LinkStore links;
     private final ScheduledExecutorService executor;
-    /** Discord users whose unban failed and is retried. */
-    private final Set<Long> pendingUnbans = ConcurrentHashMap.newKeySet();
+    private final Moderation moderation;
+    /** Discord users whose unban failed and is retried, with the UUID of their player. */
+    private final Map<Long, UUID> pendingUnbans = new ConcurrentHashMap<>();
 
     /**
      * Creates the ban sync; register it as JDA event listener and call {@link #start()}.
@@ -64,13 +64,16 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
      * @param guild    the Discord server
      * @param server   the running server
      * @param links    the account links
-     * @param executor the bot's executor, for the retries
+     * @param executor   the bot's executor, for the retries
+     * @param moderation the moderation, to log failed changes
      */
-    BanSync(Guild guild, MinecraftServer server, LinkStore links, ScheduledExecutorService executor) {
+    BanSync(Guild guild, MinecraftServer server, LinkStore links, ScheduledExecutorService executor,
+            Moderation moderation) {
         this.guild = guild;
         this.server = server;
         this.links = links;
         this.executor = executor;
+        this.moderation = moderation;
     }
 
     /**
@@ -87,7 +90,7 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
     // ---- Minecraft -> Discord ----
 
     @Override
-    public void onMinecraftBan(UUID player, String reason) {
+    public void onMinecraftBan(UUID player, String reason, boolean deleteMessages) {
         ModConfig.BanSync config = ConfigManager.get().moderation().banSync();
         OptionalLong discordId = links.discordId(player);
         if (!config.enabled() || discordId.isEmpty()) {
@@ -97,12 +100,12 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
         String auditReason = truncate("Minecraft ban: " + reason);
         pendingUnbans.remove(discordId.getAsLong());
         if (config.discordAction() == ModConfig.DiscordAction.BAN) {
-            guild.ban(user, 0, TimeUnit.SECONDS).reason(auditReason)
-                    .queue(null, error -> logError("ban", discordId.getAsLong(), error));
+            guild.ban(user, deleteMessages ? 7 : 0, TimeUnit.DAYS).reason(auditReason)
+                    .queue(null, error -> failed(player, discordId.getAsLong(), "ban", error));
         } else {
             guild.kick(user).reason(auditReason).queue(null, error -> {
                 if (!isError(error, ErrorResponse.UNKNOWN_MEMBER)) {
-                    logError("kick", discordId.getAsLong(), error);
+                    failed(player, discordId.getAsLong(), "kick", error);
                 }
             });
         }
@@ -113,7 +116,7 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
         ModConfig.BanSync config = ConfigManager.get().moderation().banSync();
         OptionalLong discordId = links.discordId(player);
         if (config.enabled() && config.discordAction() == ModConfig.DiscordAction.BAN && discordId.isPresent()) {
-            unban(discordId.getAsLong());
+            unban(discordId.getAsLong(), player);
         }
     }
 
@@ -123,18 +126,19 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
     }
 
     /**
-     * Lifts a Discord ban. A failure other than "not banned" is retried later.
+     * Lifts a Discord ban. A failure other than "not banned" is logged once and retried every minute.
      *
      * @param discordId the Discord user
+     * @param player    the UUID of the linked player
      */
-    private void unban(long discordId) {
+    private void unban(long discordId, UUID player) {
         guild.unban(UserSnowflake.fromId(discordId)).reason("Minecraft unban").queue(
                 done -> pendingUnbans.remove(discordId),
                 error -> {
                     if (isError(error, ErrorResponse.UNKNOWN_BAN)) {
                         pendingUnbans.remove(discordId);
-                    } else if (pendingUnbans.add(discordId)) {
-                        logError("unban (will retry)", discordId, error);
+                    } else if (pendingUnbans.put(discordId, player) == null) {
+                        failed(player, discordId, "unban (retrying every minute)", error);
                     }
                 });
     }
@@ -144,6 +148,46 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
      */
     private void retryUnbans() {
         pendingUnbans.forEach(this::unban);
+    }
+
+    /**
+     * Logs the Discord unbans that are still pending when the server stops, so moderators lift them by hand.
+     */
+    void reportPending() {
+        pendingUnbans.forEach((discordId, player) -> {
+            String name = profile(player).getName();
+            Constants.LOG.error("Ban sync: the Discord ban of the user {} (player {}) could not be lifted. Lift it "
+                    + "manually.", discordId, name);
+            onServerThread(() -> moderation.recordSyncFailure(name, player, "The Discord ban of <@" + discordId
+                    + "> could not be lifted before the server stopped. Lift it manually."));
+        });
+    }
+
+    /**
+     * Logs a failed Discord action to the console and the moderation log.
+     *
+     * @param player    the UUID of the linked player
+     * @param discordId the Discord user
+     * @param action    the action, e.g. {@code ban}
+     * @param error     the error
+     */
+    private void failed(UUID player, long discordId, String action, Throwable error) {
+        logError(action, discordId, error);
+        onServerThread(() -> moderation.recordSyncFailure(profile(player).getName(), player, "Could not " + action
+                + " the Discord user <@" + discordId + ">: " + error.getMessage()));
+    }
+
+    /**
+     * Runs an action on the server thread: at once if already there (e.g. while the server stops), otherwise queued.
+     *
+     * @param action the action
+     */
+    private void onServerThread(Runnable action) {
+        if (server.isSameThread()) {
+            action.run();
+        } else {
+            server.execute(action);
+        }
     }
 
     // ---- Discord -> Minecraft ----
@@ -210,11 +254,11 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
         if (bans.isBanned(profile)) {
             return;
         }
-        ModerationContext.run(new ModerationContext.Scope(moderator, Optional.of(reason), true),
-                () -> bans.add(new UserBanListEntry(profile, null, moderator, null, reason)));
+        UserBanListEntry ban = new UserBanListEntry(profile, null, moderator, null, reason);
+        ModerationContext.run(ModerationContext.Scope.synced(moderator, reason), () -> bans.add(ban));
         ServerPlayer online = server.getPlayerList().getPlayer(player);
         if (online != null) {
-            online.connection.disconnect(Component.translatable("multiplayer.disconnect.banned"));
+            online.connection.disconnect(Moderation.banMessage(ban));
         }
     }
 
@@ -231,7 +275,7 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
         if (!bans.isBanned(profile)) {
             return;
         }
-        ModerationContext.run(new ModerationContext.Scope(moderator, Optional.ofNullable(reason), true),
+        ModerationContext.run(ModerationContext.Scope.synced(moderator, reason),
                 () -> bans.remove(profile));
     }
 

@@ -280,10 +280,9 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
     /**
      * Crash notices.
      *
-     * @param enabled  whether a crash notice is sent
-     * @param logLines number of console lines in the notice, 1 to 50
+     * @param enabled whether a crash notice is sent
      */
-    public record Crash(boolean enabled, int logLines) {
+    public record Crash(boolean enabled) {
     }
 
     /**
@@ -309,10 +308,9 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
     /**
      * Direct messages to Discord users who subscribed to server events or players.
      *
-     * @param enabled               whether notifications are sent and the subscribe commands work
-     * @param playerCooldownMinutes minimum minutes between two notices about the same player to the same user
+     * @param enabled whether notifications are sent and the subscribe commands work
      */
-    public record Notifications(boolean enabled, int playerCooldownMinutes) {
+    public record Notifications(boolean enabled) {
     }
 
     /**

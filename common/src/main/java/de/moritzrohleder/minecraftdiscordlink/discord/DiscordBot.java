@@ -35,13 +35,18 @@ import java.awt.Color;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.EnumSet;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.OptionalLong;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Connection of the mod to Discord.
@@ -69,6 +74,8 @@ public final class DiscordBot {
 
     /** Maximum time the server waits on shutdown for the "Server stopped" message and the disconnect. */
     private static final Duration SHUTDOWN_TIMEOUT = Duration.ofSeconds(5);
+    /** Time of the shutdown kept for disconnecting from Discord. */
+    private static final Duration DISCONNECT_RESERVE = Duration.ofMillis(500);
 
 
     private final String token;
@@ -221,7 +228,7 @@ public final class DiscordBot {
             AccountLinking accounts = new AccountLinking(jda, guild, server, linking, state, executor);
             SlashCommands commands = new SlashCommands(guild, linking, server, startTime, stats, moderation,
                     subscriptions);
-            BanSync sync = new BanSync(guild, server, linking.links(), executor);
+            BanSync sync = new BanSync(guild, server, linking.links(), executor, moderation);
             jda.addEventListener(accounts, commands, sync);
             sync.start();
             banSync = sync;
@@ -343,6 +350,21 @@ public final class DiscordBot {
     }
 
     /**
+     * Waits for Discord requests until the deadline at most, leaving a little time for the disconnect.
+     *
+     * @param requests the requests
+     * @param deadline the shutdown deadline, from {@link System#nanoTime()}
+     * @throws InterruptedException if interrupted while waiting
+     */
+    private static void waitFor(CompletableFuture<?> requests, long deadline) throws InterruptedException {
+        try {
+            requests.get(Math.max(0, remaining(deadline) - DISCONNECT_RESERVE.toNanos()), TimeUnit.NANOSECONDS);
+        } catch (ExecutionException | TimeoutException e) {
+            Constants.LOG.warn("Not all messages could be sent before the server stopped: {}", e.toString());
+        }
+    }
+
+    /**
      * Capitalizes the first letter of a text.
      *
      * @param text the text
@@ -384,43 +406,42 @@ public final class DiscordBot {
      */
     public void shutdown() {
         long deadline = System.nanoTime() + SHUTDOWN_TIMEOUT.toNanos();
-        MonitoringChannel monitor = monitoring;
-        if (monitor != null) {
-            monitor.markOffline(SHUTDOWN_TIMEOUT.dividedBy(3));
-        }
-        Notifications notify = notifications;
-        if (notify != null && isReady()) {
-            try {
-                notify.onEvent(NotificationEvent.SERVER_STOP, "🛑 " + capitalize(Notifications.serverLabel())
-                                + " is stopping.", EmbedColors.RED)
-                        .get(SHUTDOWN_TIMEOUT.dividedBy(3).toMillis(), TimeUnit.MILLISECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (Exception e) {
-                Constants.LOG.warn("Could not send all stop notifications: {}", e.toString());
-            }
-        }
         ChatBridge bridge = chatBridge;
         if (bridge != null) {
             // Players leaving while the server stops are not reported anymore
             bridge.deactivate();
         }
+        BanSync sync = banSync;
+        if (sync != null) {
+            sync.reportPending();
+        }
         // Stops the status updates and an unfinished connection attempt
         executor.shutdownNow();
-        moderation.log().setListener(entry -> { });
 
         JDA bot = jda;
         if (bot == null) {
             return;
         }
         try {
-            if (isReady() && ConfigManager.get().chat().events().serverStop()) {
+            if (isReady()) {
+                // The stop message and the offline status first, the notifications get the remaining time
+                List<CompletableFuture<?>> first = new ArrayList<>();
                 Optional<GuildMessageChannel> channel = chatChannel();
-                if (channel.isPresent()) {
-                    channel.get().sendMessageEmbeds(embed("🛑 Server stopped", EmbedColors.RED))
-                            .submit().get(remaining(deadline), TimeUnit.NANOSECONDS);
+                if (ConfigManager.get().chat().events().serverStop() && channel.isPresent()) {
+                    first.add(channel.get().sendMessageEmbeds(embed("🛑 Server stopped", EmbedColors.RED)).submit());
+                }
+                MonitoringChannel monitor = monitoring;
+                if (monitor != null) {
+                    first.add(monitor.markOffline());
+                }
+                waitFor(CompletableFuture.allOf(first.toArray(CompletableFuture[]::new)), deadline);
+                Notifications notify = notifications;
+                if (notify != null) {
+                    waitFor(notify.onEvent(NotificationEvent.SERVER_STOP, "🛑 "
+                            + capitalize(Notifications.serverLabel()) + " is stopping.", EmbedColors.RED), deadline);
                 }
             }
+            moderation.log().setListener(entry -> { });
             bot.shutdown();
             if (!bot.awaitShutdown(remaining(deadline), TimeUnit.NANOSECONDS)) {
                 bot.shutdownNow();

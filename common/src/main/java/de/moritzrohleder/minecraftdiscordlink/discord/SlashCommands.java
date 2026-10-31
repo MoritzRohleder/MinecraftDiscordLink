@@ -144,7 +144,10 @@ final class SlashCommands extends ListenerAdapter {
                                         .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                         .addOption(OptionType.STRING, "reason", "Why the player is banned", true)
                                         .addOption(OptionType.STRING, "duration",
-                                                "e.g. 30m, 12h, 7d, 2w or 1d12h; permanent without", false),
+                                                "e.g. 30m, 12h, 7d, 2w or 1d12h; permanent without", false)
+                                        .addOption(OptionType.BOOLEAN, "delete_messages",
+                                                "Ban sync: also delete the Discord messages of the last 7 days",
+                                                false),
                                 new SubcommandData("unban", "Lift the ban of a player")
                                         .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                         .addOption(OptionType.STRING, "reason", "Why the ban is lifted", true),
@@ -235,20 +238,24 @@ final class SlashCommands extends ListenerAdapter {
     }
 
     /**
-     * Marks answers with the name of this server, if it shares the Discord server with others.
+     * Completes embeds sent by the bot: a time stamp in the footer and, if this server shares the Discord server
+     * with others, its name.
      *
-     * @param embeds the answers
-     * @return the answers, with the server name in the footer
+     * @param embeds the embeds
+     * @return the completed embeds
      */
     static List<MessageEmbed> tag(List<MessageEmbed> embeds) {
         ModConfig.Server server = ConfigManager.get().server();
-        if (!server.named()) {
-            return embeds;
-        }
         return embeds.stream().map(embed -> {
-            String footer = embed.getFooter() == null ? null : embed.getFooter().getText();
-            return new EmbedBuilder(embed).setFooter(footer == null ? server.name() : footer + " · " + server.name())
-                    .build();
+            EmbedBuilder builder = new EmbedBuilder(embed);
+            if (embed.getTimestamp() == null) {
+                builder.setTimestamp(Instant.now());
+            }
+            if (server.named()) {
+                String footer = embed.getFooter() == null ? null : embed.getFooter().getText();
+                builder.setFooter(footer == null ? server.name() : footer + " · " + server.name());
+            }
+            return builder.build();
         }).toList();
     }
 
@@ -454,7 +461,10 @@ final class SlashCommands extends ListenerAdapter {
                             + "**. Use e.g. 30m, 12h, 7d, 2w or 1d12h."));
                     return;
                 }
-                withPlayer(event, profile -> moderation.ban(profile, reason, duration, scope));
+                boolean deleteMessages = Boolean.TRUE.equals(event.getOption("delete_messages",
+                        OptionMapping::getAsBoolean));
+                withPlayer(event, profile -> moderation.ban(profile, reason, duration,
+                        scope.withBanOptions(deleteMessages, false)));
             }
             case "mcadmin unban" -> withPlayer(event, profile -> moderation.unban(profile, reason, scope));
             case "mcadmin whitelist add" -> withPlayer(event, profile -> moderation.whitelistAdd(profile, scope));

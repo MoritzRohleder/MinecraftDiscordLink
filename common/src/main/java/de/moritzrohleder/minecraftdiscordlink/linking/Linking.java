@@ -2,6 +2,7 @@ package de.moritzrohleder.minecraftdiscordlink.linking;
 
 import com.mojang.authlib.GameProfile;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
+import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.discord.AccountLinking;
@@ -394,6 +395,10 @@ public final class Linking {
      * @param player the player's UUID
      */
     public void recheck(UUID player) {
+        if (MinecraftDiscordLink.maintenanceActive()) {
+            // During maintenance only the maintenance access counts
+            return;
+        }
         ServerPlayer online = server.getPlayerList().getPlayer(player);
         if (online != null && !isWhitelisted(online.getGameProfile())) {
             Constants.LOG.info("Kicking {}: no longer whitelisted via Discord", online.getGameProfile().getName());

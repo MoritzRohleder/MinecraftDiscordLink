@@ -8,6 +8,8 @@ public enum ModerationAction {
     KICK("KICK", "Kicked"),
     /** A player was banned, permanently or temporarily. */
     BAN("BAN", "Banned"),
+    /** The ban of a player who was already banned was replaced, e.g. with a new duration. */
+    BAN_UPDATED("BAN UPDATED", "Ban updated:"),
     /** A player's ban was lifted. */
     UNBAN("UNBAN", "Unbanned"),
     /** A temporary ban of a player or an IP address ended. */
@@ -32,6 +34,8 @@ public enum ModerationAction {
     ROLE_WHITELIST_ADD("ROLE WHITELIST ADD", "Role added to the whitelist:"),
     /** A role was removed from the whitelist via Discord roles. */
     ROLE_WHITELIST_REMOVE("ROLE WHITELIST REMOVE", "Role removed from the whitelist:"),
+    /** The ban sync could not change the linked Discord account; moderators have to do it by hand. */
+    SYNC_FAILED("SYNC FAILED", "Ban sync failed:"),
     /** The maintenance mode was switched on. */
     MAINTENANCE_ON("MAINTENANCE ON", "Maintenance mode switched on"),
     /** The maintenance mode was switched off. */
@@ -61,6 +65,15 @@ public enum ModerationAction {
      */
     public String title() {
         return title;
+    }
+
+    /**
+     * Checks whether the action is a ban with a duration.
+     *
+     * @return whether the log shows the duration
+     */
+    public boolean hasDuration() {
+        return this == BAN || this == BAN_UPDATED || this == IP_BAN;
     }
 
     /**

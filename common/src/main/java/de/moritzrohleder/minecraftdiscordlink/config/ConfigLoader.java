@@ -204,10 +204,9 @@ public final class ConfigLoader {
         entry("monitoring.lag.cooldown_minutes", 5, comment("Minimum minutes between two warnings."));
 
         section("monitoring.crash", comment(
-                "Notice with the reason and the last console lines when the server crashes.",
+                "Notice with the reason when the server crashes.",
                 "A killed server process cannot be reported."));
         entry("monitoring.crash.enabled", true, null);
-        entry("monitoring.crash.log_lines", 20, comment("Number of console lines in the notice. 1 to 50."));
 
         section("monitoring.daily_report", comment("Report about the players since the last report."));
         entry("monitoring.daily_report.enabled", true, null);
@@ -237,8 +236,6 @@ public final class ConfigLoader {
         section("notifications", comment("Direct messages to Discord users who subscribed with /mc subscribe to",
                 "server events (start, stop, maintenance) or to players coming online."));
         entry("notifications.enabled", true, null);
-        entry("notifications.player_cooldown_minutes", 10, comment(
-                "Minimum minutes between two notices about the same player to the same user."));
 
         section("leaderboard", comment(
                 "Leaderboards from the vanilla statistics: /mc top <category> and /mc stats <player>.",
@@ -489,16 +486,14 @@ public final class ConfigLoader {
                                     decimal("monitoring.lag.tps_threshold", 1, 20),
                                     integer("monitoring.lag.duration_seconds", 5),
                                     integer("monitoring.lag.cooldown_minutes", 0)),
-                            new ModConfig.Crash(bool("monitoring.crash.enabled"),
-                                    integer("monitoring.crash.log_lines", 1, 50)),
+                            new ModConfig.Crash(bool("monitoring.crash.enabled")),
                             new ModConfig.DailyReport(bool("monitoring.daily_report.enabled"),
                                     time("monitoring.daily_report.time"),
                                     string("monitoring.daily_report.format")),
                             new ModConfig.StatusMessage(bool("monitoring.status_message.enabled"),
                                     integer("monitoring.status_message.interval_minutes", 1),
                                     string("monitoring.status_message.format"))),
-                    new ModConfig.Notifications(bool("notifications.enabled"),
-                            integer("notifications.player_cooldown_minutes", 0)),
+                    new ModConfig.Notifications(bool("notifications.enabled")),
                     new ModConfig.Leaderboard(integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()));
         }
 

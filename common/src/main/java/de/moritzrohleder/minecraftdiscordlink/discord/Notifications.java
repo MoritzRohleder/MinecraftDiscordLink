@@ -12,20 +12,16 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 
 import java.awt.Color;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Sends direct messages to Discord users who subscribed to server events or to players coming online.
  * <p>
- * Players coming online are reported at most once per {@code notifications.player_cooldown_minutes} per subscriber,
- * so a player reconnecting does not cause a flood of messages. Users are not told about their own linked player.
+ * Users are not told about their own linked player.
  * Users who do not accept direct messages are skipped; their subscriptions stay.
  */
 final class Notifications {
@@ -33,8 +29,6 @@ final class Notifications {
     private final JDA jda;
     private final SubscriptionStore store;
     private final LinkStore links;
-    /** When a subscriber was last told about a player, by subscriber and player. */
-    private final Map<String, Instant> lastPlayerNotice = new ConcurrentHashMap<>();
 
     /**
      * Creates the notifications.
@@ -79,15 +73,9 @@ final class Notifications {
         }
         OptionalLong ownAccount = links.discordId(player);
         Instant now = Instant.now();
-        Duration cooldown = Duration.ofMinutes(config.playerCooldownMinutes());
         List<Long> recipients = store.subscribers(player).stream()
                 .filter(id -> ownAccount.isEmpty() || ownAccount.getAsLong() != id)
-                .filter(id -> {
-                    Instant last = lastPlayerNotice.get(id + "/" + player);
-                    return last == null || !Duration.between(last, now).minus(cooldown).isNegative();
-                })
                 .toList();
-        recipients.forEach(id -> lastPlayerNotice.put(id + "/" + player, now));
         MessageEmbed embed = new EmbedBuilder()
                 .setDescription("🟢 **" + DiscordText.escape(name) + "** is now online on " + serverLabel() + ".")
                 .setColor(EmbedColors.GREEN).setTimestamp(now)

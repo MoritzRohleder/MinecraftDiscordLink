@@ -112,9 +112,10 @@ public final class MinecraftDiscordLink {
                 MinecraftDiscordLink::discordModeration);
         ModConfig config = ConfigManager.get();
         config.discord().token().ifPresent(token -> {
-            // Captured from the start, so the console channel also shows the server start; the last lines are also
-            // kept for crash notices in the monitoring channel
-            ConsoleCapture.install(config.console().channelId().isPresent());
+            if (config.console().channelId().isPresent()) {
+                // Captured from the start, so the console channel also shows the server start
+                ConsoleCapture.install();
+            }
             bot = new DiscordBot(token, config, server, startTime, stats, linking, state, moderation, maintenance,
                     report, new SubscriptionStore(dataDirectory));
             bot.connect();
@@ -333,22 +334,25 @@ public final class MinecraftDiscordLink {
      * @return the kick message, or {@code null} if the player may join
      */
     public static Component checkLogin(GameProfile profile) {
-        Component maintenanceKick = maintenance != null ? maintenance.checkLogin(profile) : null;
-        if (maintenanceKick != null) {
-            return maintenanceKick;
+        if (maintenanceActive()) {
+            // During maintenance only the maintenance access counts, not the whitelists
+            return maintenance.checkLogin(profile);
         }
         return linking != null ? linking.checkLogin(profile) : null;
     }
 
     /**
      * Checks whether the Discord whitelist lets a player join, ignoring bans and the player limit. Called by a mixin
-     * in place of the vanilla whitelist check.
+     * in place of the vanilla whitelist check. During maintenance only the maintenance access counts.
      *
      * @param profile         the joining player
      * @param vanillaAllowed  whether the vanilla whitelist lets the player join
      * @return whether the player may join
      */
     public static boolean isWhitelisted(GameProfile profile, boolean vanillaAllowed) {
+        if (maintenanceActive()) {
+            return maintenance.hasAccess(profile);
+        }
         if (linking == null || !ConfigManager.get().whitelist().active()) {
             return vanillaAllowed;
         }
@@ -393,14 +397,15 @@ public final class MinecraftDiscordLink {
     }
 
     /**
-     * Called by a mixin after an entry was added to a vanilla ban or whitelist list.
+     * Called by a mixin when an entry is added to a vanilla ban or whitelist list.
      *
-     * @param list  the list
-     * @param entry the new entry
+     * @param list     the list
+     * @param entry    the new entry
+     * @param replaces whether it replaces an entry of the same user
      */
-    public static void onUserListAdded(StoredUserList<?, ?> list, StoredUserEntry<?> entry) {
+    public static void onUserListAdded(StoredUserList<?, ?> list, StoredUserEntry<?> entry, boolean replaces) {
         if (started && moderation != null) {
-            moderation.onAdded(list, entry);
+            moderation.onAdded(list, entry, replaces);
         }
     }
 
