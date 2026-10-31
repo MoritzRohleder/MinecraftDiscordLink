@@ -33,7 +33,7 @@ class NetworkBansTest {
         String url = NetworkBans.dataUrl(ban).orElseThrow();
         Map<String, String> values = NetworkBans.parse(url);
 
-        assertTrue(url.startsWith(NetworkBans.DATA_URL + "?"));
+        assertTrue(url.startsWith("https://namemc.com/profile/" + STEVE + "?mdl=1&"));
         assertEquals("ban", values.get("action"));
         assertEquals(STEVE.toString(), values.get("uuid"));
         assertEquals("Steve", values.get("name"));

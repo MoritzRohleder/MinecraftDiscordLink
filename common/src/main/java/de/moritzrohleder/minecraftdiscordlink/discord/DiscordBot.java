@@ -114,6 +114,8 @@ public final class DiscordBot {
     private volatile Notifications notifications;
     /** The monitoring channel, set once both the bot is ready and the server has started. */
     private volatile MonitoringChannel monitoring;
+    /** The Discord server of the slash commands, roles and ban sync; set once, changes need a restart. */
+    private volatile long featureGuildId;
     /** Bans on all servers, set once the bot is ready. */
     private volatile NetworkBans networkBans;
     /** The ban sync, set once the bot is ready if one of the channels is available. */
@@ -276,6 +278,7 @@ public final class DiscordBot {
             commands.register();
             slashCommands = commands;
             accountLinking = accounts;
+            featureGuildId = guild.getIdLong();
             accounts.apply();
         });
     }
@@ -330,6 +333,7 @@ public final class DiscordBot {
         }
         MonitoringChannel monitor = new MonitoringChannel(jda, server, startTime, stats, state, report, executor);
         monitor.start();
+        PermissionWarnings.connect(monitor::sendWarning);
         maintenance.addListener(change -> monitor.updateStatusNow());
         monitoring = monitor;
         StatusUpdater status = new StatusUpdater(jda, server, startTime, stats, executor);
@@ -403,6 +407,10 @@ public final class DiscordBot {
             setUpConsole();
         }
         setUpGuildFeatures();
+        guild().filter(guild -> featureGuildId != 0 && guild.getIdLong() != featureGuildId).ifPresent(guild ->
+                Constants.LOG.warn("The chat or console channel is now on another Discord server ({}). Slash "
+                        + "commands, roles, the whitelist roles and the ban sync stay on the previous Discord server "
+                        + "until the server restarts.", guild.getName()));
     }
 
     /**
@@ -518,6 +526,7 @@ public final class DiscordBot {
         }
         // Stops the status updates and an unfinished connection attempt
         executor.shutdownNow();
+        PermissionWarnings.reset();
 
         JDA bot = jda;
         if (bot == null) {

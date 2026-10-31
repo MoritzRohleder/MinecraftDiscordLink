@@ -115,6 +115,9 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
             }
         } catch (InsufficientPermissionException | HierarchyException e) {
             // Checked by JDA before sending, e.g. without "Ban Members" or for members above the bot
+            if (e instanceof InsufficientPermissionException missing) {
+                PermissionWarnings.missing(missing.getPermission().getName(), "on the Discord server", "the ban sync");
+            }
             failed(player, discordId.getAsLong(), config.discordAction() == ModConfig.DiscordAction.BAN ? "ban"
                     : "kick", e);
         }
@@ -159,6 +162,7 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
                         }
                     });
         } catch (InsufficientPermissionException e) {
+            PermissionWarnings.missing(e.getPermission().getName(), "on the Discord server", "the ban sync");
             if (pendingUnbans.put(discordId, player) == null) {
                 failed(player, discordId, "unban (retrying every minute)", e);
             }
@@ -317,8 +321,12 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
                         .filter(entry -> entry.getTargetIdLong() == targetId)
                         .max(Comparator.comparing(AuditLogEntry::getTimeCreated))),
                 error -> {
-                    Constants.LOG.warn("Could not read the Discord audit log (needs \"View Audit Log\"): {}",
-                            error.getMessage());
+                    if (isError(error, ErrorResponse.MISSING_PERMISSIONS)) {
+                        PermissionWarnings.missing("View Audit Log", "on the Discord server",
+                                "the moderator of Discord bans");
+                    } else {
+                        Constants.LOG.warn("Could not read the Discord audit log: {}", error.getMessage());
+                    }
                     callback.accept(Optional.empty());
                 });
     }

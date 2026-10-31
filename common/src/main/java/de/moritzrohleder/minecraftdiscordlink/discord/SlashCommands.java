@@ -5,6 +5,7 @@ import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import de.moritzrohleder.minecraftdiscordlink.info.Features;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Leaderboards;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
@@ -147,6 +148,7 @@ final class SlashCommands extends ListenerAdapter {
                                         .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                         .addOption(OptionType.USER, "user", "The Discord user", true),
                                 new SubcommandData("reload", "Reload the config of the Minecraft mod"),
+                                new SubcommandData("features", "Show which features are switched on"),
                                 new SubcommandData("kick", "Kick a player from the Minecraft server")
                                         .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                         .addOption(OptionType.STRING, "reason", "Why the player is kicked", true),
@@ -289,7 +291,7 @@ final class SlashCommands extends ListenerAdapter {
             case "mc top", "mc stats" -> config.leaderboard().enabled();
             case "mc unlink", "mcadmin link" -> config.linking().enabled();
             case "mc subscribe", "mc unsubscribe", "mc subscriptions" -> config.notifications().enabled();
-            case "mcadmin reload" -> true;
+            case "mcadmin reload", "mcadmin features" -> true;
             default -> !command.startsWith("mcadmin") || config.moderation().enabled();
         };
     }
@@ -366,6 +368,7 @@ final class SlashCommands extends ListenerAdapter {
                  "mcadmin rolewhitelist status",
                  "mcadmin maintenance on", "mcadmin maintenance off", "mcadmin maintenance status" ->
                     moderate(event, command);
+            case "mcadmin features" -> reply(event, CommandEmbeds.features(Features.of(ConfigManager.get())));
             case "mc subscribe", "mc unsubscribe" -> subscribe(event, command.equals("mc subscribe"));
             case "mc subscriptions" -> listSubscriptions(event);
             case "mc top" -> top(event);

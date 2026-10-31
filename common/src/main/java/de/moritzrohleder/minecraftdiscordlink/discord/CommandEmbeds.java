@@ -2,6 +2,7 @@ package de.moritzrohleder.minecraftdiscordlink.discord;
 
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import de.moritzrohleder.minecraftdiscordlink.info.Features;
 import de.moritzrohleder.minecraftdiscordlink.info.ServerInfo;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Leaderboards.Category;
 import de.moritzrohleder.minecraftdiscordlink.leaderboard.Ranking;
@@ -266,6 +267,26 @@ final class CommandEmbeds {
             embed.setDescription("Whitelisting by roles is switched off in the config (`whitelist.enabled`).");
         }
         return embed.setColor(whitelistOn && whitelist.active() ? EmbedColors.BLUE : EmbedColors.GRAY).build();
+    }
+
+    /**
+     * Builds the answer of {@code /mcadmin features}: one field per feature with its parts.
+     *
+     * @param features the features
+     * @return the embed
+     */
+    static MessageEmbed features(List<Features.Feature> features) {
+        EmbedBuilder embed = new EmbedBuilder().setTitle("⚙️ Features").setColor(EmbedColors.BLURPLE);
+        for (Features.Feature feature : features) {
+            String parts = feature.parts().stream()
+                    .map(part -> (part.enabled() ? "✅ " : "❌ ") + part.name())
+                    .collect(Collectors.joining("\n"));
+            String value = feature.note().map(note -> "⚠️ " + note + (parts.isEmpty() ? "" : "\n")).orElse("")
+                    + parts;
+            embed.addField((feature.enabled() ? "✅ " : "❌ ") + feature.name(), value.isEmpty() ? "\u200b" : value,
+                    true);
+        }
+        return embed.build();
     }
 
     /**

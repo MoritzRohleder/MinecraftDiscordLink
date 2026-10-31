@@ -73,12 +73,17 @@ final class LinkedRoles {
      */
     void apply() {
         run(() -> {
+            ModConfig.LinkedRole config = ConfigManager.get().linking().linkedRole();
             if (!ConfigManager.get().linking().enabled()) {
-                // Account linking is switched off: the role is left as it is
+                // Account linking is switched off: the role goes away, the links stay; switching it on again
+                // gives the role back to all linked members
                 role = null;
+                deleteCreatedRole();
+                if (config.mode() == ModConfig.LinkedRoleMode.ROLE) {
+                    removeFromAll(config.roleId().getAsLong());
+                }
                 return;
             }
-            ModConfig.LinkedRole config = ConfigManager.get().linking().linkedRole();
             if (config.mode() != ModConfig.LinkedRoleMode.AUTO) {
                 deleteCreatedRole();
             }
@@ -155,7 +160,7 @@ final class LinkedRoles {
             logError("The linked role is above the bot's highest role. Move the bot's role above it in the server "
                     + "settings.");
         } catch (InsufficientPermissionException e) {
-            logError("The bot needs the 'Manage Roles' permission for the linked role.");
+            PermissionWarnings.missing("Manage Roles", "on the Discord server", "the linked role");
         }
     }
 
@@ -194,11 +199,32 @@ final class LinkedRoles {
             Constants.LOG.info("Created the Discord role '{}' for linked accounts", created.getName());
             return created;
         } catch (InsufficientPermissionException e) {
-            Constants.LOG.error("Could not create the linked role: the bot needs the 'Manage Roles' permission.");
+            PermissionWarnings.missing("Manage Roles", "on the Discord server", "the linked role");
         } catch (RuntimeException e) {
             Constants.LOG.error("Could not create the linked role: {}", e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * Removes a configured role from all members, when account linking is switched off. The role itself is not
+     * deleted, as the bot did not create it.
+     *
+     * @param roleId the configured role
+     */
+    private void removeFromAll(long roleId) {
+        Role configured = guild.getRoleById(roleId);
+        if (configured == null) {
+            return;
+        }
+        for (Member member : guild.getMembersWithRoles(configured)) {
+            try {
+                guild.removeRoleFromMember(member, configured).queue(null, this::logError);
+            } catch (InsufficientPermissionException | HierarchyException e) {
+                logError(e);
+                return;
+            }
+        }
     }
 
     /**
@@ -213,7 +239,7 @@ final class LinkedRoles {
         try {
             if (created != null) {
                 created.delete().complete();
-                Constants.LOG.info("Deleted the Discord role '{}', as linking.linked_role is no longer \"auto\"",
+                Constants.LOG.info("Deleted the Discord role '{}' created for linked accounts",
                         created.getName());
             }
             state.setCreatedLinkedRole(OptionalLong.empty());

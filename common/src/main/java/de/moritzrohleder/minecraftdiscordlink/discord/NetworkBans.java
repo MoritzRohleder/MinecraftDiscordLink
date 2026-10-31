@@ -33,16 +33,19 @@ import java.util.UUID;
  * Bans and unbans on all servers sharing the Discord server.
  * <p>
  * The servers do not talk to each other directly; each runs its own connection with the same bot. The server where
- * a ban on all servers is made posts it to the shared moderation channel as usual; the embed links to a URL that
- * carries the ban as data. The other servers read the moderation channel, take only such embeds sent by the bot
- * itself, and apply the ban with the same end, reason and moderator. They log it to their own log file but do not
+ * a ban on all servers is made posts it to the shared moderation channel as usual; the title of the embed links to the
+ * player's NameMC profile, with the ban as machine-readable data in the query (NameMC ignores it). The visible text
+ * is formatted for people and configurable, so it is not read back. The other servers read the moderation channel,
+ * take only such embeds sent by the bot itself, and apply the ban with the same end, reason and moderator. They log it to their own log file but do not
  * post it again. A server that was not running catches up on start from the last message it checked, stored in
  * {@code state.json}.
  */
 final class NetworkBans extends ListenerAdapter {
 
-    /** Start of the data URL of bans on all servers. */
-    static final String DATA_URL = "https://minecraftdiscordlink.invalid/network";
+    /** Start of the data URLs: the NameMC profile of the player. */
+    static final String DATA_URL = "https://namemc.com/profile/";
+    /** Query parameter marking a data URL. */
+    private static final String MARKER = "mdl";
     /** Longest reason carried in the data URL. */
     private static final int MAX_REASON = 500;
     /** Number of messages read per request when catching up. */
@@ -84,7 +87,7 @@ final class NetworkBans extends ListenerAdapter {
             return Optional.empty();
         }
         Map<String, String> values = new LinkedHashMap<>();
-        values.put("v", "1");
+        values.put(MARKER, "1");
         values.put("action", action);
         values.put("uuid", entry.player().get().toString());
         values.put("name", entry.target());
@@ -93,7 +96,7 @@ final class NetworkBans extends ListenerAdapter {
         String reason = entry.reason().orElse("");
         values.put("reason", reason.length() > MAX_REASON ? reason.substring(0, MAX_REASON) : reason);
         values.put("origin", ConfigManager.get().server().name());
-        StringBuilder url = new StringBuilder(DATA_URL).append('?');
+        StringBuilder url = new StringBuilder(DATA_URL).append(entry.player().get()).append('?');
         values.forEach((key, value) -> url.append(url.charAt(url.length() - 1) == '?' ? "" : "&").append(key)
                 .append('=').append(URLEncoder.encode(value, StandardCharsets.UTF_8)));
         return Optional.of(url.toString());
@@ -163,7 +166,8 @@ final class NetworkBans extends ListenerAdapter {
      */
     private void handle(Message message) {
         Optional<Map<String, String>> data = message.getEmbeds().stream().map(MessageEmbed::getUrl)
-                .filter(url -> url != null && url.startsWith(DATA_URL + "?")).findFirst().map(NetworkBans::parse);
+                .filter(url -> url != null && url.startsWith(DATA_URL)).findFirst().map(NetworkBans::parse)
+                .filter(values -> "1".equals(values.get(MARKER)));
         state.setNetworkMessage(message.getIdLong());
         if (data.isEmpty() || data.get().getOrDefault("origin", "").equals(ConfigManager.get().server().name())) {
             return;

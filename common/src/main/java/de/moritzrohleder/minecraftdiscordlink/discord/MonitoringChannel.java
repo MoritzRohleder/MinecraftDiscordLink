@@ -104,6 +104,16 @@ final class MonitoringChannel {
     }
 
     /**
+     * Sends a warning about a missing permission to the monitoring channel.
+     *
+     * @param text the warning
+     */
+    void sendWarning(String text) {
+        send(new EmbedBuilder().setTitle("⚠️ Missing permission").setDescription(text)
+                .setColor(EmbedColors.YELLOW).setTimestamp(Instant.now()).build());
+    }
+
+    /**
      * Updates the status message now, e.g. when the maintenance mode changes.
      */
     void updateStatusNow() {
@@ -333,8 +343,7 @@ final class MonitoringChannel {
                 message.pin().queue(null, error -> Constants.LOG.error("Could not pin the status message: {}",
                         error.getMessage()));
             } catch (InsufficientPermissionException e) {
-                Constants.LOG.error("Could not pin the status message: the bot needs the 'Pin Messages' permission "
-                        + "in the monitoring channel.");
+                PermissionWarnings.missing("Pin Messages", "in the monitoring channel", "pinning the status message");
             }
         }
     }

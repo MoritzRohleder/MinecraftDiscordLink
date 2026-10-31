@@ -10,6 +10,7 @@ import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import de.moritzrohleder.minecraftdiscordlink.info.Features;
 import de.moritzrohleder.minecraftdiscordlink.info.InfoText;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
@@ -22,6 +23,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.GameProfileArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -40,6 +42,7 @@ import java.util.function.Consumer;
  *     <li>{@code /discord unlink}: removes the own link</li>
  *     <li>{@code /discord whois <name>}: shows the account linked to a Minecraft or Discord name</li>
  *     <li>{@code /discord reload}: reloads the config (admins only)</li>
+ *     <li>{@code /discord features}: shows which features are switched on (admins only)</li>
  *     <li>{@code /discord admin link <player> <discordname>}: links accounts manually (admins only)</li>
  *     <li>{@code /discord tempban <player> <duration> <reason>}: bans a player for a time (admins only)</li>
  *     <li>{@code /discord networkban <player> <reason>}, {@code /discord networktempban <player> <duration> <reason>}
@@ -81,6 +84,9 @@ public final class DiscordCommand {
                 .then(Commands.literal("reload")
                         .requires(Services.PLATFORM::isAdmin)
                         .executes(DiscordCommand::reload))
+                .then(Commands.literal("features")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .executes(DiscordCommand::features))
                 .then(Commands.literal("tempban")
                         .requires(Services.PLATFORM::isAdmin)
                         .then(Commands.argument("player", GameProfileArgument.gameProfile())
@@ -202,6 +208,36 @@ public final class DiscordCommand {
         String result = MinecraftDiscordLink.reloadConfig();
         context.getSource().sendSuccess(() -> Component.literal(result), true);
         return 1;
+    }
+
+    /**
+     * Runs {@code /discord features}: one line per feature, green if switched on, red if off, with its parts.
+     *
+     * @param context the command context
+     * @return 1
+     */
+    private static int features(CommandContext<CommandSourceStack> context) {
+        MutableComponent text = Component.literal("Features:").withStyle(ChatFormatting.GOLD);
+        for (Features.Feature feature : Features.of(ConfigManager.get())) {
+            text.append(featureLine(feature, ""));
+            feature.parts().forEach(part -> text.append(featureLine(part, "    ")));
+        }
+        context.getSource().sendSystemMessage(text);
+        return 1;
+    }
+
+    /**
+     * Formats one feature for {@code /discord features}.
+     *
+     * @param feature the feature
+     * @param indent  the indentation of parts
+     * @return the line, starting with a line break
+     */
+    private static Component featureLine(Features.Feature feature, String indent) {
+        return Component.literal("\n" + indent + (feature.enabled() ? "✔ " : "✘ ") + feature.name())
+                .withStyle(feature.enabled() ? ChatFormatting.GREEN : ChatFormatting.RED)
+                .append(Component.literal(feature.note().map(note -> " (" + note + ")").orElse(""))
+                        .withStyle(ChatFormatting.YELLOW));
     }
 
     /**

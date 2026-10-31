@@ -28,8 +28,6 @@ final class TopicUpdater extends PeriodicUpdater {
 
     /** The chat channel; changed when a reload changes the chat channel. */
     private volatile StandardGuildMessageChannel channel;
-    /** Whether the missing permission has already been logged. */
-    private boolean permissionErrorLogged;
 
     /**
      * Creates a topic updater; call {@link #start()} to begin.
@@ -73,14 +71,10 @@ final class TopicUpdater extends PeriodicUpdater {
         }
         try {
             channel.getManager().setTopic(topic).queue(
-                    success -> permissionErrorLogged = false,
+                    null,
                     error -> Constants.LOG.error("Could not update the chat channel topic: {}", error.getMessage()));
         } catch (InsufficientPermissionException e) {
-            if (!permissionErrorLogged) {
-                Constants.LOG.error("Could not update the chat channel topic: the bot needs the 'Manage Channels' "
-                        + "permission in the chat channel.");
-                permissionErrorLogged = true;
-            }
+            PermissionWarnings.missing("Manage Channels", "in the chat channel", "the channel topic");
         }
     }
 }

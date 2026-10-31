@@ -121,8 +121,8 @@ public final class ChatBridge extends ListenerAdapter {
             }
             return container.createWebhook(WEBHOOK_NAME).complete();
         } catch (InsufficientPermissionException e) {
-            Constants.LOG.error("Could not set up the chat webhook: the bot needs the 'Manage Webhooks' permission "
-                    + "in the chat channel. Plain bot messages are used.");
+            PermissionWarnings.missing("Manage Webhooks", "in the chat channel",
+                    "chat messages as the player (plain bot messages are used)");
             return null;
         } catch (RuntimeException e) {
             Constants.LOG.error("Could not set up the chat webhook ({}). Plain bot messages are used.",

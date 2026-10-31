@@ -41,8 +41,6 @@ final class ConsoleChannel extends ListenerAdapter {
     private final MinecraftServer server;
     private final ScheduledExecutorService executor;
 
-    /** Whether the missing reaction permission has already been logged. */
-    private volatile boolean reactionErrorLogged;
     /** Whether this channel was replaced by another one after a config reload. */
     private volatile boolean stopped;
 
@@ -119,11 +117,8 @@ final class ConsoleChannel extends ListenerAdapter {
             message.addReaction(EXECUTED).queue(null, error ->
                     ConsoleCapture.LOG.error("Could not react to a command: {}", error.getMessage()));
         } catch (InsufficientPermissionException e) {
-            if (!reactionErrorLogged) {
-                ConsoleCapture.LOG.error("Could not react to a command: the bot needs the 'Add Reactions' and "
-                        + "'Read Message History' permissions in the console channel.");
-                reactionErrorLogged = true;
-            }
+            PermissionWarnings.missing(e.getPermission().getName(), "in the console channel",
+                    "the reaction on commands");
         }
     }
 
