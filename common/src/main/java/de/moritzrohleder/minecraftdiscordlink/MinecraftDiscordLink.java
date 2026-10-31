@@ -14,9 +14,11 @@ import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.DiscordModeration;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationLog;
+import de.moritzrohleder.minecraftdiscordlink.monitoring.ReportTracker;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
+import net.minecraft.CrashReport;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.DisplayInfo;
 import net.minecraft.locale.Language;
@@ -68,6 +70,8 @@ public final class MinecraftDiscordLink {
     private static Linking linking;
     /** When the server was started, {@code null} while the server is not running. */
     private static Instant startTime;
+    /** The numbers of the daily report, {@code null} while the server is not running. */
+    private static ReportTracker report;
     /** The maintenance mode, {@code null} while the server is not running. */
     private static Maintenance maintenance;
     /** The moderation, {@code null} while the server is not running. */
@@ -98,6 +102,7 @@ public final class MinecraftDiscordLink {
         startTime = Instant.now();
         Path dataDirectory = server.getServerDirectory().resolve(Constants.MOD_ID);
         stats = new PlayerStats(dataDirectory, Clock.systemDefaultZone());
+        report = new ReportTracker(dataDirectory, Clock.systemDefaultZone());
         linking = new Linking(server, dataDirectory, MinecraftDiscordLink::accountLinking, stats);
         StateStore state = new StateStore(dataDirectory);
         maintenance = new Maintenance(server, state, linking.links(), discordId -> accountLinking()
@@ -106,11 +111,11 @@ public final class MinecraftDiscordLink {
                 MinecraftDiscordLink::discordModeration);
         ModConfig config = ConfigManager.get();
         config.discord().token().ifPresent(token -> {
-            if (config.console().channelId().isPresent()) {
-                // Captured from the start, so the console channel also shows the server start
-                ConsoleCapture.install();
-            }
-            bot = new DiscordBot(token, config, server, startTime, stats, linking, state, moderation, maintenance);
+            // Captured from the start, so the console channel also shows the server start; the last lines are also
+            // kept for crash notices in the monitoring channel
+            ConsoleCapture.install(config.console().channelId().isPresent());
+            bot = new DiscordBot(token, config, server, startTime, stats, linking, state, moderation, maintenance,
+                    report);
             bot.connect();
         });
     }
@@ -204,8 +209,10 @@ public final class MinecraftDiscordLink {
      */
     public static void onPlayerJoin(ServerPlayer player) {
         if (stats != null) {
-            stats.recordJoin(player.getUUID(),
-                    player.server.getPlayerList().getPlayers().stream().map(ServerPlayer::getUUID).toList());
+            List<UUID> online = player.server.getPlayerList().getPlayers().stream().map(ServerPlayer::getUUID).toList();
+            boolean isNew = !stats.isKnown(player.getUUID());
+            stats.recordJoin(player.getUUID(), online);
+            report.join(player.getUUID(), isNew, online.size());
         }
         accountLinking().ifPresent(accounts -> accounts.sendMentionSuggestions(List.of(player)));
         if (ConfigManager.get().chat().events().join()) {
@@ -222,6 +229,7 @@ public final class MinecraftDiscordLink {
     public static void onPlayerLeave(ServerPlayer player) {
         if (stats != null) {
             stats.recordLeave(player.getUUID());
+            report.leave(player.getUUID());
         }
         if (ConfigManager.get().chat().events().leave()) {
             sendPlayerEvent(player, OUTBOX_TRAY + " **" + DiscordText.escape(playerName(player)) + "** left the game",
@@ -462,6 +470,19 @@ public final class MinecraftDiscordLink {
      */
     private static Optional<ChatBridge> chatBridge() {
         return bot != null ? bot.chatBridge() : Optional.empty();
+    }
+
+    /**
+     * Called by a mixin when the server crashed, before it stops. Sends the crash notice to the monitoring channel,
+     * blocking for a few seconds at most.
+     *
+     * @param crash the crash report
+     */
+    public static void onServerCrash(CrashReport crash) {
+        if (bot != null) {
+            Throwable exception = crash.getException();
+            bot.onCrash(crash.getTitle(), exception == null ? "" : exception.toString());
+        }
     }
 
     /**

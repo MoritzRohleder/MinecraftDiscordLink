@@ -16,6 +16,8 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -70,7 +72,9 @@ public final class ConfigLoader {
             "  {uptime}          time since server start",
             "  {last_updated}    time of this update (HH:mm)",
             "  {version}         Minecraft version",
-            "  {motd}            server MOTD");
+            "  {motd}            server MOTD",
+            "  {players}         names of the online players",
+            "  {tps}             ticks per second");
 
     /** Comments of the config sections (tables), by path. */
     private static final Map<String, String> SECTIONS = new LinkedHashMap<>();
@@ -177,6 +181,47 @@ public final class ConfigLoader {
                 "A Minecraft ban also bans the linked Discord account and vice versa, same for unbans."));
         entry("moderation.ban_sync.discord_action", "ban", comment(
                 "What a Minecraft ban does to the linked Discord account: \"ban\" or \"kick\"."));
+
+        section("monitoring", comment("Monitoring channel: lag warnings, crash notices, a daily report and a status",
+                "message that is edited regularly."));
+        entry("monitoring.channel_id", "", comment("ID of the monitoring channel. \"\" = monitoring off."));
+
+        section("monitoring.lag", comment("Warning when the TPS stay below a threshold, all-clear when the lag is over."));
+        entry("monitoring.lag.enabled", true, null);
+        entry("monitoring.lag.tps_threshold", 15.0, comment("TPS below this value count as lag. 1 to 20."));
+        entry("monitoring.lag.duration_seconds", 60,
+                comment("Seconds the TPS must stay below the threshold. Minimum: 5."));
+        entry("monitoring.lag.cooldown_minutes", 5, comment("Minimum minutes between two warnings."));
+
+        section("monitoring.crash", comment("Notice with the reason and the last console lines when the server crashes.",
+                "A killed server process cannot be reported."));
+        entry("monitoring.crash.enabled", true, null);
+        entry("monitoring.crash.log_lines", 20, comment("Number of console lines in the notice. 1 to 50."));
+
+        section("monitoring.daily_report", comment("Report about the players since the last report."));
+        entry("monitoring.daily_report.enabled", true, null);
+        entry("monitoring.daily_report.time", "00:00", comment("Time of the report (HH:mm, server time zone)."));
+        entry("monitoring.daily_report.format", String.join("\n",
+                        "Players: **{unique_players}** ({new_players} new)",
+                        "Peak: **{peak_players}** online",
+                        "Play time: **{play_time}**",
+                        "Top players: {top_players}"),
+                comment("Text of the report (Discord Markdown). Placeholders:",
+                        "  {date}            day of the report",
+                        "  {unique_players}  distinct players",
+                        "  {new_players}     players who joined for the first time",
+                        "  {peak_players}    most players online at the same time",
+                        "  {play_time}       play time of all players together",
+                        "  {top_players}     the 3 players with the most play time"));
+
+        section("monitoring.status_message", comment("A message in the monitoring channel that is edited regularly."));
+        entry("monitoring.status_message.enabled", true, null);
+        entry("monitoring.status_message.interval_minutes", 5, comment("Minutes between updates. Minimum: 1."));
+        entry("monitoring.status_message.format", String.join("\n",
+                        "**{online}/{max}** players online: {players}",
+                        "TPS: {tps} · Uptime: {uptime}",
+                        "Version: {version}"),
+                comment("Text of the status message (Discord Markdown). Placeholders: as for the topic."));
 
         section("leaderboard", comment(
                 "Leaderboards from the vanilla statistics: /mc top <category> and /mc stats <player>.",
@@ -420,6 +465,20 @@ public final class ConfigLoader {
                     new ModConfig.Moderation(
                             optionalChannel("moderation.channel_id", "moderation channel"),
                             new ModConfig.BanSync(bool("moderation.ban_sync.enabled"), discordAction())),
+                    new ModConfig.Monitoring(
+                            optionalChannel("monitoring.channel_id", "monitoring channel"),
+                            new ModConfig.Lag(bool("monitoring.lag.enabled"),
+                                    decimal("monitoring.lag.tps_threshold", 1, 20),
+                                    integer("monitoring.lag.duration_seconds", 5),
+                                    integer("monitoring.lag.cooldown_minutes", 0)),
+                            new ModConfig.Crash(bool("monitoring.crash.enabled"),
+                                    integer("monitoring.crash.log_lines", 1, 50)),
+                            new ModConfig.DailyReport(bool("monitoring.daily_report.enabled"),
+                                    time("monitoring.daily_report.time"),
+                                    string("monitoring.daily_report.format")),
+                            new ModConfig.StatusMessage(bool("monitoring.status_message.enabled"),
+                                    integer("monitoring.status_message.interval_minutes", 1),
+                                    string("monitoring.status_message.format"))),
                     new ModConfig.Leaderboard(integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()));
         }
 
@@ -747,6 +806,41 @@ public final class ConfigLoader {
                 }
             }
             return invalid(path, (Integer) defaultValue(path));
+        }
+
+        /**
+         * Reads a decimal value within bounds.
+         *
+         * @param path path of the entry
+         * @param min  smallest valid value
+         * @param max  largest valid value
+         * @return the value, or the default if invalid
+         */
+        private double decimal(String path, double min, double max) {
+            if (config.get(path) instanceof Number number) {
+                double value = number.doubleValue();
+                if (value >= min && value <= max) {
+                    return value;
+                }
+            }
+            return invalid(path, ((Number) defaultValue(path)).doubleValue());
+        }
+
+        /**
+         * Reads a time of day ({@code HH:mm}).
+         *
+         * @param path path of the entry
+         * @return the time, or the default if invalid
+         */
+        private LocalTime time(String path) {
+            if (config.get(path) instanceof String text) {
+                try {
+                    return LocalTime.parse(text.strip());
+                } catch (DateTimeParseException ignored) {
+                    // Falls through to the default
+                }
+            }
+            return invalid(path, LocalTime.parse((String) defaultValue(path)));
         }
 
         /**

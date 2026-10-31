@@ -8,6 +8,7 @@
   "server": [
     "CommandsMixin",
     "KickCommandMixin",
+    "MinecraftServerCrashMixin",
     "MinecraftServerMixin",
     "PlayerAdvancementsMixin",
     "PlayerListLoginMixin",

@@ -81,6 +81,7 @@ public final class ConfigManager {
                 loaded.whitelist(),
                 loaded.linking(),
                 loaded.moderation(),
+                loaded.monitoring(),
                 loaded.leaderboard());
         Constants.LOG.info("Config reloaded");
         return restartNeeded;
@@ -104,7 +105,7 @@ public final class ConfigManager {
         ModConfig current = get();
         config = new ModConfig(current.discord(), current.chat(), current.console(),
                 new ModConfig.Whitelist(whitelist.enabled(), List.copyOf(whitelist.roleIds())), current.linking(),
-                current.moderation(), current.leaderboard());
+                current.moderation(), current.monitoring(), current.leaderboard());
         return true;
     }
 }

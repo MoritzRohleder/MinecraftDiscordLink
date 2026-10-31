@@ -8,6 +8,7 @@ import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.DiscordModeration;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
+import de.moritzrohleder.minecraftdiscordlink.monitoring.ReportTracker;
 import de.moritzrohleder.minecraftdiscordlink.stats.PlayerStats;
 import net.dv8tion.jda.api.EmbedBuilder;
 import com.neovisionaries.ws.client.WebSocketFactory;
@@ -76,6 +77,7 @@ public final class DiscordBot {
     private final StateStore state;
     private final Moderation moderation;
     private final Maintenance maintenance;
+    private final ReportTracker report;
     private final ScheduledExecutorService executor;
 
     /** The bot, set as soon as it is built. */
@@ -86,6 +88,8 @@ public final class DiscordBot {
     private volatile AccountLinking accountLinking;
     /** The slash commands, set once the bot is ready if one of the channels is available. */
     private volatile SlashCommands slashCommands;
+    /** The monitoring channel, set once both the bot is ready and the server has started. */
+    private volatile MonitoringChannel monitoring;
     /** The ban sync, set once the bot is ready if one of the channels is available. */
     private volatile BanSync banSync;
     /** Whether the bot is connected and ready. */
@@ -105,9 +109,11 @@ public final class DiscordBot {
      * @param state       the stored state of the mod
      * @param moderation  the moderation, for the moderation commands and the moderation channel
      * @param maintenance the maintenance mode, for the topic and the bot status
+     * @param report      the numbers of the daily report
      */
     public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime, PlayerStats stats,
-                      Linking linking, StateStore state, Moderation moderation, Maintenance maintenance) {
+                      Linking linking, StateStore state, Moderation moderation, Maintenance maintenance,
+                      ReportTracker report) {
         this.token = token;
         this.chatChannelId = config.chat().channelId();
         this.consoleChannelId = config.console().channelId();
@@ -118,6 +124,7 @@ public final class DiscordBot {
         this.state = state;
         this.moderation = moderation;
         this.maintenance = maintenance;
+        this.report = report;
         this.executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, Constants.MOD_NAME + " Discord");
             thread.setDaemon(true);
@@ -242,6 +249,10 @@ public final class DiscordBot {
             chatChannel().ifPresent(channel -> channel.sendMessageEmbeds(
                     embed("✅ Server started", EmbedColors.GREEN)).queue(null, this::logSendError));
         }
+        MonitoringChannel monitor = new MonitoringChannel(jda, server, startTime, stats, state, report, executor);
+        monitor.start();
+        maintenance.addListener(change -> monitor.updateStatusNow());
+        monitoring = monitor;
         StatusUpdater status = new StatusUpdater(jda, server, startTime, stats, executor);
         status.start();
         maintenance.addListener(change -> status.updateNow());
@@ -305,6 +316,25 @@ public final class DiscordBot {
         if (commands != null) {
             commands.register();
         }
+        MonitoringChannel monitor = monitoring;
+        if (monitor != null) {
+            // The monitoring channel or the format may have changed
+            monitor.updateStatusNow();
+        }
+    }
+
+    /**
+     * Sends the crash notice to the monitoring channel, waiting a few seconds at most. Called before the server stops
+     * after a crash.
+     *
+     * @param title     the title of the crash report
+     * @param exception the exception that crashed the server
+     */
+    public void onCrash(String title, String exception) {
+        MonitoringChannel monitor = monitoring;
+        if (monitor != null) {
+            monitor.sendCrash(title, exception, SHUTDOWN_TIMEOUT);
+        }
     }
 
     /**
@@ -312,6 +342,10 @@ public final class DiscordBot {
      */
     public void shutdown() {
         long deadline = System.nanoTime() + SHUTDOWN_TIMEOUT.toNanos();
+        MonitoringChannel monitor = monitoring;
+        if (monitor != null) {
+            monitor.markOffline(SHUTDOWN_TIMEOUT.dividedBy(2));
+        }
         ChatBridge bridge = chatBridge;
         if (bridge != null) {
             // Players leaving while the server stops are not reported anymore

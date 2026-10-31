@@ -1,5 +1,6 @@
 package de.moritzrohleder.minecraftdiscordlink.config;
 
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -17,10 +18,11 @@ import java.util.OptionalLong;
  * @param whitelist   whitelist via Discord roles ({@code [whitelist]})
  * @param linking     account linking settings ({@code [linking]})
  * @param moderation  moderation log and ban sync ({@code [moderation]})
+ * @param monitoring  monitoring channel ({@code [monitoring]})
  * @param leaderboard leaderboards from the vanilla statistics ({@code [leaderboard]})
  */
 public record ModConfig(Discord discord, Chat chat, Console console, Whitelist whitelist, Linking linking,
-                        Moderation moderation, Leaderboard leaderboard) {
+                        Moderation moderation, Monitoring monitoring, Leaderboard leaderboard) {
 
     /**
      * Discord bot settings.
@@ -228,6 +230,59 @@ public record ModConfig(Discord discord, Chat chat, Console console, Whitelist w
         BAN,
         /** The Discord account is only kicked from the Discord server. */
         KICK
+    }
+
+    /**
+     * Settings of the monitoring channel.
+     *
+     * @param channelId     ID of the monitoring channel, empty if monitoring is off
+     * @param lag           lag warnings
+     * @param crash         crash notices
+     * @param dailyReport   the daily report
+     * @param statusMessage the status message that is edited regularly
+     */
+    public record Monitoring(OptionalLong channelId, Lag lag, Crash crash, DailyReport dailyReport,
+                             StatusMessage statusMessage) {
+    }
+
+    /**
+     * Lag warnings: sent when the TPS stay below a threshold for some time, followed by an all-clear.
+     *
+     * @param enabled         whether lag warnings are sent
+     * @param tpsThreshold    TPS below this value count as lag, 1 to 20
+     * @param durationSeconds how long the TPS must stay below the threshold, at least 5
+     * @param cooldownMinutes minimum minutes between two warnings, at least 0
+     */
+    public record Lag(boolean enabled, double tpsThreshold, int durationSeconds, int cooldownMinutes) {
+    }
+
+    /**
+     * Crash notices.
+     *
+     * @param enabled  whether a crash notice is sent
+     * @param logLines number of console lines in the notice, 1 to 50
+     */
+    public record Crash(boolean enabled, int logLines) {
+    }
+
+    /**
+     * The daily report.
+     *
+     * @param enabled whether the report is sent
+     * @param time    when the report is sent, in the server's time zone
+     * @param format  text of the report with placeholders such as {@code {unique_players}}
+     */
+    public record DailyReport(boolean enabled, LocalTime time, String format) {
+    }
+
+    /**
+     * The status message in the monitoring channel, edited regularly.
+     *
+     * @param enabled         whether the status message is shown
+     * @param intervalMinutes minutes between updates, at least 1
+     * @param format          text with placeholders such as {@code {players}}
+     */
+    public record StatusMessage(boolean enabled, int intervalMinutes, String format) {
     }
 
     /**

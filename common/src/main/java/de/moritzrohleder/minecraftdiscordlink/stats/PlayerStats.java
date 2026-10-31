@@ -132,6 +132,16 @@ public final class PlayerStats {
     }
 
     /**
+     * Checks whether a player has joined before, as recorded by the mod.
+     *
+     * @param player the player's UUID
+     * @return whether the player is known
+     */
+    public synchronized boolean isKnown(UUID player) {
+        return total.contains(player);
+    }
+
+    /**
      * Returns the number of distinct players ever.
      *
      * @return the number of players

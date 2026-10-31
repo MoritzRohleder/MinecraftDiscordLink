@@ -25,6 +25,10 @@ installed on the dedicated server – players don't need it.
   temporary bans also in Minecraft. Every moderation action, also from
   vanilla commands, goes to a moderation log file and optionally a Discord
   channel. Optional ban sync between Minecraft and linked Discord accounts.
+- **Maintenance mode** – only operators and linked Discord admins may join;
+  switched from Discord or Minecraft, optionally kept after a restart.
+- **Monitoring channel** – lag warnings, crash notices, a daily report and a
+  status message that is kept up to date.
 - **Leaderboards** – rankings from the vanilla statistics (default: play time
   and deaths) and every player's ranks.
 - **Slash commands** – `/mc online`, `/mc status`, `/mc whois`,
@@ -97,6 +101,8 @@ All options are documented in the generated
 | `moderation.channel_id` | – | Channel for the moderation log (optional) |
 | `moderation.ban_sync.enabled` | `false` | Bans across Minecraft and linked Discord accounts |
 | `moderation.ban_sync.discord_action` | `"ban"` | What a Minecraft ban does in Discord: `"ban"` or `"kick"` |
+| `monitoring.channel_id` | – | Monitoring channel (lag, crashes, daily report, status message) |
+| `monitoring.*` | on | Lag threshold, crash log lines, report time and format, status message |
 | `leaderboard.size` | `10` | Players shown by `/mc top` |
 | `[[leaderboard.categories]]` | play time, deaths | Ranked statistics (see below) |
 
@@ -144,6 +150,7 @@ default.
 | `/discord admin link <player> <discordname>` | admins |
 | `/discord tempban <player> <duration> <reason>` – e.g. `7d`, `12h`, `1d12h` | admins |
 | `/discord rolewhitelist on <reason>`, `off [reason]`, `status` | admins |
+| `/discord maintenance on [persistent] [reason]`, `off [reason]`, `status` | admins |
 | `/discord reload` | admins |
 
 Admins are operators of level 4 or players with the permission node
@@ -159,6 +166,7 @@ Admins are operators of level 4 or players with the permission node
 | `/mc unlink` | everyone |
 | `/mcadmin kick`, `ban [duration]`, `unban`, `banlist` – reason required except for `banlist` | members with *Administrator* |
 | `/mcadmin whitelist add\|remove\|list\|on\|off`, `/mcadmin rolewhitelist on\|off\|add\|remove\|status` | members with *Administrator* |
+| `/mcadmin maintenance on [keep_after_restart] [reason]`, `off`, `status` | members with *Administrator* |
 | `/mcadmin link <player> <user>`, `/mcadmin reload` | members with *Administrator* (adjustable in the server's integration settings) |
 
 ## Data files

@@ -10,11 +10,13 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Provides the values of the server placeholders used in the bot status and the channel topic.
+ * Provides the values of the server placeholders used in the bot status, the channel topic and the status message
+ * of the monitoring channel.
  */
 public final class ServerPlaceholders {
 
@@ -44,6 +46,12 @@ public final class ServerPlaceholders {
         values.put("last_updated", LocalTime.now().format(TIME));
         values.put("version", server.getServerVersion());
         values.put("motd", server.getMotd());
+        List<String> names = server.getPlayerList().getPlayers().stream().map(player -> player.getGameProfile().getName())
+                .sorted(String.CASE_INSENSITIVE_ORDER).toList();
+        values.put("players", names.isEmpty() ? "nobody" : String.join(", ", names));
+        double mspt = server.getAverageTickTimeNanos() / 1_000_000.0;
+        values.put("tps", String.format(Locale.ROOT, "%.1f",
+                Math.min(server.tickRateManager().tickrate(), 1000.0 / Math.max(mspt, 0.001))));
         return values;
     }
 }

@@ -108,6 +108,33 @@ enabled = false
 # What a Minecraft ban does to the linked Discord account: "ban" or "kick"
 discord_action = "ban"
 
+[monitoring]
+# ID of the monitoring channel ("" = monitoring off)
+channel_id = ""
+
+[monitoring.lag]
+enabled = true
+tps_threshold = 15.0     # 1 to 20
+duration_seconds = 60    # minimum 5
+cooldown_minutes = 5
+
+[monitoring.crash]
+enabled = true
+log_lines = 20           # 1 to 50
+
+[monitoring.daily_report]
+enabled = true
+time = "00:00"           # HH:mm, server time zone
+# Placeholders: {date}, {unique_players}, {new_players}, {peak_players},
+# {play_time}, {top_players}
+format = "Players: **{unique_players}** ({new_players} new)\nPeak: **{peak_players}** online\nPlay time: **{play_time}**\nTop players: {top_players}"
+
+[monitoring.status_message]
+enabled = true
+interval_minutes = 5     # minimum 1
+# Placeholders: see section 2
+format = "**{online}/{max}** players online: {players}\nTPS: {tps} · Uptime: {uptime}\nVersion: {version}"
+
 [leaderboard]
 # Number of players shown by /mc top (1-25)
 size = 10
@@ -140,6 +167,8 @@ order = "lowest"
 | `{last_updated}` | Time of this update (`HH:mm`) |
 | `{version}` | Minecraft version |
 | `{motd}` | Server MOTD |
+| `{players}` | Names of the online players (`nobody` if empty) |
+| `{tps}` | Ticks per second |
 
 ## 3. Commands
 
@@ -433,6 +462,28 @@ line (`**Steve** · by Discord @anedhel · until <date> · Griefing`).
   (default `🔧 Maintenance | {online}/{max} online | Last updated:
   {last_updated}`) and the bot status `discord.status.maintenance_format`
   (default `Maintenance`); both are updated immediately when it changes.
+
+## 4d. Monitoring channel
+
+All messages are embeds in `monitoring.channel_id`; the channel can be
+changed by a reload.
+
+| Message | Content |
+|---|---|
+| Lag warning | Yellow, `⚠️ Lag: 11.2 TPS`, "The TPS are below 15.0 for 1m.", lowest TPS and MSPT. Sent when the TPS stay below `tps_threshold` for `duration_seconds` (measured every 5 seconds), at most once per `cooldown_minutes` |
+| All-clear | Green, `✅ Lag over: 20.0 TPS`, how long the lag lasted and the lowest TPS; always follows its warning |
+| Crash notice | Red, `💥 Server crashed`, title and exception of the crash report and the last `log_lines` console lines; sent before the server stops (a killed process cannot be reported) |
+| Daily report | Blurple, `📅 Daily report · 2026-10-30`, `format` with the numbers since the last report |
+| Status message | One message, edited every `interval_minutes`: `🟢 Server online` (green) or `🔧 Server in maintenance` (blurple) with `format`; `🔴 Server offline` when the server stops. Updated at once on reload and maintenance changes; a deleted message is sent again |
+
+Daily report numbers are collected since the last report and stored in
+`minecraftdiscordlink/report.json`, so a restart keeps them; a report missed
+while the server was down is sent after the next start. `{date}` is the day
+the period started; play time counts sessions until the report, players
+online at that moment count for the next period too. `{top_players}`:
+`Steve (3h 12m), Alex (45m)`.
+
+The ID of the status message is stored in `state.json` (`status_message`).
 
 ## 5. Data storage
 
