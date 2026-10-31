@@ -36,9 +36,9 @@ import java.util.UUID;
  * a ban on all servers is made posts it to the shared moderation channel as usual; the title of the embed links to the
  * player's NameMC profile, with the ban as machine-readable data in the query (NameMC ignores it). The visible text
  * is formatted for people and configurable, so it is not read back. The other servers read the moderation channel,
- * take only such embeds sent by the bot itself, and apply the ban with the same end, reason and moderator. They log it to their own log file but do not
- * post it again. A server that was not running catches up on start from the last message it checked, stored in
- * {@code state.json}.
+ * take only such embeds sent by the bot itself, and apply the ban with the same end, reason and moderator. They log
+ * it to their own log file but do not post it again. A server that was not running catches up on start from the
+ * last message it checked, stored in {@code state.json}.
  */
 final class NetworkBans extends ListenerAdapter {
 

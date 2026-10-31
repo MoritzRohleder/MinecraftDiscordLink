@@ -36,8 +36,8 @@ installed on the dedicated server – players don't need it.
   and deaths) and every player's ranks.
 - **Slash commands** – `/mc online`, `/mc status`, `/mc whois`,
   `/mc top`, `/mc stats` and more.
-- **Configurable** – every feature can be switched off (`enabled` in each
-  config section), all texts players and members see are in `[messages]`.
+- **Configurable** – every feature can be switched off (all switches in
+  `[features]`), all texts players and members see are in `[texts]`.
 
 ## Installation
 
@@ -75,8 +75,8 @@ installed on the dedicated server – players don't need it.
    | Manage Webhooks | Chat messages as the player (`chat.webhook = "auto"`) |
    | Manage Channels | Channel topic of the chat channel |
    | Manage Roles | Linked role (`linking.linked_role`) |
-   | Ban Members, Kick Members, View Audit Log | Ban sync (`moderation.ban_sync`) |
-   | Pin Messages | Pinning the status message (`monitoring.status_message.pin`) |
+   | Ban Members, Kick Members, View Audit Log | Ban sync (`features.moderation.ban_sync`) |
+   | Pin Messages | Pinning the status message (`features.monitoring.pin_status_message`) |
 
    Manage Webhooks and Manage Channels can also be granted on the chat channel
    only. The bot's role must be above the linked role.
@@ -92,7 +92,7 @@ a chat and console channel per server, a unique `server.name` on every
 server and `server.primary = true` on exactly one (with none, commands
 without `server` option stay unanswered; with two, both run them). Slash
 commands then take an optional `server` option; without it the primary
-server answers. Enable the bot status (`discord.status.enabled`) on one
+server answers. Enable the bot status (`features.bot_status.enabled`) on one
 server only. For bans on all servers, all servers use the same
 `moderation.channel_id`.
 
@@ -101,30 +101,34 @@ server only. For bans on all servers, all servers use the same
 All options are documented in the generated
 `config/minecraftdiscordlink.toml`. Highlights:
 
+The file is ordered: this server and the bot, then **all switches**
+(`[features]`, grouped by feature), **all texts** (`[texts]`), then the
+settings per feature.
+
 | Option | Default | Meaning |
 |---|---|---|
-| `server.name` | `""` | Name of this server when several share the Discord server |
-| `server.primary` | `true` | Answers slash commands without a `server` option |
+| `server.name`, `server.primary` | `""`, `true` | Several servers in one Discord server (see above) |
 | `discord.token` | – | Bot token |
-| `discord.status.*` | `playing`, every 5 min | Bot status text with placeholders |
+| `[features.*]` | all on except `moderation.ban_sync` | Switch every feature and its parts on or off |
+| `[texts.*]` | English texts | Every text players and members see, with placeholders |
+| `bot_status.type`, `interval_minutes` | `playing`, 5 min | Bot status |
 | `chat.channel_id` | – | Chat channel |
 | `chat.webhook` | `"auto"` | `"auto"`, a webhook URL or `""` for plain bot messages |
-| `chat.minecraft_format` | `&9[Discord]&r {name}: {message}` | Discord messages in Minecraft, `&` formatting codes allowed |
-| `chat.events.*` | all on | Which events are sent |
-| `chat.topic.*` | every 10 min | Channel topic with placeholders |
+| `chat.topic_interval_minutes` | 10 | Topic updates |
 | `console.channel_id` | – | Console channel |
 | `[[console.permissions]]` | none | Who may run which commands (see below) |
-| `*.enabled` | `true` | Switches a feature off (chat, console, whitelist roles, linking, moderation, maintenance, info, monitoring, notifications, leaderboard) |
 | `whitelist.role_ids` | `[]` | Discord roles on the whitelist (while `/whitelist on`); also `/mcadmin rolewhitelist add\|remove` |
 | `linking.linked_role` | `"auto"` | Role for linked members: `"auto"`, a role ID or `""` |
 | `moderation.channel_id` | – | Channel for the moderation log (optional) |
-| `moderation.ban_sync.enabled` | `false` | Bans across Minecraft and linked Discord accounts |
-| `moderation.ban_sync.discord_action` | `"ban"` | What a Minecraft ban does in Discord: `"ban"` or `"kick"` |
-| `monitoring.channel_id` | – | Monitoring channel (lag, crashes, daily report, status message) |
-| `monitoring.*` | on | Lag threshold, crash notice, report time and format, status message (pinned) |
-| `[messages]` | English texts | Event, kick, DM, notification and monitoring texts with placeholders |
+| `moderation.ban_sync_action` | `"ban"` | What a Minecraft ban does in Discord: `"ban"` or `"kick"` |
+| `monitoring.channel_id` | – | Monitoring channel (lag, crashes, daily report, pinned status message) |
+| `monitoring.*` | 15 TPS / 60 s, `00:00`, 5 min | Lag threshold, report time, status message interval |
 | `leaderboard.size` | `10` | Players shown by `/mc top` |
 | `[[leaderboard.categories]]` | play time, deaths | Ranked statistics (see below) |
+
+`/mcadmin features` and `/discord features` show which features are on.
+Missing bot permissions are logged and posted once in the monitoring
+channel.
 
 Console permissions – one entry per role or user; without entries nobody can
 run commands from Discord:
@@ -154,7 +158,9 @@ stat = "minecraft.mined:minecraft.diamond_ore"
 ```
 
 `/discord reload` applies all changes except the bot token and the `[server]`
-section, which need a restart; changed channels are applied at once. Invalid
+section, which need a restart; changed channels are applied at once (moving
+a channel to another Discord server needs a restart for the slash commands,
+roles and the ban sync). Invalid
 values are logged as errors and replaced by their default.
 
 ## Commands
@@ -172,7 +178,7 @@ values are logged as errors and replaced by their default.
 | `/discord networkban`, `networktempban`, `networkunban` – the same on all servers | admins |
 | `/discord rolewhitelist status` | admins |
 | `/discord maintenance on [persistent] [reason]`, `off [reason]`, `status` | admins |
-| `/discord reload` | admins |
+| `/discord reload`, `/discord features` | admins |
 
 Admins are operators of level 4 or players with the permission node
 `minecraftdiscordlink.admin` (e.g. with LuckPerms).
@@ -189,7 +195,7 @@ Admins are operators of level 4 or players with the permission node
 | `/mcadmin kick`, `ban [duration] [delete_messages] [all_servers]`, `unban [all_servers]`, `banlist [page]` – reason required except for `banlist` | members with *Administrator* |
 | `/mcadmin whitelist add\|remove\|list\|on\|off`, `/mcadmin rolewhitelist add\|remove\|status` | members with *Administrator* |
 | `/mcadmin maintenance on [keep_after_restart] [reason]`, `off`, `status` | members with *Administrator* |
-| `/mcadmin link <player> <user>`, `/mcadmin reload` | members with *Administrator* (adjustable in the server's integration settings) |
+| `/mcadmin link <player> <user>`, `/mcadmin reload`, `/mcadmin features` | members with *Administrator* (adjustable in the server's integration settings) |
 
 ## Data files
 

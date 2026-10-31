@@ -29,10 +29,14 @@ class ConfigLoaderTest {
 
         assertTrue(Files.exists(file));
         String content = Files.readString(file);
-        assertTrue(content.contains("[discord.status]"));
+        assertTrue(content.contains("[features.chat]"));
         assertTrue(content.contains("# Bot token from the Discord Developer Portal. Keep it secret!"));
         assertTrue(content.contains("{unique_today}"));
-        assertTrue(content.indexOf("[discord]") < content.indexOf("[chat]"));
+        // Server and bot first, then all switches, all texts and the settings per feature
+        assertTrue(content.indexOf("[server]") < content.indexOf("[discord]"));
+        assertTrue(content.indexOf("[discord]") < content.indexOf("[features]"));
+        assertTrue(content.indexOf("[features.monitoring]") < content.indexOf("[texts]"));
+        assertTrue(content.indexOf("[texts.monitoring]") < content.indexOf("[chat]"));
         assertTrue(content.indexOf("[chat]") < content.indexOf("[console]"));
 
         assertTrue(config.discord().token().isEmpty());
@@ -65,7 +69,7 @@ class ConfigLoaderTest {
         String original = Files.readString(file);
         Files.writeString(file, original.replace("code_validity_minutes = 60", "code_validity_minutes = 30"));
 
-        assertTrue(ConfigLoader.update(file, java.util.Map.of("whitelist.enabled", false,
+        assertTrue(ConfigLoader.update(file, java.util.Map.of("features.whitelist.roles", false,
                 "whitelist.role_ids", List.of("123456789012345678"))));
 
         ModConfig config = ConfigLoader.load(file);
@@ -142,7 +146,7 @@ class ConfigLoaderTest {
         String content = Files.readString(file);
         assertTrue(content.contains("My own comment"));
         assertTrue(content.contains("token = \"abc.def.ghi\""));
-        assertTrue(content.contains("[chat.topic]"));
+        assertTrue(content.contains("[texts.topic]"));
         assertTrue(content.contains("code_validity_minutes = 60"));
     }
 

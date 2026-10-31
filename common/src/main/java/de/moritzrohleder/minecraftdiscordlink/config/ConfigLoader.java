@@ -61,8 +61,8 @@ public final class ConfigLoader {
     /** Vanilla scoreboard criteria of statistics, e.g. {@code minecraft.mined:minecraft.diamond_ore}. */
     private static final Pattern STAT = Pattern.compile("[a-z0-9_.-]+:[a-z0-9_.-]+");
 
-    /** Comment documenting the placeholders of the status and topic formats. */
-    private static final String PLACEHOLDERS = comment(
+    /** Lines documenting the placeholders of the bot status, the topic and the status message. */
+    private static final String[] PLACEHOLDER_LINES = {
             "Placeholders:",
             "  {online}          players currently online",
             "  {max}             max players",
@@ -74,7 +74,7 @@ public final class ConfigLoader {
             "  {version}         Minecraft version",
             "  {motd}            server MOTD",
             "  {players}         names of the online players",
-            "  {tps}             ticks per second");
+            "  {tps}             ticks per second"};
 
     /** Comments of the config sections (tables), by path. */
     private static final Map<String, String> SECTIONS = new LinkedHashMap<>();
@@ -82,6 +82,8 @@ public final class ConfigLoader {
     private static final Map<String, Entry> ENTRIES = new LinkedHashMap<>();
 
     static {
+        // ---- This server and the bot (changes need a restart)
+
         section("server", comment("This Minecraft server. Changes in this section require a server restart."));
         entry("server.name", "", comment(
                 "Name of this server when several Minecraft servers share one Discord server (same bot token).",
@@ -89,64 +91,195 @@ public final class ConfigLoader {
                 "\"auto\" is then named \"Linked Account (<name>)\". \"\" = this is the only server."));
         entry("server.primary", true, comment(
                 "The primary server answers slash commands without a \"server\" option. Exactly one server",
-                "sharing the Discord server should be primary."));
+                "sharing the Discord server should be primary: with none, such commands stay unanswered;",
+                "with two, both run them."));
 
-        section("discord", comment("Discord bot settings. Changes in this section require a server restart,",
-                "except for the status."));
+        section("discord", comment("Discord bot. The token requires a server restart."));
         entry("discord.token", "", comment("Bot token from the Discord Developer Portal. Keep it secret!"));
 
-        section("discord.status", comment("Activity shown for the bot in Discord."));
-        entry("discord.status.enabled", true, comment("Show a status for the bot."));
-        entry("discord.status.type", "playing",
-                comment("Activity type: \"playing\", \"watching\", \"listening\", \"competing\" or \"custom\"."));
-        entry("discord.status.interval_minutes", 5, comment("Minutes between status updates. Minimum: 1."));
-        entry("discord.status.format", "{online}/{max} online", PLACEHOLDERS);
-        entry("discord.status.maintenance_format", "Maintenance",
-                comment("Status text while the maintenance mode is on. Same placeholders."));
+        // ---- All switches
 
-        section("chat", comment("Bridge between the Minecraft chat and a Discord channel."));
-        entry("chat.enabled", true, comment("Switch the chat bridge, the events and the topic on or off."));
-        entry("chat.channel_id", "", comment("ID of the chat channel."));
+        section("features", comment("Switch features on or off. Their settings follow further below."));
+
+        section("features.chat", comment("Bridge between the Minecraft chat and the chat channel."));
+        entry("features.chat.enabled", true, comment("The chat bridge, its events and the topic."));
+        entry("features.chat.join", true, comment("Events sent to the chat channel."));
+        entry("features.chat.leave", true, null);
+        entry("features.chat.death", true, null);
+        entry("features.chat.advancement", true, null);
+        entry("features.chat.server_start", true, null);
+        entry("features.chat.server_stop", true, null);
+        entry("features.chat.topic", true, comment("Update the topic of the chat channel."));
+        entry("features.chat.mention_suggestions", true,
+                comment("Players get the Discord usernames as chat suggestions (@ + Tab)."));
+
+        section("features.bot_status", comment("Activity shown for the bot in Discord."));
+        entry("features.bot_status.enabled", true, null);
+
+        section("features.console", comment("Live server console in the console channel."));
+        entry("features.console.enabled", true, null);
+
+        section("features.linking", comment("Linking of Minecraft and Discord accounts and the linked role.",
+                "Switched off, the linked role is removed; the links are kept."));
+        entry("features.linking.enabled", true, null);
+
+        section("features.whitelist", comment(
+                "Discord roles on the whitelist: while the whitelist is on (/whitelist on), linked members with",
+                "a whitelisted role may join in addition to the vanilla whitelist."));
+        entry("features.whitelist.roles", true, null);
+
+        section("features.moderation", comment("Moderation commands. The moderation log is always written."));
+        entry("features.moderation.enabled", true, null);
+        entry("features.moderation.ban_sync", false, comment(
+                "Bans across Minecraft and linked Discord accounts, in both directions.",
+                "Needs the bot permissions \"Ban Members\", \"Kick Members\" and \"View Audit Log\"."));
+
+        section("features.maintenance", comment("Maintenance mode: only operators and linked Discord admins may join."));
+        entry("features.maintenance.enabled", true, null);
+
+        section("features.info", comment(
+                "Information commands: /mc online, /mc status, /mc whois, /mc playtime and /discord whois."));
+        entry("features.info.enabled", true, null);
+
+        section("features.leaderboard", comment("Leaderboards: /mc top and /mc stats."));
+        entry("features.leaderboard.enabled", true, null);
+
+        section("features.notifications", comment(
+                "Direct messages to Discord users who subscribed with /mc subscribe to server events or players."));
+        entry("features.notifications.enabled", true, null);
+
+        section("features.monitoring", comment("Monitoring channel."));
+        entry("features.monitoring.enabled", true, null);
+        entry("features.monitoring.lag", true,
+                comment("Warning when the TPS stay below a threshold, all-clear when the lag is over."));
+        entry("features.monitoring.crash", true, comment("Notice when the server crashes."));
+        entry("features.monitoring.daily_report", true, comment("Report about the players since the last report."));
+        entry("features.monitoring.status_message", true,
+                comment("A message that is edited regularly with the status of the server."));
+        entry("features.monitoring.pin_status_message", true,
+                comment("Pin the status message (needs the \"Pin Messages\" permission)."));
+
+        // ---- All texts
+
+        section("texts", comment(
+                "Texts players and Discord members see. Discord texts: Discord Markdown and emojis as :name:.",
+                "Minecraft texts: formatting codes with & (&0-&9 and &a-&f for colors, &l bold, &o italic,",
+                "&n underlined, &m strikethrough, &k obfuscated, &r reset; text without a code is white)."));
+
+        section("texts.chat", comment("Chat bridge and events."));
+        entry("texts.chat.minecraft_format", "&9[Discord]&r {name}: {message}",
+                comment("Discord messages in Minecraft (Minecraft text). Placeholders: {name}, {message}"));
+        entry("texts.chat.discord_format", "**{player}**: {message}",
+                comment("Minecraft messages in Discord without webhook. Placeholders: {player}, {message}"));
+        entry("texts.chat.linked_name_format", "{mc} ({discord})",
+                comment("Name of linked players. Placeholders: {mc}, {discord}"));
+        entry("texts.chat.join", ":inbox_tray: **{player}** joined the game", comment("Placeholders: {player}"));
+        entry("texts.chat.leave", ":outbox_tray: **{player}** left the game", comment("Placeholders: {player}"));
+        entry("texts.chat.death", ":skull: {message}",
+                comment("Placeholders: {message} (vanilla death message, name in bold), {player}"));
+        entry("texts.chat.advancement", ":trophy: {message}",
+                comment("Placeholders: {message} (vanilla wording), {player}, {advancement}"));
+        entry("texts.chat.server_start", ":white_check_mark: Server started", null);
+        entry("texts.chat.server_stop", ":octagonal_sign: Server stopped", null);
+
+        section("texts.bot_status", comment("Activity text of the bot.", PLACEHOLDER_LINES));
+        entry("texts.bot_status.format", "{online}/{max} online", null);
+        entry("texts.bot_status.maintenance_format", "Maintenance",
+                comment("While the maintenance mode is on."));
+
+        section("texts.topic", comment("Topic of the chat channel.", PLACEHOLDER_LINES));
+        entry("texts.topic.format",
+                "{online}/{max} online | {unique_today} players today | Uptime: {uptime} "
+                        + "| Last updated: {last_updated}",
+                null);
+        entry("texts.topic.maintenance_format",
+                "🔧 Maintenance | {online}/{max} online | Last updated: {last_updated}",
+                comment("While the maintenance mode is on."));
+
+        section("texts.linking", comment("Account linking and the whitelist (Minecraft texts except link_dm)."));
+        entry("texts.linking.kick_not_linked", String.join("\n",
+                        "You are not whitelisted on this server.",
+                        "Link your Discord account by running /mc link {code} on the Discord server.",
+                        "The code is valid for {minutes} minutes."),
+                comment("Kick message of unlinked players. Placeholders: {code}, {minutes}"));
+        entry("texts.linking.kick_not_whitelisted", "You are not whitelisted on this server.",
+                comment("Kick message of linked players without a whitelisted role."));
+        entry("texts.linking.kick_no_longer_whitelisted", "You are no longer whitelisted on this server.",
+                comment("Kick message when a player loses access."));
+        entry("texts.linking.link_dm", String.join("\n",
+                        "The Minecraft player **{player}** wants to link their account to yours.",
+                        "Your code: **{code}** (valid for {minutes} minutes)",
+                        "Enter it in Minecraft with `/discord confirm {code}`.",
+                        "Reply `refresh` to get a new code.",
+                        "If this wasn't you, ignore this message."),
+                comment("Discord direct message with a link code. Placeholders: {player}, {code}, {minutes}"));
+
+        section("texts.maintenance", comment("Maintenance mode."));
+        entry("texts.maintenance.kick", String.join("\n",
+                        "The server is in maintenance mode. Please try again later.",
+                        "Reason: {reason}"),
+                comment("Kick message (Minecraft text). Placeholders: {reason}"));
+
+        section("texts.notifications", comment(
+                "Direct messages to subscribers. {server} = \"the Minecraft server\" (with its name if set),",
+                "{Server} = the same with a capital letter."));
+        entry("texts.notifications.server_start", ":white_check_mark: {Server} has started.", null);
+        entry("texts.notifications.server_stop", ":octagonal_sign: {Server} is stopping.", null);
+        entry("texts.notifications.maintenance_on",
+                ":wrench: {Server} is now in maintenance mode. Reason: {reason}", comment("Placeholders: {reason}"));
+        entry("texts.notifications.maintenance_off",
+                ":white_check_mark: The maintenance mode of {server} is over.", null);
+        entry("texts.notifications.player_online", ":green_circle: **{player}** is now online on {server}.",
+                comment("Placeholders: {player}"));
+
+        section("texts.monitoring", comment("Monitoring channel."));
+        entry("texts.monitoring.lag_warning_title", ":warning: Lag: {tps} TPS", comment("Placeholders: {tps}"));
+        entry("texts.monitoring.lag_warning", "The TPS are below {threshold} for {duration}.",
+                comment("Placeholders: {threshold}, {duration}"));
+        entry("texts.monitoring.lag_over_title", ":white_check_mark: Lag over: {tps} TPS",
+                comment("Placeholders: {tps}"));
+        entry("texts.monitoring.lag_over", "The lag lasted {duration}.", comment("Placeholders: {duration}"));
+        entry("texts.monitoring.crash_title", ":boom: Server crashed", null);
+        entry("texts.monitoring.daily_report", String.join("\n",
+                        "Players: **{unique_players}** ({new_players} new)",
+                        "Peak: **{peak_players}** online",
+                        "Play time: **{play_time}**",
+                        "Top players: {top_players}"),
+                comment("Daily report. Placeholders:",
+                        "  {date}            day of the report",
+                        "  {unique_players}  distinct players",
+                        "  {new_players}     players who joined for the first time",
+                        "  {peak_players}    most players online at the same time",
+                        "  {play_time}       play time of all players together",
+                        "  {top_players}     the 3 players with the most play time"));
+        entry("texts.monitoring.status_message", String.join("\n",
+                        "**{online}/{max}** players online: {players}",
+                        "TPS: {tps} · Uptime: {uptime}",
+                        "Version: {version}"),
+                comment("Status message.", PLACEHOLDER_LINES));
+
+        // ---- Settings per feature
+
+        section("bot_status", comment("Settings of the bot status."));
+        entry("bot_status.type", "playing",
+                comment("Activity type: \"playing\", \"watching\", \"listening\", \"competing\" or \"custom\"."));
+        entry("bot_status.interval_minutes", 5, comment("Minutes between status updates. Minimum: 1."));
+
+        section("chat", comment("Settings of the chat bridge."));
+        entry("chat.channel_id", "", comment("ID of the chat channel. Moving it to another Discord server",
+                "requires a restart for the slash commands, roles and the ban sync."));
         entry("chat.webhook", "auto", comment(
                 "How Minecraft messages are sent to Discord:",
                 "  \"auto\"  the bot creates a webhook itself (needs the \"Manage Webhooks\" permission)",
                 "  URL     use this webhook",
                 "  \"\"      no webhook, plain bot messages"));
-        entry("chat.minecraft_format", "&9[Discord]&r {name}: {message}", comment(
-                "Discord messages in Minecraft. Placeholders: {name}, {message}",
-                "Formatting codes: &0-&9 and &a-&f for colors, &l bold, &o italic, &n underlined,",
-                "&m strikethrough, &k obfuscated, &r reset. Text without a code is white."));
-        entry("chat.linked_name_format", "{mc} ({discord})",
-                comment("Name of linked players. Placeholders: {mc}, {discord}"));
         entry("chat.avatar_url", "https://vzge.me/face/256/{uuid}",
                 comment("Player head used as webhook avatar. Placeholders: {uuid}, {name}"));
-        entry("chat.discord_format", "**{player}**: {message}",
-                comment("Minecraft messages in Discord without webhook. Placeholders: {player}, {message}"));
-        entry("chat.mention_suggestions", true,
-                comment("Players get the Discord usernames as chat suggestions (@ + Tab)."));
-
-        section("chat.events", comment("Minecraft events sent to the chat channel."));
-        entry("chat.events.join", true, null);
-        entry("chat.events.leave", true, null);
-        entry("chat.events.death", true, null);
-        entry("chat.events.advancement", true, null);
-        entry("chat.events.server_start", true, null);
-        entry("chat.events.server_stop", true, null);
-
-        section("chat.topic", comment("Description (topic) of the chat channel."));
-        entry("chat.topic.enabled", true, comment("Update the channel topic."));
-        entry("chat.topic.interval_minutes", 10, comment(
+        entry("chat.topic_interval_minutes", 10, comment(
                 "Minutes between topic updates. Minimum: 5 (Discord allows about 2 changes per 10 minutes)."));
-        entry("chat.topic.format",
-                "{online}/{max} online | {unique_today} players today | Uptime: {uptime} "
-                        + "| Last updated: {last_updated}",
-                PLACEHOLDERS);
-        entry("chat.topic.maintenance_format",
-                "\uD83D\uDD27 Maintenance | {online}/{max} online | Last updated: {last_updated}",
-                comment("Topic while the maintenance mode is on. Same placeholders."));
 
         section("console", comment(
-                "Live server console in a Discord channel.",
+                "Settings of the console channel.",
                 "",
                 "Users allowed to run commands are configured with [[console.permissions]] entries,",
                 "one per Discord role or user (IDs are unique across both):",
@@ -164,22 +297,17 @@ public final class ConfigLoader {
                 "  id = \"123456789012345678\"",
                 "  mode = \"blacklist\"",
                 "  commands = [\"stop\", \"op\", \"deop\"]"));
-        entry("console.enabled", true, comment("Switch the console channel on or off."));
         entry("console.channel_id", "", comment("ID of the console channel."));
         entry("console.batch_interval_ms", 2000,
                 comment("Milliseconds between batched console messages. Minimum: 1000."));
 
-        section("whitelist", comment(
-                "Discord roles on the whitelist. While the whitelist is on (/whitelist on), linked members with",
-                "one of these roles may join, in addition to operators and the players on the vanilla whitelist.",
-                "The vanilla whitelist is meant for players without a linked Discord account.",
-                "The roles are also changed by /mcadmin rolewhitelist add|remove."));
-        entry("whitelist.enabled", true, comment("Switch whitelisting by roles on or off."));
-        entry("whitelist.role_ids", List.of(),
-                comment("IDs of the whitelisted roles. Empty = only the vanilla whitelist counts."));
+        section("whitelist", comment("Discord roles on the whitelist. The vanilla whitelist is meant for players",
+                "without a linked Discord account."));
+        entry("whitelist.role_ids", List.of(), comment(
+                "IDs of the whitelisted roles. Empty = only the vanilla whitelist counts.",
+                "Also changed by /mcadmin rolewhitelist add|remove."));
 
-        section("linking", comment("Linking of Minecraft and Discord accounts."));
-        entry("linking.enabled", true, comment("Switch the account linking and the linked role on or off."));
+        section("linking", comment("Settings of the account linking."));
         entry("linking.code_validity_minutes", 60, comment("Validity of link codes in minutes. Minimum: 1."));
         entry("linking.linked_role", "auto", comment(
                 "Discord role of members with a linked account:",
@@ -187,134 +315,28 @@ public final class ConfigLoader {
                 "  role ID use this role (it must be below the bot's highest role)",
                 "  \"\"      no role"));
 
-        section("moderation", comment("Moderation: every kick, ban and whitelist change is logged to the console and",
-                "to minecraftdiscordlink/moderation.log."));
-        entry("moderation.enabled", true, comment(
-                "Switch the moderation commands of the mod on or off. The moderation log is always written."));
+        section("moderation", comment("Settings of the moderation. Every kick, ban and whitelist change is logged",
+                "to the console and to minecraftdiscordlink/moderation.log."));
         entry("moderation.channel_id", "", comment(
-                "ID of a channel the moderation log is also sent to. \"\" = only the log file."));
+                "ID of a channel the moderation log is also sent to. \"\" = only the log file.",
+                "Bans on all servers need the same channel on all servers sharing the Discord server."));
+        entry("moderation.ban_sync_action", "ban", comment(
+                "What a Minecraft ban does to the linked Discord account: \"ban\" or \"kick\" (removed from the",
+                "Discord server, but can come back with an invite)."));
 
-        section("moderation.ban_sync", comment("Bans across Minecraft and Discord for linked accounts.",
-                "Needs the bot permissions \"Ban Members\", \"Kick Members\" and \"View Audit Log\"."));
-        entry("moderation.ban_sync.enabled", false, comment(
-                "A Minecraft ban also bans the linked Discord account and vice versa, same for unbans."));
-        entry("moderation.ban_sync.discord_action", "ban", comment(
-                "What a Minecraft ban does to the linked Discord account: \"ban\" or \"kick\"."));
-
-        section("maintenance", comment("Maintenance mode: only operators and linked Discord admins may join."));
-        entry("maintenance.enabled", true, comment("Switch the maintenance commands on or off."));
-
-        section("info", comment("Information commands: /mc online, /mc status, /mc whois, /mc playtime and",
-                "/discord whois."));
-        entry("info.enabled", true, comment("Switch the information commands on or off."));
-
-        section("monitoring", comment("Monitoring channel: lag warnings, crash notices, a daily report and a status",
-                "message that is edited regularly."));
-        entry("monitoring.enabled", true, comment("Switch the monitoring channel on or off."));
+        section("monitoring", comment("Settings of the monitoring channel."));
         entry("monitoring.channel_id", "", comment("ID of the monitoring channel. \"\" = monitoring off."));
-
-        section("monitoring.lag",
-                comment("Warning when the TPS stay below a threshold, all-clear when the lag is over."));
-        entry("monitoring.lag.enabled", true, null);
-        entry("monitoring.lag.tps_threshold", 15.0, comment("TPS below this value count as lag. 1 to 20."));
-        entry("monitoring.lag.duration_seconds", 60,
+        entry("monitoring.lag_tps_threshold", 15.0, comment("TPS below this value count as lag. 1 to 20."));
+        entry("monitoring.lag_duration_seconds", 60,
                 comment("Seconds the TPS must stay below the threshold. Minimum: 5."));
-        entry("monitoring.lag.cooldown_minutes", 5, comment("Minimum minutes between two warnings."));
-
-        section("monitoring.crash", comment(
-                "Notice with the reason when the server crashes.",
-                "A killed server process cannot be reported."));
-        entry("monitoring.crash.enabled", true, null);
-
-        section("monitoring.daily_report", comment("Report about the players since the last report."));
-        entry("monitoring.daily_report.enabled", true, null);
-        entry("monitoring.daily_report.time", "00:00", comment("Time of the report (HH:mm, server time zone)."));
-        entry("monitoring.daily_report.format", String.join("\n",
-                        "Players: **{unique_players}** ({new_players} new)",
-                        "Peak: **{peak_players}** online",
-                        "Play time: **{play_time}**",
-                        "Top players: {top_players}"),
-                comment("Text of the report (Discord Markdown). Placeholders:",
-                        "  {date}            day of the report",
-                        "  {unique_players}  distinct players",
-                        "  {new_players}     players who joined for the first time",
-                        "  {peak_players}    most players online at the same time",
-                        "  {play_time}       play time of all players together",
-                        "  {top_players}     the 3 players with the most play time"));
-
-        section("monitoring.status_message", comment("A message in the monitoring channel that is edited regularly."));
-        entry("monitoring.status_message.enabled", true, null);
-        entry("monitoring.status_message.interval_minutes", 5, comment("Minutes between updates. Minimum: 1."));
-        entry("monitoring.status_message.format", String.join("\n",
-                        "**{online}/{max}** players online: {players}",
-                        "TPS: {tps} · Uptime: {uptime}",
-                        "Version: {version}"),
-                comment("Text of the status message (Discord Markdown). Placeholders: as for the topic."));
-        entry("monitoring.status_message.pin", true,
-                comment("Pin the status message, so it stays visible (needs the \"Pin Messages\" permission)."));
-
-        section("notifications", comment("Direct messages to Discord users who subscribed with /mc subscribe to",
-                "server events (start, stop, maintenance) or to players coming online."));
-        entry("notifications.enabled", true, null);
-
-        section("messages", comment("Texts players and Discord members see. Discord texts: Discord Markdown and emojis",
-                "as :name:. Minecraft texts: formatting codes with & as in chat.minecraft_format."));
-        entry("messages.join", ":inbox_tray: **{player}** joined the game",
-                comment("Chat channel: a player joined. {player}"));
-        entry("messages.leave", ":outbox_tray: **{player}** left the game",
-                comment("Chat channel: a player left. {player}"));
-        entry("messages.death", ":skull: {message}",
-                comment("Chat channel: a player died. {message} = vanilla death message (name in bold), {player}"));
-        entry("messages.advancement", ":trophy: {message}",
-                comment("Chat channel: an advancement. {message} = vanilla wording, {player}, {advancement}"));
-        entry("messages.server_start", ":white_check_mark: Server started",
-                comment("Chat channel: the server started."));
-        entry("messages.server_stop", ":octagonal_sign: Server stopped",
-                comment("Chat channel: the server stopped."));
-        entry("messages.kick_not_linked", String.join("\n",
-                        "You are not whitelisted on this server.",
-                        "Link your Discord account by running /mc link {code} on the Discord server.",
-                        "The code is valid for {minutes} minutes."),
-                comment("Minecraft: kick message of unlinked players. {code}, {minutes}"));
-        entry("messages.kick_not_whitelisted", "You are not whitelisted on this server.",
-                comment("Minecraft: kick message of linked players without a whitelisted role."));
-        entry("messages.kick_no_longer_whitelisted", "You are no longer whitelisted on this server.",
-                comment("Minecraft: kick message when a player loses access."));
-        entry("messages.kick_maintenance", String.join("\n",
-                        "The server is in maintenance mode. Please try again later.",
-                        "Reason: {reason}"),
-                comment("Minecraft: kick message during maintenance. {reason}"));
-        entry("messages.link_dm", String.join("\n",
-                        "The Minecraft player **{player}** wants to link their account to yours.",
-                        "Your code: **{code}** (valid for {minutes} minutes)",
-                        "Enter it in Minecraft with `/discord confirm {code}`.",
-                        "Reply `refresh` to get a new code.",
-                        "If this wasn't you, ignore this message."),
-                comment("Discord DM with a link code. {player}, {code}, {minutes}"));
-        entry("messages.notify_server_start", ":white_check_mark: {Server} has started.",
-                comment("Notification DMs. {server} = \"the Minecraft server\" (with its name if set),",
-                        "{Server} = the same with a capital letter."));
-        entry("messages.notify_server_stop", ":octagonal_sign: {Server} is stopping.",
-                null);
-        entry("messages.notify_maintenance_on", ":wrench: {Server} is now in maintenance mode. Reason: {reason}",
-                comment("{reason}"));
-        entry("messages.notify_maintenance_off", ":white_check_mark: The maintenance mode of {server} is over.",
-                null);
-        entry("messages.notify_player_online", ":green_circle: **{player}** is now online on {server}.",
-                comment("{player}"));
-        entry("messages.lag_warning_title", ":warning: Lag: {tps} TPS",
-                comment("Monitoring channel. {tps}"));
-        entry("messages.lag_warning", "The TPS are below {threshold} for {duration}.",
-                comment("{threshold}, {duration}"));
-        entry("messages.lag_over_title", ":white_check_mark: Lag over: {tps} TPS",
-                comment("{tps}"));
-        entry("messages.lag_over", "The lag lasted {duration}.",
-                comment("{duration}"));
-        entry("messages.crash_title", ":boom: Server crashed",
-                null);
+        entry("monitoring.lag_cooldown_minutes", 5, comment("Minimum minutes between two lag warnings."));
+        entry("monitoring.daily_report_time", "00:00",
+                comment("Time of the daily report (HH:mm, server time zone)."));
+        entry("monitoring.status_message_interval_minutes", 5,
+                comment("Minutes between updates of the status message. Minimum: 1."));
 
         section("leaderboard", comment(
-                "Leaderboards from the vanilla statistics: /mc top <category> and /mc stats <player>.",
+                "Settings of the leaderboards.",
                 "",
                 "Every [[leaderboard.categories]] entry is one ranked statistic:",
                 "  stat   the statistic as scoreboard criterion, e.g.",
@@ -322,8 +344,7 @@ public final class ConfigLoader {
                 "         \"minecraft.killed:minecraft.zombie\" or \"minecraft.used:minecraft.diamond_pickaxe\"",
                 "  name   name shown in Discord (optional, default: the vanilla name of the statistic)",
                 "  order  \"highest\" = the highest value is ranked first, \"lowest\" = the lowest (e.g. deaths)",
-                "At most 25 categories. With \"categories = []\" the leaderboard commands are not available."));
-        entry("leaderboard.enabled", true, comment("Switch the leaderboard commands on or off."));
+                "At most 25 categories."));
         entry("leaderboard.size", 10, comment("Number of players shown by /mc top. Minimum: 1, maximum: "
                 + MAX_LEADERBOARD_SIZE + "."));
         entry("leaderboard.categories", List.of(
@@ -497,6 +518,20 @@ public final class ConfigLoader {
     }
 
     /**
+     * Joins a first line and further lines to a TOML comment, see {@link #comment(String...)}.
+     *
+     * @param first the first line
+     * @param more  the further lines
+     * @return the comment text
+     */
+    private static String comment(String first, String[] more) {
+        String[] lines = new String[more.length + 1];
+        lines[0] = first;
+        System.arraycopy(more, 0, lines, 1, more.length);
+        return comment(lines);
+    }
+
+    /**
      * A registered config entry.
      *
      * @param path         dotted path of the entry
@@ -524,86 +559,86 @@ public final class ConfigLoader {
                     new ModConfig.Discord(
                             token(),
                             new ModConfig.Status(
-                                    bool("discord.status.enabled"),
+                                    bool("features.bot_status.enabled"),
                                     activityType(),
-                                    integer("discord.status.interval_minutes", 1),
-                                    string("discord.status.format"),
-                                    string("discord.status.maintenance_format"))),
+                                    integer("bot_status.interval_minutes", 1),
+                                    string("texts.bot_status.format"),
+                                    string("texts.bot_status.maintenance_format"))),
                     new ModConfig.Chat(
-                            bool("chat.enabled"),
+                            bool("features.chat.enabled"),
                             channel("chat.channel_id", "chat bridge"),
                             webhook(),
-                            string("chat.minecraft_format"),
-                            string("chat.linked_name_format"),
+                            string("texts.chat.minecraft_format"),
+                            string("texts.chat.linked_name_format"),
                             string("chat.avatar_url"),
-                            string("chat.discord_format"),
+                            string("texts.chat.discord_format"),
                             new ModConfig.Events(
-                                    bool("chat.events.join"),
-                                    bool("chat.events.leave"),
-                                    bool("chat.events.death"),
-                                    bool("chat.events.advancement"),
-                                    bool("chat.events.server_start"),
-                                    bool("chat.events.server_stop")),
+                                    bool("features.chat.join"),
+                                    bool("features.chat.leave"),
+                                    bool("features.chat.death"),
+                                    bool("features.chat.advancement"),
+                                    bool("features.chat.server_start"),
+                                    bool("features.chat.server_stop")),
                             new ModConfig.Topic(
-                                    bool("chat.topic.enabled"),
-                                    integer("chat.topic.interval_minutes", 5),
-                                    string("chat.topic.format"),
-                                    string("chat.topic.maintenance_format")),
-                            bool("chat.mention_suggestions")),
+                                    bool("features.chat.topic"),
+                                    integer("chat.topic_interval_minutes", 5),
+                                    string("texts.topic.format"),
+                                    string("texts.topic.maintenance_format")),
+                            bool("features.chat.mention_suggestions")),
                     new ModConfig.Console(
-                            bool("console.enabled"),
+                            bool("features.console.enabled"),
                             channel("console.channel_id", "console channel"),
                             integer("console.batch_interval_ms", 1000),
                             permissions()),
-                    new ModConfig.Whitelist(bool("whitelist.enabled"), roleIds()),
-                    new ModConfig.Linking(bool("linking.enabled"), integer("linking.code_validity_minutes", 1),
-                            linkedRole()),
+                    new ModConfig.Whitelist(bool("features.whitelist.roles"), roleIds()),
+                    new ModConfig.Linking(bool("features.linking.enabled"),
+                            integer("linking.code_validity_minutes", 1), linkedRole()),
                     new ModConfig.Moderation(
-                            bool("moderation.enabled"),
+                            bool("features.moderation.enabled"),
                             optionalChannel("moderation.channel_id", "moderation channel"),
-                            new ModConfig.BanSync(bool("moderation.ban_sync.enabled"), discordAction())),
-                    new ModConfig.Maintenance(bool("maintenance.enabled")),
-                    new ModConfig.Info(bool("info.enabled")),
+                            new ModConfig.BanSync(bool("features.moderation.ban_sync"), discordAction())),
+                    new ModConfig.Maintenance(bool("features.maintenance.enabled")),
+                    new ModConfig.Info(bool("features.info.enabled")),
                     new ModConfig.Monitoring(
-                            bool("monitoring.enabled"),
+                            bool("features.monitoring.enabled"),
                             optionalChannel("monitoring.channel_id", "monitoring channel"),
-                            new ModConfig.Lag(bool("monitoring.lag.enabled"),
-                                    decimal("monitoring.lag.tps_threshold", 1, 20),
-                                    integer("monitoring.lag.duration_seconds", 5),
-                                    integer("monitoring.lag.cooldown_minutes", 0)),
-                            new ModConfig.Crash(bool("monitoring.crash.enabled")),
-                            new ModConfig.DailyReport(bool("monitoring.daily_report.enabled"),
-                                    time("monitoring.daily_report.time"),
-                                    string("monitoring.daily_report.format")),
-                            new ModConfig.StatusMessage(bool("monitoring.status_message.enabled"),
-                                    integer("monitoring.status_message.interval_minutes", 1),
-                                    string("monitoring.status_message.format"),
-                                    bool("monitoring.status_message.pin"))),
-                    new ModConfig.Notifications(bool("notifications.enabled")),
-                    new ModConfig.Leaderboard(bool("leaderboard.enabled"),
+                            new ModConfig.Lag(bool("features.monitoring.lag"),
+                                    decimal("monitoring.lag_tps_threshold", 1, 20),
+                                    integer("monitoring.lag_duration_seconds", 5),
+                                    integer("monitoring.lag_cooldown_minutes", 0)),
+                            new ModConfig.Crash(bool("features.monitoring.crash")),
+                            new ModConfig.DailyReport(bool("features.monitoring.daily_report"),
+                                    time("monitoring.daily_report_time"),
+                                    string("texts.monitoring.daily_report")),
+                            new ModConfig.StatusMessage(bool("features.monitoring.status_message"),
+                                    integer("monitoring.status_message_interval_minutes", 1),
+                                    string("texts.monitoring.status_message"),
+                                    bool("features.monitoring.pin_status_message"))),
+                    new ModConfig.Notifications(bool("features.notifications.enabled")),
+                    new ModConfig.Leaderboard(bool("features.leaderboard.enabled"),
                             integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()),
                     new ModConfig.Messages(
-                            string("messages.join"),
-                            string("messages.leave"),
-                            string("messages.death"),
-                            string("messages.advancement"),
-                            string("messages.server_start"),
-                            string("messages.server_stop"),
-                            string("messages.kick_not_linked"),
-                            string("messages.kick_not_whitelisted"),
-                            string("messages.kick_no_longer_whitelisted"),
-                            string("messages.kick_maintenance"),
-                            string("messages.link_dm"),
-                            string("messages.notify_server_start"),
-                            string("messages.notify_server_stop"),
-                            string("messages.notify_maintenance_on"),
-                            string("messages.notify_maintenance_off"),
-                            string("messages.notify_player_online"),
-                            string("messages.lag_warning_title"),
-                            string("messages.lag_warning"),
-                            string("messages.lag_over_title"),
-                            string("messages.lag_over"),
-                            string("messages.crash_title")));
+                            string("texts.chat.join"),
+                            string("texts.chat.leave"),
+                            string("texts.chat.death"),
+                            string("texts.chat.advancement"),
+                            string("texts.chat.server_start"),
+                            string("texts.chat.server_stop"),
+                            string("texts.linking.kick_not_linked"),
+                            string("texts.linking.kick_not_whitelisted"),
+                            string("texts.linking.kick_no_longer_whitelisted"),
+                            string("texts.maintenance.kick"),
+                            string("texts.linking.link_dm"),
+                            string("texts.notifications.server_start"),
+                            string("texts.notifications.server_stop"),
+                            string("texts.notifications.maintenance_on"),
+                            string("texts.notifications.maintenance_off"),
+                            string("texts.notifications.player_online"),
+                            string("texts.monitoring.lag_warning_title"),
+                            string("texts.monitoring.lag_warning"),
+                            string("texts.monitoring.lag_over_title"),
+                            string("texts.monitoring.lag_over"),
+                            string("texts.monitoring.crash_title")));
         }
 
         /**
@@ -626,7 +661,7 @@ public final class ConfigLoader {
          * @return the configured activity type, or the default if invalid
          */
         private ActivityType activityType() {
-            String path = "discord.status.type";
+            String path = "bot_status.type";
             if (config.get(path) instanceof String type) {
                 try {
                     return ActivityType.valueOf(type.trim().toUpperCase(Locale.ROOT));
@@ -722,7 +757,7 @@ public final class ConfigLoader {
          * @return the configured action, or the default if invalid
          */
         private ModConfig.DiscordAction discordAction() {
-            String path = "moderation.ban_sync.discord_action";
+            String path = "moderation.ban_sync_action";
             if (config.get(path) instanceof String action) {
                 try {
                     return ModConfig.DiscordAction.valueOf(action.trim().toUpperCase(Locale.ROOT));

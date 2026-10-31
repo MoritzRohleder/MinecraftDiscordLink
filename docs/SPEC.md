@@ -17,7 +17,7 @@ Can be reloaded at runtime (see section 3). Changes to the bot token and the
 `[server]` section require a server restart; everything else, including all
 channel IDs, is applied on reload.
 
-Every feature section has `enabled = true|false`. Switched off commands stay
+All switches are in `[features]`, grouped by feature. Switched off commands stay
 registered (all servers sharing a Discord server register the same commands)
 and answer `This feature is switched off on this server.`
 
@@ -26,178 +26,128 @@ the mod logs an **error** and the affected part stays inactive (no token: the
 whole mod; one channel: only that feature).
 
 ```toml
+# ---- This server and the bot (changes need a restart)
 [server]
-# Name of this server when several Minecraft servers share one Discord
-# server; "" = only one server. Changes need a restart.
-name = ""
-# Answers slash commands without a "server" option
-primary = true
+name = ""            # name when several servers share one Discord server
+primary = true       # answers slash commands without a "server" option
 
 [discord]
-# Bot token from the Discord Developer Portal. Keep it secret!
 token = ""
 
-[discord.status]
+# ---- All switches
+[features.chat]
 enabled = true
-# Activity type: "playing", "watching", "listening", "competing" or "custom"
-type = "playing"
-# Minutes between status updates
-interval_minutes = 5
-# Placeholders: see section 2
-format = "{online}/{max} online"
-# Status text while the maintenance mode is on
-maintenance_format = "Maintenance"
-
-[chat]
-enabled = true
-# ID of the chat channel
-channel_id = ""
-# "auto"  = the bot creates a webhook itself (needs "Manage Webhooks")
-# URL     = use this webhook
-# ""      = no webhook, plain bot messages
-webhook = "auto"
-# Discord -> Minecraft. Placeholders: {name}, {message}
-minecraft_format = "&9[Discord]&r {name}: {message}"
-# Name of linked users in Minecraft. Placeholders: {mc}, {discord}
-linked_name_format = "{mc} ({discord})"
-# Player head used as webhook avatar. Placeholders: {uuid}, {name}
-avatar_url = "https://vzge.me/face/256/{uuid}"
-# Minecraft -> Discord without webhook. Placeholders: {player}, {message}
-discord_format = "**{player}**: {message}"
-# Players get the Discord usernames as chat suggestions (@ + Tab)
-mention_suggestions = true
-
-[chat.events]
 join = true
 leave = true
 death = true
 advancement = true
 server_start = true
 server_stop = true
-
-[chat.topic]
+topic = true
+mention_suggestions = true
+[features.bot_status]
 enabled = true
-# Minutes between topic updates (Discord allows ~2 changes per 10 min)
-interval_minutes = 10
-# Placeholders: see section 2
+[features.console]
+enabled = true
+[features.linking]
+enabled = true       # off: the linked role is removed, the links are kept
+[features.whitelist]
+roles = true         # Discord roles on the whitelist
+[features.moderation]
+enabled = true       # the moderation commands; the log is always written
+ban_sync = false
+[features.maintenance]
+enabled = true
+[features.info]
+enabled = true       # /mc online, status, whois, playtime and /discord whois
+[features.leaderboard]
+enabled = true
+[features.notifications]
+enabled = true
+[features.monitoring]
+enabled = true
+lag = true
+crash = true
+daily_report = true
+status_message = true
+pin_status_message = true
+
+# ---- All texts (section 4g)
+[texts.chat]
+minecraft_format = "&9[Discord]&r {name}: {message}"
+discord_format = "**{player}**: {message}"
+linked_name_format = "{mc} ({discord})"
+join = ":inbox_tray: **{player}** joined the game"
+# leave, death, advancement, server_start, server_stop
+[texts.bot_status]
+format = "{online}/{max} online"
+maintenance_format = "Maintenance"
+[texts.topic]
 format = "{online}/{max} online | {unique_today} players today | Uptime: {uptime} | Last updated: {last_updated}"
-# Topic while the maintenance mode is on
 maintenance_format = "🔧 Maintenance | {online}/{max} online | Last updated: {last_updated}"
+[texts.linking]
+# kick_not_linked, kick_not_whitelisted, kick_no_longer_whitelisted, link_dm
+[texts.maintenance]
+# kick
+[texts.notifications]
+# server_start, server_stop, maintenance_on, maintenance_off, player_online
+[texts.monitoring]
+# lag_warning_title, lag_warning, lag_over_title, lag_over, crash_title,
+# daily_report, status_message
+
+# ---- Settings per feature
+[bot_status]
+type = "playing"     # "playing", "watching", "listening", "competing", "custom"
+interval_minutes = 5
+
+[chat]
+channel_id = ""
+webhook = "auto"     # "auto", a webhook URL or "" for plain bot messages
+avatar_url = "https://vzge.me/face/256/{uuid}"
+topic_interval_minutes = 10
 
 [console]
-enabled = true
-# ID of the console channel
 channel_id = ""
-# Milliseconds between batched console messages
 batch_interval_ms = 2000
-
-# One entry per authorized Discord role or user (IDs are unique across both).
-# mode = "whitelist": only the listed commands are allowed
-# mode = "blacklist": everything except the listed commands is allowed
-# An entry matches a command and all its subcommands:
-#   "gamerule"                  -> every gamerule command
-#   "gamerule doDaylightCycle"  -> only this subcommand
-# Multiple matching entries: union of allowed commands, explicit denies win.
-[[console.permissions]]
-id = ""
-mode = "blacklist"
-commands = ["stop"]
+# [[console.permissions]] entries: id, mode ("whitelist"/"blacklist"), commands
+#   An entry matches a command and all its subcommands ("gamerule" or
+#   "gamerule doDaylightCycle"); several entries combine, explicit denies win.
 
 [whitelist]
-# Discord roles on the whitelist: while the whitelist is on (/whitelist on),
-# linked members with one of these roles may join, in addition to operators
-# and the players on the vanilla whitelist. Changed by /mcadmin rolewhitelist.
-enabled = true
-# Empty = only the vanilla whitelist counts
-role_ids = []
+role_ids = []        # also changed by /mcadmin rolewhitelist add|remove
 
 [linking]
-enabled = true
-# Validity of link codes in minutes
 code_validity_minutes = 60
-# Role for members with a linked account:
-# "auto"  = the bot creates and uses a role named "Linked Account"
-# role ID = use this role
-# ""      = no role
-linked_role = "auto"
+linked_role = "auto" # "auto" (role "Linked Account"), a role ID or ""
 
 [moderation]
-# The moderation commands of the mod; the log is always written
-enabled = true
-# Channel for the moderation log, optional ("" = only the log file);
-# shared by all servers for bans on all servers
-channel_id = ""
-
-[moderation.ban_sync]
-# Bans across Minecraft and Discord for linked accounts (opt-in)
-enabled = false
-# What a Minecraft ban does to the linked Discord account: "ban" or "kick"
-discord_action = "ban"
-
-[maintenance]
-# The maintenance commands
-enabled = true
-
-[info]
-# /mc online, /mc status, /mc whois, /mc playtime and /discord whois
-enabled = true
+channel_id = ""      # optional; the same on all servers for bans on all servers
+ban_sync_action = "ban"  # what a Minecraft ban does in Discord: "ban" or "kick"
 
 [monitoring]
-enabled = true
-# ID of the monitoring channel ("" = monitoring off)
 channel_id = ""
-
-[monitoring.lag]
-enabled = true
-tps_threshold = 15.0     # 1 to 20
-duration_seconds = 60    # minimum 5
-cooldown_minutes = 5
-
-[monitoring.crash]
-enabled = true
-
-[monitoring.daily_report]
-enabled = true
-time = "00:00"           # HH:mm, server time zone
-# Placeholders: {date}, {unique_players}, {new_players}, {peak_players},
-# {play_time}, {top_players}
-format = "Players: **{unique_players}** ({new_players} new)\nPeak: **{peak_players}** online\nPlay time: **{play_time}**\nTop players: {top_players}"
-
-[monitoring.status_message]
-enabled = true
-interval_minutes = 5     # minimum 1
-# Placeholders: see section 2
-format = "**{online}/{max}** players online: {players}\nTPS: {tps} · Uptime: {uptime}\nVersion: {version}"
-# Pin the status message (needs "Pin Messages")
-pin = true
-
-[notifications]
-enabled = true
+lag_tps_threshold = 15.0       # 1 to 20
+lag_duration_seconds = 60      # minimum 5
+lag_cooldown_minutes = 5
+daily_report_time = "00:00"    # HH:mm, server time zone
+status_message_interval_minutes = 5
 
 [leaderboard]
-enabled = true
-# Number of players shown by /mc top (1-25)
-size = 10
-
-# One entry per ranked statistic (at most 25), written as scoreboard criterion.
-# name:  shown in Discord, optional (default: the vanilla name of the statistic)
-# order: "highest" (default) or "lowest" = the lowest value is ranked first
-# With "categories = []" the leaderboard commands are not registered.
+size = 10            # players shown by /mc top, 1 to 25
+# One [[leaderboard.categories]] entry per statistic (at most 25), written as
+# scoreboard criterion; name optional; order "highest" (default) or "lowest".
 [[leaderboard.categories]]
 stat = "minecraft.custom:minecraft.play_time"
 name = "Play time"
 order = "highest"
-
 [[leaderboard.categories]]
 stat = "minecraft.custom:minecraft.deaths"
 name = "Deaths"
 order = "lowest"
-
-# Texts players and Discord members see; see section 4g
-[messages]
-join = ":inbox_tray: **{player}** joined the game"
-# ... one entry per text
 ```
+
+The file is ordered: this server and the bot, then all switches
+(`[features]`), all texts (`[texts]`), then the settings per feature.
 
 ## 2. Placeholders for topic and bot status
 
@@ -235,6 +185,7 @@ join = ":inbox_tray: **{player}** joined the game"
 | `/discord maintenance off [reason]` | admin | Switch the maintenance mode off |
 | `/discord maintenance status` | admin | Show the maintenance mode |
 | `/discord reload` | admin | Reload config |
+| `/discord features` | admin | Show which features are switched on (section 4h) |
 
 Admin = OP level 4 **or** permission node `minecraftdiscordlink.admin`.
 
@@ -257,6 +208,7 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mc unlink` | everyone | Remove own link |
 | `/mcadmin link <player> <user>` | Administrator | Link accounts manually |
 | `/mcadmin reload` | Administrator | Reload config |
+| `/mcadmin features` | Administrator | Show which features are switched on (section 4h) |
 | `/mcadmin kick <player> <reason>` | Administrator | Kick an online player |
 | `/mcadmin ban <player> <reason> [duration] [delete_messages] [all_servers]` | Administrator | Ban a player, permanently without duration; a banned player gets the new ban |
 | `/mcadmin unban <player> <reason> [all_servers]` | Administrator | Lift a ban |
@@ -292,7 +244,7 @@ the server's integration settings.
 Chat messages are sent via webhook as the player. Discord Markdown in chat
 messages is allowed (`**bold**` is shown bold). Events are sent via webhook as
 **embeds** with a colored bar and an emoji. The texts are configurable in
-`[messages]` (section 4g); the table shows the defaults.
+`[texts]` (section 4g); the table shows the defaults.
 
 Forwarded: public chat, `/say` and `/me` (vanilla; private messages such as
 `/msg` and `/teammsg` are not forwarded). Display:
@@ -320,7 +272,7 @@ allow "discord" in webhook names; player names containing "discord" or
 Server start/stop are sent by the bot itself (bot name and avatar).
 Without a webhook (`webhook = ""`) the bot sends all embeds itself.
 
-Webhook name: the player name. For linked players `linked_name_format` is used
+Webhook name: the player name. For linked players `texts.chat.linked_name_format` is used
 (default `{mc} ({discord})`), for chat messages and events alike.
 
 Webhook avatar: player head from an external service. The URL is configurable
@@ -445,7 +397,7 @@ Minecraft `whois`: `Steve is linked to @steve (online now)` /
   the vanilla whitelist and linked members with a whitelisted Discord role
   may join. The vanilla whitelist is meant for players without a linked
   Discord account.
-- Whitelisted roles count when `whitelist.enabled = true` and at least one
+- Whitelisted roles count when `features.whitelist.roles = true` and at least one
   role is configured; otherwise only the vanilla whitelist counts.
 - `rolewhitelist add|remove` write `whitelist.role_ids` into the config
   file: the file is read again, only this value is changed, values and
@@ -478,13 +430,13 @@ vanilla whitelist stores no source).
 Admins in Minecraft see Discord actions like vanilla commands of other
 operators: `[@anedhel: Banned Steve: Griefing]` (gray, italic).
 
-### Ban sync (`moderation.ban_sync`)
+### Ban sync (`features.moderation.ban_sync`)
 
 Opt-in, only for linked accounts:
 
 | Action | Effect on the other side |
 |---|---|
-| Minecraft ban (any source, also temporary) | `discord_action = "ban"`: the Discord account is banned; `"kick"`: it is only removed from the Discord server and can come back with an invite |
+| Minecraft ban (any source, also temporary) | `moderation.ban_sync_action = "ban"`: the Discord account is banned; `"kick"`: it is only removed from the Discord server and can come back with an invite |
 | Minecraft unban | the Discord ban is lifted (with `"ban"`) |
 | Temporary ban expires | the Discord ban is lifted |
 | Discord ban (by anyone, also via the Discord menu) | the Minecraft account is banned, source the Discord moderator, reason the Discord ban reason (`Banned on Discord` if none) |
@@ -550,31 +502,31 @@ command; `page` chooses the first page shown.
   they are not whitelisted, and role changes do not kick them. Bans still
   apply.
 - Switching it on kicks all other online players. Kick and login message:
-  `messages.kick_maintenance` (default `The server is in maintenance mode.
+  `texts.maintenance.kick` (default `The server is in maintenance mode.
   Please try again later.` and `Reason: …`).
 - By default it ends with the next restart, also when switched on from
   Minecraft; with `keep_after_restart:True` / `/discord maintenance on true`
   it is stored in `state.json` and active again after a restart.
 - The reason is optional. Switching on and off is logged in the moderation
   log (`MAINTENANCE ON`, `MAINTENANCE OFF`).
-- While it is on, the channel topic uses `chat.topic.maintenance_format`
+- While it is on, the channel topic uses `texts.topic.maintenance_format`
   (default `🔧 Maintenance | {online}/{max} online | Last updated:
-  {last_updated}`) and the bot status `discord.status.maintenance_format`
+  {last_updated}`) and the bot status `texts.bot_status.maintenance_format`
   (default `Maintenance`); both are updated immediately when it changes.
 
 ## 4d. Monitoring channel
 
 All messages are embeds in `monitoring.channel_id` with a time stamp; the
 channel can be changed by a reload. The texts of the lag and crash messages
-are in `[messages]`.
+are in `[texts.monitoring]`.
 
 | Message | Content |
 |---|---|
-| Lag warning | Yellow, `⚠️ Lag: 11.2 TPS`, "The TPS are below 15.0 for 1m.", lowest TPS and MSPT. Sent when the TPS stay below `tps_threshold` for `duration_seconds` (measured every 5 seconds), at most once per `cooldown_minutes` |
+| Lag warning | Yellow, `⚠️ Lag: 11.2 TPS`, "The TPS are below 15.0 for 1m.", lowest TPS and MSPT. Sent when the TPS stay below `lag_tps_threshold` for `lag_duration_seconds` (measured every 5 seconds), at most once per `lag_cooldown_minutes` |
 | All-clear | Green, `✅ Lag over: 20.0 TPS`, how long the lag lasted and the lowest TPS; always follows its warning |
 | Crash notice | Red, `💥 Server crashed`, title and exception of the crash report (no console lines: they are in the console channel and the crash report); sent before the server stops (a killed process cannot be reported) |
-| Daily report | Blurple, `📅 Daily report · 2026-10-30`, `format` with the numbers since the last report |
-| Status message | One message, edited every `interval_minutes`: `🟢 Server online` (green) or `🔧 Server in maintenance` (blurple) with `format`; `🔴 Server offline` when the server stops. Updated at once on reload and maintenance changes; a deleted message is sent again. Pinned by the bot with `pin = true` (needs *Pin Messages*) |
+| Daily report | Blurple, `📅 Daily report · 2026-10-30`, `texts.monitoring.daily_report` with the numbers since the last report, at `daily_report_time` |
+| Status message | One message, edited every `status_message_interval_minutes`: `🟢 Server online` (green) or `🔧 Server in maintenance` (blurple) with `texts.monitoring.status_message`; `🔴 Server offline` when the server stops. Updated at once on reload and maintenance changes; a deleted message is sent again. Pinned by the bot with `features.monitoring.pin_status_message` (needs *Pin Messages*) |
 
 Daily report numbers are collected since the last report and stored in
 `minecraftdiscordlink/report.json`, so a restart keeps them; a report missed
@@ -598,7 +550,7 @@ The ID of the status message is stored in `state.json` (`status_message`).
   (ephemeral). DMs are embeds with a footer how to unsubscribe, e.g.
   `🟢 **Steve** is now online on the Minecraft server.`
 - Users who do not accept DMs are skipped (logged as warning); their
-  subscriptions stay. With `notifications.enabled = false` nothing is sent
+  subscriptions stay. With `features.notifications.enabled = false` nothing is sent
   and the commands answer that notifications are switched off.
 - Stored in `minecraftdiscordlink/subscriptions.json`
   (`{"subscriptions": [{"discord_id": "…", "events": ["server_start"],
@@ -626,7 +578,7 @@ The ID of the status message is stored in `state.json` (`status_message`).
   **Survival**`) and in the unsubscribe hint (`server:Survival`).
 - Links, subscriptions, the maintenance mode and all other data are per
   server. The linked role `auto` is named `Linked Account (<name>)`.
-- The bot status is set by every server with `discord.status.enabled`; for
+- The bot status is set by every server with `features.bot_status.enabled`; for
   several servers enable it on one server only, e.g. with the text
   "Watching several servers" (the servers do not communicate).
 - The primary server is set by each server itself (`server.primary`).
@@ -634,34 +586,60 @@ The ID of the status message is stored in `state.json` (`status_message`).
   unanswered; with two, both run them (e.g. a ban on both servers).
 - Bans on all servers: see section 4b.
 
-## 4g. Configurable texts (`[messages]`)
+## 4g. Configurable texts (`[texts]`)
 
-Discord texts use Discord Markdown and emoji shortcodes (`:skull:`),
-Minecraft texts formatting codes with `&`. Placeholder values are inserted
-as plain text.
+All texts players and Discord members see are in `[texts]`, grouped by
+feature. Discord texts use Discord Markdown and emoji shortcodes
+(`:skull:`), Minecraft texts formatting codes with `&` (marked *MC* below).
+Placeholder values are inserted as plain text.
 
 | Key | Where | Placeholders |
 |---|---|---|
-| `join`, `leave` | chat channel | `{player}` |
-| `death` | chat channel | `{message}` (vanilla death message, name in bold), `{player}` |
-| `advancement` | chat channel | `{message}` (vanilla wording), `{player}`, `{advancement}` |
-| `server_start`, `server_stop` | chat channel | – |
-| `kick_not_linked` | Minecraft kick | `{code}`, `{minutes}` |
-| `kick_not_whitelisted`, `kick_no_longer_whitelisted` | Minecraft kick | – |
-| `kick_maintenance` | Minecraft kick | `{reason}` |
-| `link_dm` | Discord DM | `{player}`, `{code}`, `{minutes}` |
-| `notify_server_start`, `notify_server_stop`, `notify_maintenance_off` | DM | `{server}`, `{Server}` |
-| `notify_maintenance_on` | DM | `{server}`, `{Server}`, `{reason}` |
-| `notify_player_online` | DM | `{player}`, `{server}`, `{Server}` |
-| `lag_warning_title`, `lag_over_title` | monitoring channel | `{tps}` |
-| `lag_warning` | monitoring channel | `{threshold}`, `{duration}` |
-| `lag_over` | monitoring channel | `{duration}` |
-| `crash_title` | monitoring channel | – |
+| `texts.chat.minecraft_format` (*MC*) | Discord message in Minecraft | `{name}`, `{message}` |
+| `texts.chat.discord_format` | Minecraft message without webhook | `{player}`, `{message}` |
+| `texts.chat.linked_name_format` | name of linked players | `{mc}`, `{discord}` |
+| `texts.chat.join`, `leave` | chat channel | `{player}` |
+| `texts.chat.death` | chat channel | `{message}` (vanilla death message, name in bold), `{player}` |
+| `texts.chat.advancement` | chat channel | `{message}` (vanilla wording), `{player}`, `{advancement}` |
+| `texts.chat.server_start`, `server_stop` | chat channel | – |
+| `texts.bot_status.format`, `maintenance_format` | bot status | section 2 |
+| `texts.topic.format`, `maintenance_format` | channel topic | section 2 |
+| `texts.linking.kick_not_linked` (*MC*) | kick | `{code}`, `{minutes}` |
+| `texts.linking.kick_not_whitelisted`, `kick_no_longer_whitelisted` (*MC*) | kick | – |
+| `texts.linking.link_dm` | DM with a link code | `{player}`, `{code}`, `{minutes}` |
+| `texts.maintenance.kick` (*MC*) | kick during maintenance | `{reason}` |
+| `texts.notifications.server_start`, `server_stop`, `maintenance_off` | DM | `{server}`, `{Server}` |
+| `texts.notifications.maintenance_on` | DM | `{server}`, `{Server}`, `{reason}` |
+| `texts.notifications.player_online` | DM | `{player}`, `{server}`, `{Server}` |
+| `texts.monitoring.lag_warning_title`, `lag_over_title` | monitoring channel | `{tps}` |
+| `texts.monitoring.lag_warning` | monitoring channel | `{threshold}`, `{duration}` |
+| `texts.monitoring.lag_over` | monitoring channel | `{duration}` |
+| `texts.monitoring.crash_title` | monitoring channel | – |
+| `texts.monitoring.daily_report` | monitoring channel | `{date}`, `{unique_players}`, `{new_players}`, `{peak_players}`, `{play_time}`, `{top_players}` |
+| `texts.monitoring.status_message` | monitoring channel | section 2 |
 
 `{server}` is `the Minecraft server` (with `server.name`: `the Minecraft
 server **Survival**`), `{Server}` the same with a capital letter. A missing
 reason is shown as `no reason given`. Command answers and errors are not
 configurable.
+
+## 4h. Feature overview and missing permissions
+
+- `/mcadmin features` (Discord) and `/discord features` (Minecraft, admins)
+  list every feature and its parts as switched on (✅/✔) or off (❌/✘), with a
+  note when a switched on feature cannot work, e.g. `no channel configured`
+  or `no roles configured`.
+- A missing bot permission is logged as an error once per permission and
+  place, e.g. `The bot needs the 'Pin Messages' permission in the monitoring
+  channel for pinning the status message.`, and posted once as
+  `⚠️ Missing permission` in the monitoring channel (also the warnings from
+  before the monitoring channel was ready). Covered: Manage Webhooks, Manage
+  Channels (topic), Manage Roles, Add Reactions, Pin Messages, Ban/Kick
+  Members and View Audit Log.
+- A reload that moves the chat or console channel to another Discord server
+  works for the chat and the console at once, but slash commands, roles and
+  the ban sync stay on the previous Discord server until a restart; the mod
+  logs a warning.
 
 ## 5. Data storage
 
@@ -703,7 +681,7 @@ Pending link codes are kept in memory only and are lost on restart.
   whitelisted role too. Bans take priority and keep their message; the
   maintenance mode overrides the whitelist.
 - Kick messages: unlinked players get the message with a link code (only
-  with `linking.enabled`); linked players without a whitelisted role, and
+  with `features.linking.enabled`); linked players without a whitelisted role, and
   everyone while Discord is unavailable, get "You are not whitelisted on
   this server."
 - Mention suggestions: players get the usernames of all Discord members as
