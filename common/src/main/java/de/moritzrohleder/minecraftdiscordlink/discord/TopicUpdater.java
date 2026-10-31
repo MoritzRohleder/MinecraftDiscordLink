@@ -26,7 +26,8 @@ final class TopicUpdater extends PeriodicUpdater {
     /** Discord's maximum length of a channel topic. */
     private static final int MAX_LENGTH = 1024;
 
-    private final StandardGuildMessageChannel channel;
+    /** The chat channel; changed when a reload changes the chat channel. */
+    private volatile StandardGuildMessageChannel channel;
     /** Whether the missing permission has already been logged. */
     private boolean permissionErrorLogged;
 
@@ -42,6 +43,15 @@ final class TopicUpdater extends PeriodicUpdater {
     TopicUpdater(StandardGuildMessageChannel channel, MinecraftServer server, Instant startTime, PlayerStats stats,
                  ScheduledExecutorService executor) {
         super(server, startTime, stats, executor);
+        this.channel = channel;
+    }
+
+    /**
+     * Uses another chat channel, after a reload changed it.
+     *
+     * @param channel the new chat channel
+     */
+    void setChannel(StandardGuildMessageChannel channel) {
         this.channel = channel;
     }
 

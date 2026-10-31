@@ -3,6 +3,7 @@ package de.moritzrohleder.minecraftdiscordlink.discord;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import de.moritzrohleder.minecraftdiscordlink.console.ConsoleCapture;
 import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
@@ -55,8 +56,8 @@ import java.util.concurrent.TimeoutException;
  * and the server has started, the "Server started" message is sent and the status updates begin, no matter which
  * of the two happens first.
  * <p>
- * All Discord work runs on a single daemon thread owned by this class. The bot token and the channel IDs are taken
- * from the config at construction and do not change until the next server start.
+ * All Discord work runs on a single daemon thread owned by this class. The bot token is taken from the config at
+ * construction and does not change until the next server start; the channels follow config reloads.
  */
 public final class DiscordBot {
 
@@ -79,8 +80,10 @@ public final class DiscordBot {
 
 
     private final String token;
-    private final OptionalLong chatChannelId;
-    private final OptionalLong consoleChannelId;
+    /** The chat channel; changed by a reload. */
+    private volatile OptionalLong chatChannelId;
+    /** The console channel; changed by a reload. */
+    private volatile OptionalLong consoleChannelId;
     private final MinecraftServer server;
     private final Instant startTime;
     private final PlayerStats stats;
@@ -96,6 +99,10 @@ public final class DiscordBot {
     private volatile JDA jda;
     /** The chat bridge, set once the bot is ready if the chat channel is available. */
     private volatile ChatBridge chatBridge;
+    /** The console channel, set once the bot is ready if the console channel is available. */
+    private volatile ConsoleChannel consoleChannel;
+    /** The topic updater, set once the bot is ready and the server has started if the chat channel has a topic. */
+    private volatile TopicUpdater topicUpdater;
     /** The Discord side of the linking, set once the bot is ready if one of the channels is available. */
     private volatile AccountLinking accountLinking;
     /** The slash commands, set once the bot is ready if one of the channels is available. */
@@ -115,7 +122,7 @@ public final class DiscordBot {
      * Creates the bot without connecting yet, see {@link #connect()}.
      *
      * @param token         the bot token
-     * @param config        the config at server start, for the channel IDs
+     * @param config        the config at server start, for the first channel IDs
      * @param server        the starting server
      * @param startTime     when the server was started, for {@code {uptime}}
      * @param stats         the player statistics, for the unique player placeholders
@@ -210,20 +217,47 @@ public final class DiscordBot {
         Constants.LOG.info("Connected to Discord as {}", jda.getSelfUser().getName());
         checkChannel(chatChannelId, "chat channel", "chat bridge");
         checkChannel(consoleChannelId, "console channel", "console channel");
+        setUpChat();
+        setUpConsole();
+        notifications = new Notifications(jda, subscriptions, linking.links());
+        ModerationChannel moderationChannel = new ModerationChannel(jda);
+        moderation.log().setListener(moderationChannel::send);
+        setUpGuildFeatures();
+    }
+
+    /**
+     * Sets up the chat bridge for the current chat channel, if it is available.
+     */
+    private void setUpChat() {
         chatChannel().ifPresent(channel -> {
             ChatBridge bridge = new ChatBridge(jda, channel, server, linking);
             bridge.setUpWebhook();
             jda.addEventListener(bridge);
             chatBridge = bridge;
         });
+    }
+
+    /**
+     * Sets up the console channel for the current console channel ID, if it is available.
+     */
+    private void setUpConsole() {
         channel(consoleChannelId).ifPresent(channel -> {
             ConsoleChannel console = new ConsoleChannel(channel, server, executor);
             jda.addEventListener(console);
             console.start();
+            consoleChannel = console;
         });
-        notifications = new Notifications(jda, subscriptions, linking.links());
-        ModerationChannel moderationChannel = new ModerationChannel(jda);
-        moderation.log().setListener(moderationChannel::send);
+    }
+
+    /**
+     * Sets up the features that need the Discord server: account linking, slash commands and ban sync. The Discord
+     * server is the one of the chat or console channel; without both these features stay inactive until a reload
+     * configures a channel.
+     */
+    private void setUpGuildFeatures() {
+        if (accountLinking != null) {
+            return;
+        }
         guild().ifPresent(guild -> {
             AccountLinking accounts = new AccountLinking(jda, guild, server, linking, state, executor);
             SlashCommands commands = new SlashCommands(guild, linking, server, startTime, stats, moderation,
@@ -282,15 +316,74 @@ public final class DiscordBot {
         StatusUpdater status = new StatusUpdater(jda, server, startTime, stats, executor);
         status.start();
         maintenance.addListener(change -> status.updateNow());
-        chatChannel().ifPresent(channel -> {
-            if (channel instanceof StandardGuildMessageChannel topicChannel) {
-                TopicUpdater topic = new TopicUpdater(topicChannel, server, startTime, stats, executor);
-                topic.start();
-                maintenance.addListener(change -> topic.updateNow());
-            } else {
-                Constants.LOG.error("The chat channel has no topic. The topic updates stay inactive.");
+        setUpTopic();
+    }
+
+    /**
+     * Starts the topic updates for the current chat channel, or moves them to it after a reload.
+     */
+    private void setUpTopic() {
+        Optional<GuildMessageChannel> chat = chatChannel();
+        if (chat.isEmpty()) {
+            return;
+        }
+        if (!(chat.get() instanceof StandardGuildMessageChannel topicChannel)) {
+            Constants.LOG.error("The chat channel has no topic. The topic updates stay inactive.");
+            return;
+        }
+        TopicUpdater existing = topicUpdater;
+        if (existing != null) {
+            existing.setChannel(topicChannel);
+            existing.updateNow();
+            return;
+        }
+        TopicUpdater topic = new TopicUpdater(topicChannel, server, startTime, stats, executor);
+        topic.start();
+        maintenance.addListener(change -> topic.updateNow());
+        topicUpdater = topic;
+    }
+
+    /**
+     * Applies changed chat and console channel IDs after a reload: the chat bridge, the topic and the console
+     * channel move to the new channels. Runs on the bot's executor.
+     */
+    private void applyChannels() {
+        OptionalLong chat = ConfigManager.get().chat().channelId();
+        if (!chat.equals(chatChannelId)) {
+            chatChannelId = chat;
+            checkChannel(chatChannelId, "chat channel", "chat bridge");
+            ChatBridge old = chatBridge;
+            if (old != null) {
+                old.deactivate();
+                jda.removeEventListener(old);
+                chatBridge = null;
             }
-        });
+            setUpChat();
+            synchronized (this) {
+                if (ready && serverStarted) {
+                    setUpTopic();
+                }
+            }
+        } else if (chatBridge != null) {
+            // chat.webhook may have changed
+            chatBridge.setUpWebhook();
+        }
+        OptionalLong console = ConfigManager.get().console().channelId();
+        if (!console.equals(consoleChannelId)) {
+            consoleChannelId = console;
+            checkChannel(consoleChannelId, "console channel", "console channel");
+            ConsoleChannel old = consoleChannel;
+            if (old != null) {
+                old.stop();
+                jda.removeEventListener(old);
+                consoleChannel = null;
+            }
+            if (console.isPresent()) {
+                ConsoleCapture.install();
+            }
+            setUpConsole();
+        }
+        setUpGuildFeatures();
     }
 
     /**
@@ -321,15 +414,14 @@ public final class DiscordBot {
     }
 
     /**
-     * Applies a reloaded config: sets up the chat webhook again, as {@code chat.webhook} may have changed, and
-     * applies the linked role and the whitelist roles and registers the slash commands again for the leaderboard
-     * categories.
+     * Applies a reloaded config: moves the chat bridge, the topic and the console to changed channels (or sets up
+     * the chat webhook again, as {@code chat.webhook} may have changed), applies the linked role and the whitelist
+     * roles, registers the slash commands again and updates the status message.
      */
     public void onConfigReloaded() {
-        ChatBridge bridge = chatBridge;
-        if (bridge != null) {
+        if (isReady()) {
             try {
-                executor.execute(bridge::setUpWebhook);
+                executor.execute(this::applyChannels);
             } catch (RejectedExecutionException ignored) {
                 // The bot is shutting down
             }

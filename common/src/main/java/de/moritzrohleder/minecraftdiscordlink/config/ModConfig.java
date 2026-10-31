@@ -329,8 +329,9 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
      * @param enabled         whether the status message is shown
      * @param intervalMinutes minutes between updates, at least 1
      * @param format          text with placeholders such as {@code {players}}
+     * @param pin             whether the bot pins the status message
      */
-    public record StatusMessage(boolean enabled, int intervalMinutes, String format) {
+    public record StatusMessage(boolean enabled, int intervalMinutes, String format, boolean pin) {
     }
 
     /**

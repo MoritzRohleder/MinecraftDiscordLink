@@ -43,6 +43,8 @@ final class ConsoleChannel extends ListenerAdapter {
 
     /** Whether the missing reaction permission has already been logged. */
     private volatile boolean reactionErrorLogged;
+    /** Whether this channel was replaced by another one after a config reload. */
+    private volatile boolean stopped;
 
     /**
      * Creates the console channel; call {@link #start()} to begin sending console output and register it as JDA
@@ -66,6 +68,14 @@ final class ConsoleChannel extends ListenerAdapter {
     }
 
     /**
+     * Stops sending console output and running commands, e.g. when the console channel was changed by a reload.
+     * Remove this as JDA event listener as well.
+     */
+    void stop() {
+        stopped = true;
+    }
+
+    /**
      * Runs commands written in the console channel.
      *
      * @param event the received message
@@ -74,7 +84,7 @@ final class ConsoleChannel extends ListenerAdapter {
     public void onMessageReceived(MessageReceivedEvent event) {
         Message message = event.getMessage();
         Member member = event.getMember();
-        if (!ConfigManager.get().console().enabled()
+        if (stopped || !ConfigManager.get().console().enabled()
                 || event.getChannel().getIdLong() != channel.getIdLong() || member == null || event.getAuthor().isBot()
                 || message.isWebhookMessage() || message.getType().isSystem()) {
             return;
@@ -121,6 +131,9 @@ final class ConsoleChannel extends ListenerAdapter {
      * Sends the captured console output and schedules the next batch.
      */
     private void flush() {
+        if (stopped) {
+            return;
+        }
         try {
             List<String> lines = ConsoleCapture.drain();
             // Switched off: the lines are dropped, so they do not pile up

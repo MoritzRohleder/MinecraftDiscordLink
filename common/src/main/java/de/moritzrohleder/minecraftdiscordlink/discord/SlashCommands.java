@@ -22,7 +22,10 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.MessageEmbed;
 import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.events.interaction.command.CommandAutoCompleteInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
 import net.dv8tion.jda.api.interactions.commands.Command;
@@ -63,6 +66,13 @@ import java.util.function.Supplier;
  * the footer. The leaderboard categories are suggested by the answering server (autocomplete), as they may differ.
  */
 final class SlashCommands extends ListenerAdapter {
+
+    /** Prefix of the IDs of the page buttons. */
+    private static final String BUTTON_PREFIX = "mdl|";
+    /** Name of the ban list in button IDs. */
+    private static final String BANLIST = "bans";
+    /** Name of the whitelist in button IDs. */
+    private static final String WHITELIST = "whitelist";
 
     /** Delay before the primary server answers commands no other server answered, in milliseconds. */
     private static final long FALLBACK_DELAY_MS = 2000;
@@ -151,7 +161,8 @@ final class SlashCommands extends ListenerAdapter {
                                 new SubcommandData("unban", "Lift the ban of a player")
                                         .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                         .addOption(OptionType.STRING, "reason", "Why the ban is lifted", true),
-                                new SubcommandData("banlist", "List the banned players"))
+                                new SubcommandData("banlist", "List the banned players")
+                                        .addOptions(pageOption()))
                         .addSubcommandGroups(
                                 new SubcommandGroupData("whitelist", "The vanilla whitelist").addSubcommands(
                                         new SubcommandData("add", "Add a player to the whitelist")
@@ -160,7 +171,8 @@ final class SlashCommands extends ListenerAdapter {
                                         new SubcommandData("remove", "Remove a player from the whitelist")
                                                 .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                                 .addOption(OptionType.STRING, "reason", "Why", false),
-                                        new SubcommandData("list", "List the whitelisted players"),
+                                        new SubcommandData("list", "List the whitelisted players")
+                                                .addOptions(pageOption()),
                                         new SubcommandData("on", "Switch the whitelist on")
                                                 .addOption(OptionType.STRING, "reason", "Why", true),
                                         new SubcommandData("off", "Switch the whitelist off")
@@ -501,10 +513,15 @@ final class SlashCommands extends ListenerAdapter {
                 deferred(event, onServerThread(() -> answer(add ? moderation.roleWhitelistAdd(roleId, scope)
                         : moderation.roleWhitelistRemove(roleId, scope))));
             }
-            case "mcadmin banlist" -> deferred(event, onServerThread(() ->
-                    List.of(CommandEmbeds.banlist(moderation.bans()))));
-            case "mcadmin whitelist list" -> deferred(event, onServerThread(() ->
-                    List.of(CommandEmbeds.whitelist(moderation.whitelisted(), moderation.whitelistOn()))));
+            case "mcadmin banlist", "mcadmin whitelist list" -> {
+                String list = command.equals("mcadmin banlist") ? BANLIST : WHITELIST;
+                int page = Optional.ofNullable(event.getOption("page", OptionMapping::getAsInt)).orElse(1) - 1;
+                event.deferReply().queue();
+                onServerThread(() -> List.of(listPage(list, page))).thenAccept(embeds -> event.getHook()
+                        .sendMessageEmbeds(tag(embeds)).setComponents(pageButtons(list, page,
+                                listSize(list), event.getUser().getIdLong()))
+                        .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue());
+            }
             case "mcadmin rolewhitelist status" -> deferred(event, onServerThread(() -> List.of(
                     CommandEmbeds.roleWhitelist(ConfigManager.get().whitelist(), moderation.whitelistOn()))));
             case "mcadmin maintenance on", "mcadmin maintenance off" -> {
@@ -521,6 +538,95 @@ final class SlashCommands extends ListenerAdapter {
                 // Not a moderation command
             }
         }
+    }
+
+    /**
+     * Creates the optional {@code page} option of the lists.
+     *
+     * @return the option
+     */
+    private static OptionData pageOption() {
+        return new OptionData(OptionType.INTEGER, "page", "The page to show first", false).setMinValue(1);
+    }
+
+    /**
+     * Builds one page of a list. Must be called on the server thread.
+     *
+     * @param list {@link #BANLIST} or {@link #WHITELIST}
+     * @param page the page, starting at 0
+     * @return the page
+     */
+    private MessageEmbed listPage(String list, int page) {
+        return list.equals(BANLIST) ? CommandEmbeds.banlist(moderation.bans(), page)
+                : CommandEmbeds.whitelist(moderation.whitelisted(), moderation.whitelistOn(), page);
+    }
+
+    /**
+     * Returns the number of entries of a list. Must be called on the server thread.
+     *
+     * @param list {@link #BANLIST} or {@link #WHITELIST}
+     * @return the number of entries
+     */
+    private int listSize(String list) {
+        return list.equals(BANLIST) ? moderation.bans().size() : moderation.whitelisted().size();
+    }
+
+    /**
+     * Creates the buttons to turn the pages of a list: ◀ and ▶, disabled on the first and last page. Their IDs name
+     * the list, the target page, the user who may use them and this server.
+     *
+     * @param list   {@link #BANLIST} or {@link #WHITELIST}
+     * @param page   the current page, starting at 0
+     * @param size   the number of entries
+     * @param userId the user who ran the command
+     * @return the buttons, none for a single page
+     */
+    private static List<ActionRow> pageButtons(String list, int page, int size, long userId) {
+        int pages = CommandEmbeds.pages(size);
+        if (pages <= 1) {
+            return List.of();
+        }
+        int current = Math.clamp(page, 0, pages - 1);
+        String prefix = BUTTON_PREFIX + list + "|";
+        String suffix = "|" + userId + "|" + ConfigManager.get().server().name();
+        return List.of(ActionRow.of(
+                Button.secondary(prefix + (current - 1) + suffix, "◀").withDisabled(current == 0),
+                Button.secondary(prefix + (current + 1) + suffix, "▶").withDisabled(current == pages - 1)));
+    }
+
+    /**
+     * Turns a page of a list. Only the user who ran the command may use the buttons; the server that sent the list
+     * answers.
+     *
+     * @param event the button click
+     */
+    @Override
+    public void onButtonInteraction(ButtonInteractionEvent event) {
+        String id = event.getComponentId();
+        if (!id.startsWith(BUTTON_PREFIX)) {
+            return;
+        }
+        String[] parts = id.substring(BUTTON_PREFIX.length()).split("\\|", 4);
+        if (parts.length < 4 || !parts[3].equals(ConfigManager.get().server().name())) {
+            return;
+        }
+        if (!parts[2].equals(event.getUser().getId())) {
+            event.replyEmbeds(CommandEmbeds.error("Only the user who ran the command can turn the pages."))
+                    .setEphemeral(true).queue();
+            return;
+        }
+        String list = parts[0];
+        int page;
+        try {
+            page = Integer.parseInt(parts[1]);
+        } catch (NumberFormatException e) {
+            return;
+        }
+        long userId = event.getUser().getIdLong();
+        event.deferEdit().queue();
+        onServerThread(() -> List.of(listPage(list, page))).thenAccept(embeds -> event.getHook()
+                .editOriginalEmbeds(tag(embeds)).setComponents(pageButtons(list, page, listSize(list), userId))
+                .queue());
     }
 
     /**

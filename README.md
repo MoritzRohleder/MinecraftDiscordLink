@@ -62,7 +62,7 @@ installed on the dedicated server – players don't need it.
 4. Invite the bot with this link (replace `APPLICATION_ID`):
 
    ```
-   https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot+applications.commands&permissions=805391574
+   https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot+applications.commands&permissions=2251800619076822
    ```
 
    | Permission | Used for |
@@ -73,6 +73,7 @@ installed on the dedicated server – players don't need it.
    | Manage Channels | Channel topic of the chat channel |
    | Manage Roles | Linked role (`linking.linked_role`) |
    | Ban Members, Kick Members, View Audit Log | Ban sync (`moderation.ban_sync`) |
+   | Pin Messages | Pinning the status message (`monitoring.status_message.pin`) |
 
    Manage Webhooks and Manage Channels can also be granted on the chat channel
    only. The bot's role must be above the linked role.

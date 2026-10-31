@@ -33,6 +33,9 @@ import java.util.stream.Collectors;
  */
 final class CommandEmbeds {
 
+    /** Entries per page of the ban list and the whitelist. */
+    static final int PAGE_SIZE = 15;
+
     /** Discord shows at most ten embeds per message. */
     static final int MAX_EMBEDS = 10;
 
@@ -171,40 +174,79 @@ final class CommandEmbeds {
     }
 
     /**
-     * Builds the answer of {@code /mcadmin banlist}: one ban per line with source, end and reason.
+     * Builds one page of the answer of {@code /mcadmin banlist}: one ban per line with source, end and reason.
      *
-     * @param bans the bans
+     * @param bans all bans
+     * @param page the page, starting at 0
      * @return the embed
      */
-    static MessageEmbed banlist(List<Moderation.Ban> bans) {
+    static MessageEmbed banlist(List<Moderation.Ban> bans, int page) {
         EmbedBuilder embed = new EmbedBuilder().setTitle("🔨 " + players(bans.size()) + " banned");
         if (bans.isEmpty()) {
             return embed.setDescription("Nobody is banned.").setColor(EmbedColors.GRAY).build();
         }
-        List<String> lines = bans.stream()
+        List<String> lines = page(bans, page).stream()
                 .map(ban -> "**" + DiscordText.escape(ban.player()) + "** · by " + DiscordText.escape(ban.source())
                         + " · " + ban.until().map(end -> "until <t:" + end.getEpochSecond() + ":f>")
                         .orElse("permanent")
                         + " · " + DiscordText.escape(ban.reason()))
                 .toList();
-        return embed.setDescription(limitLines(lines)).setColor(EmbedColors.RED).build();
+        return pageFooter(embed.setDescription(limitLines(lines)), bans.size(), page).setColor(EmbedColors.RED)
+                .build();
     }
 
     /**
-     * Builds the answer of {@code /mcadmin whitelist list}.
+     * Returns the number of pages of a list.
      *
-     * @param players the whitelisted players
-     * @param on      whether the whitelist is on
+     * @param size the number of entries
+     * @return the number of pages, at least 1
+     */
+    static int pages(int size) {
+        return Math.max(1, (size + PAGE_SIZE - 1) / PAGE_SIZE);
+    }
+
+    /**
+     * Returns the entries of one page.
+     *
+     * @param entries all entries
+     * @param page    the page, starting at 0; clamped to the existing pages
+     * @param <T>     the type of the entries
+     * @return the entries of the page
+     */
+    private static <T> List<T> page(List<T> entries, int page) {
+        int index = Math.clamp(page, 0, pages(entries.size()) - 1) * PAGE_SIZE;
+        return entries.subList(index, Math.min(entries.size(), index + PAGE_SIZE));
+    }
+
+    /**
+     * Shows the page number in the footer of a list with several pages.
+     *
+     * @param embed the embed
+     * @param size  the number of entries
+     * @param page  the page, starting at 0
      * @return the embed
      */
-    static MessageEmbed whitelist(List<String> players, boolean on) {
+    private static EmbedBuilder pageFooter(EmbedBuilder embed, int size, int page) {
+        int pages = pages(size);
+        return pages > 1 ? embed.setFooter("Page " + (Math.clamp(page, 0, pages - 1) + 1) + "/" + pages) : embed;
+    }
+
+    /**
+     * Builds one page of the answer of {@code /mcadmin whitelist list}.
+     *
+     * @param players all whitelisted players
+     * @param on      whether the whitelist is on
+     * @param page    the page, starting at 0
+     * @return the embed
+     */
+    static MessageEmbed whitelist(List<String> players, boolean on, int page) {
         EmbedBuilder embed = new EmbedBuilder()
                 .setTitle("📋 Whitelist " + (on ? "on" : "off") + " · " + players(players.size()));
         if (players.isEmpty()) {
             return embed.setDescription("Nobody is whitelisted.").setColor(EmbedColors.GRAY).build();
         }
-        return embed.setDescription(limitLines(players.stream().map(DiscordText::escape).toList()))
-                .setColor(EmbedColors.BLUE).build();
+        return pageFooter(embed.setDescription(limitLines(page(players, page).stream().map(DiscordText::escape)
+                .toList())), players.size(), page).setColor(EmbedColors.BLUE).build();
     }
 
     /**

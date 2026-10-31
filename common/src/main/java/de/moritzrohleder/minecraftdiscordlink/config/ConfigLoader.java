@@ -250,6 +250,8 @@ public final class ConfigLoader {
                         "TPS: {tps} · Uptime: {uptime}",
                         "Version: {version}"),
                 comment("Text of the status message (Discord Markdown). Placeholders: as for the topic."));
+        entry("monitoring.status_message.pin", true,
+                comment("Pin the status message, so it stays visible (needs the \"Pin Messages\" permission)."));
 
         section("notifications", comment("Direct messages to Discord users who subscribed with /mc subscribe to",
                 "server events (start, stop, maintenance) or to players coming online."));
@@ -519,7 +521,8 @@ public final class ConfigLoader {
                                     string("monitoring.daily_report.format")),
                             new ModConfig.StatusMessage(bool("monitoring.status_message.enabled"),
                                     integer("monitoring.status_message.interval_minutes", 1),
-                                    string("monitoring.status_message.format"))),
+                                    string("monitoring.status_message.format"),
+                                    bool("monitoring.status_message.pin"))),
                     new ModConfig.Notifications(bool("notifications.enabled")),
                     new ModConfig.Leaderboard(bool("leaderboard.enabled"),
                             integer("leaderboard.size", 1, MAX_LEADERBOARD_SIZE), categories()));

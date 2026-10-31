@@ -288,7 +288,7 @@ final class MonitoringChannel {
                 return;
             }
             channel.get().editMessageEmbedsById(messageId.getAsLong(), SlashCommands.tag(List.of(embed)))
-                    .queue(null, error -> {
+                    .queue(message -> pin(message, config), error -> {
                 if (error instanceof ErrorResponseException response
                         && (response.getErrorResponse() == ErrorResponse.UNKNOWN_MESSAGE
                         || response.getErrorResponse() == ErrorResponse.UNKNOWN_CHANNEL)) {
@@ -306,9 +306,26 @@ final class MonitoringChannel {
          * @param embed   the status
          */
         private void sendNew(GuildMessageChannel channel, MessageEmbed embed) {
+            ModConfig.StatusMessage config = ConfigManager.get().monitoring().statusMessage();
             channel.sendMessageEmbeds(SlashCommands.tag(List.of(embed))).queue(
-                    message -> state.setStatusMessage(OptionalLong.of(message.getIdLong())),
+                    message -> {
+                        state.setStatusMessage(OptionalLong.of(message.getIdLong()));
+                        pin(message, config);
+                    },
                     error -> Constants.LOG.error("Could not send the status message: {}", error.getMessage()));
+        }
+    }
+
+    /**
+     * Pins the status message if {@code monitoring.status_message.pin} is on and it is not pinned yet.
+     *
+     * @param message the status message
+     * @param config  the status message settings
+     */
+    private static void pin(Message message, ModConfig.StatusMessage config) {
+        if (config.pin() && !message.isPinned()) {
+            message.pin().queue(null, error -> Constants.LOG.error(
+                    "Could not pin the status message (needs the 'Pin Messages' permission): {}", error.getMessage()));
         }
     }
 
