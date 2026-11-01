@@ -14,6 +14,7 @@ import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.DiscordModeration;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationLog;
+import de.moritzrohleder.minecraftdiscordlink.moderation.MuteStore;
 import de.moritzrohleder.minecraftdiscordlink.monitoring.ReportTracker;
 import de.moritzrohleder.minecraftdiscordlink.notifications.SubscriptionStore;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
@@ -42,6 +43,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -71,6 +74,9 @@ public final class MinecraftDiscordLink {
     private static Instant startTime;
     /** The numbers of the daily report, {@code null} while the server is not running. */
     private static ReportTracker report;
+    /** Commands that send chat or private messages, blocked for muted players. */
+    private static final Set<String> CHAT_COMMANDS = Set.of("msg", "tell", "w", "teammsg", "tm", "me");
+
     /** The maintenance mode, {@code null} while the server is not running. */
     private static Maintenance maintenance;
     /** The moderation, {@code null} while the server is not running. */
@@ -106,8 +112,8 @@ public final class MinecraftDiscordLink {
         StateStore state = new StateStore(dataDirectory);
         maintenance = new Maintenance(server, state, linking.links(), discordId -> accountLinking()
                 .map(accounts -> accounts.isAdministrator(discordId)).orElse(false));
-        moderation = new Moderation(server, new ModerationLog(dataDirectory, ZoneId.systemDefault()), linking,
-                MinecraftDiscordLink::discordModeration);
+        moderation = new Moderation(server, new ModerationLog(dataDirectory, ZoneId.systemDefault()),
+                new MuteStore(dataDirectory), linking, MinecraftDiscordLink::discordModeration);
         ModConfig config = ConfigManager.get();
         config.discord().token().ifPresent(token -> {
             if (config.console().channelId().isPresent()) {
@@ -128,6 +134,7 @@ public final class MinecraftDiscordLink {
     public static void onServerStarted(MinecraftServer server) {
         started = true;
         moderation.removeExpiredBans();
+        moderation.removeExpiredMutes();
         moderationTimer = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, Constants.MOD_NAME + " Moderation");
             thread.setDaemon(true);
@@ -396,7 +403,35 @@ public final class MinecraftDiscordLink {
     public static void removeExpiredBans() {
         if (started && moderation != null) {
             moderation.removeExpiredBans();
+            moderation.removeExpiredMutes();
         }
+    }
+
+    /**
+     * Checks whether a command of a player sends a message the player may not send because of a mute:
+     * {@code /msg}, {@code /tell}, {@code /w}, {@code /teammsg}, {@code /tm} and {@code /me}. Called by a mixin
+     * before a command runs.
+     *
+     * @param player  the player
+     * @param command the command, with or without leading slash
+     * @return whether the command must not run; the player has been told why
+     */
+    public static boolean blockMutedCommand(ServerPlayer player, String command) {
+        String name = command.strip().split(" ", 2)[0].toLowerCase(Locale.ROOT);
+        return CHAT_COMMANDS.contains(name.startsWith("/") ? name.substring(1) : name) && blockMuted(player);
+    }
+
+    /**
+     * Checks whether a player may write: muted players cannot chat or send private messages. Called by mixins
+     * before a chat message is sent and before chat commands.
+     *
+     * @param player the player
+     * @return whether the player is muted; the player has been told so
+     */
+    public static boolean blockMuted(ServerPlayer player) {
+        Optional<Component> notice = moderation != null ? moderation.mutedNotice(player.getUUID()) : Optional.empty();
+        notice.ifPresent(player::sendSystemMessage);
+        return notice.isPresent();
     }
 
     /**

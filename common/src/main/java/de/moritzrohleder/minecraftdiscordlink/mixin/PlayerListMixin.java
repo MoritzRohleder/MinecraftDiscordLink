@@ -15,7 +15,8 @@ import java.util.function.Predicate;
 
 /**
  * Forwards chat messages broadcast to all players: player chat, {@code /say} and {@code /me}. Private messages
- * ({@code /msg}, {@code /teammsg}) are not broadcast and therefore not forwarded.
+ * ({@code /msg}, {@code /teammsg}) are not broadcast and therefore not forwarded. Messages of muted players are
+ * dropped.
  */
 @Mixin(PlayerList.class)
 public abstract class PlayerListMixin {
@@ -31,11 +32,16 @@ public abstract class PlayerListMixin {
      */
     @Inject(
             method = "broadcastChatMessage(Lnet/minecraft/network/chat/PlayerChatMessage;Ljava/util/function/Predicate;Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/network/chat/ChatType$Bound;)V",
-            at = @At("HEAD"))
+            at = @At("HEAD"), cancellable = true)
     private void minecraftdiscordlink$onBroadcastChatMessage(PlayerChatMessage message,
                                                              Predicate<ServerPlayer> filter,
                                                              @Nullable ServerPlayer sender, ChatType.Bound bound,
                                                              CallbackInfo ci) {
+        if (sender != null && MinecraftDiscordLink.blockMuted(sender)) {
+            // Muted players can neither chat nor use /me; the message goes nowhere
+            ci.cancel();
+            return;
+        }
         MinecraftDiscordLink.onChatMessage(message, sender, bound);
     }
 }

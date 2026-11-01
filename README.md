@@ -24,8 +24,9 @@ installed on the dedicated server – players don't need it.
 - **Moderation** – kick, (temporary) ban, unban and whitelist from Discord,
   temporary bans also in Minecraft. Every moderation action, also from
   vanilla commands, goes to a moderation log file and optionally a Discord
-  channel. Optional ban sync between Minecraft and linked Discord accounts,
-  bans on all servers sharing the Discord server.
+  channel. Temporary mutes (chat and private messages). Optional ban and mute
+  sync with linked Discord accounts (bans and timeouts), bans and mutes on all
+  servers sharing the Discord server.
 - **Maintenance mode** – only operators and linked Discord admins may join;
   switched from Discord or Minecraft, optionally kept after a restart.
 - **Monitoring channel** – lag warnings, crash notices, a daily report and a
@@ -65,7 +66,7 @@ installed on the dedicated server – players don't need it.
 4. Invite the bot with this link (replace `APPLICATION_ID`):
 
    ```
-   https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot+applications.commands&permissions=2251800619076822
+   https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot+applications.commands&permissions=2252900130704598
    ```
 
    | Permission | Used for |
@@ -77,6 +78,7 @@ installed on the dedicated server – players don't need it.
    | Manage Roles | Linked role (`linking.linked_role`) |
    | Ban Members, Kick Members, View Audit Log | Ban sync (`features.moderation.ban_sync`) |
    | Pin Messages | Pinning the status message (`features.monitoring.pin_status_message`) |
+   | Timeout Members | Mute sync (`features.moderation.mute_sync`) |
 
    Manage Webhooks and Manage Channels can also be granted on the chat channel
    only. The bot's role must be above the linked role.
@@ -176,6 +178,7 @@ values are logged as errors and replaced by their default.
 | `/discord admin link <player> <discordname>` | admins |
 | `/discord tempban <player> <duration> <reason>` – e.g. `7d`, `12h`, `1d12h` | admins |
 | `/discord networkban`, `networktempban`, `networkunban` – the same on all servers | admins |
+| `/discord mute <player> <duration> <reason>`, `unmute`, `networkmute`, `networkunmute` | admins |
 | `/discord rolewhitelist status` | admins |
 | `/discord maintenance on [persistent] [reason]`, `off [reason]`, `status` | admins |
 | `/discord reload`, `/discord features` | admins |
@@ -193,6 +196,7 @@ Admins are operators of level 4 or players with the permission node
 | `/mc link <code>` – link with the code from the kick message | everyone |
 | `/mc unlink` | everyone |
 | `/mcadmin kick`, `ban [duration] [delete_messages] [all_servers]`, `unban [all_servers]`, `banlist [page]` – reason required except for `banlist` | members with *Administrator* |
+| `/mcadmin mute <duration> [all_servers]`, `unmute [all_servers]`, `mutelist [page]` – mutes last at most 28 days | members with *Administrator* |
 | `/mcadmin whitelist add\|remove\|list\|on\|off`, `/mcadmin rolewhitelist add\|remove\|status` | members with *Administrator* |
 | `/mcadmin maintenance on [keep_after_restart] [reason]`, `off`, `status` | members with *Administrator* |
 | `/mcadmin link <player> <user>`, `/mcadmin reload`, `/mcadmin features` | members with *Administrator* (adjustable in the server's integration settings) |

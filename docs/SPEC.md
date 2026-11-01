@@ -56,6 +56,7 @@ roles = true         # Discord roles on the whitelist
 [features.moderation]
 enabled = true       # the moderation commands; the log is always written
 ban_sync = false
+mute_sync = false    # mutes as Discord timeouts and vice versa
 [features.maintenance]
 enabled = true
 [features.info]
@@ -87,6 +88,8 @@ format = "{online}/{max} online | {unique_today} players today | Uptime: {uptime
 maintenance_format = "🔧 Maintenance | {online}/{max} online | Last updated: {last_updated}"
 [texts.linking]
 # kick_not_linked, kick_not_whitelisted, kick_no_longer_whitelisted, link_dm
+[texts.moderation]
+muted = "&cYou are muted until {until}. Reason: {reason}"
 [texts.maintenance]
 # kick
 [texts.notifications]
@@ -180,6 +183,9 @@ The file is ordered: this server and the bot, then all switches
 | `/discord networkban <player> <reason>` | admin | Permanent ban on all servers sharing the Discord server |
 | `/discord networktempban <player> <duration> <reason>` | admin | Temporary ban on all servers |
 | `/discord networkunban <player> <reason>` | admin | Lift a ban on all servers |
+| `/discord mute <player> <duration> <reason>` | admin | Mute a player for a time (at most 28 days) |
+| `/discord unmute <player> <reason>` | admin | Lift a mute |
+| `/discord networkmute <player> <duration> <reason>`, `networkunmute <player> <reason>` | admin | The same on all servers |
 | `/discord rolewhitelist status` | admin | Show whether the whitelist is on and the whitelisted roles |
 | `/discord maintenance on [persistent] [reason]` | admin | Switch the maintenance mode on; `persistent` = `true` keeps it after a restart |
 | `/discord maintenance off [reason]` | admin | Switch the maintenance mode off |
@@ -213,6 +219,9 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mcadmin ban <player> <reason> [duration] [delete_messages] [all_servers]` | Administrator | Ban a player, permanently without duration; a banned player gets the new ban |
 | `/mcadmin unban <player> <reason> [all_servers]` | Administrator | Lift a ban |
 | `/mcadmin banlist [page]` | Administrator | List the banned players with reason, source and end; ◀ ▶ buttons |
+| `/mcadmin mute <player> <reason> <duration> [all_servers]` | Administrator | Mute a player for a time (at most 28 days); a muted player gets the new mute |
+| `/mcadmin unmute <player> <reason> [all_servers]` | Administrator | Lift a mute |
+| `/mcadmin mutelist [page]` | Administrator | List the muted players; ◀ ▶ buttons |
 | `/mcadmin whitelist add <player> [reason]` | Administrator | Add a player to the vanilla whitelist |
 | `/mcadmin whitelist remove <player> [reason]` | Administrator | Remove a player from the vanilla whitelist |
 | `/mcadmin whitelist list [page]` | Administrator | List the whitelisted players; ◀ ▶ buttons |
@@ -459,6 +468,39 @@ Opt-in, only for linked accounts:
 - Requires the bot permissions *Ban Members*, *Kick Members* and *View
   Audit Log* (for the moderator of Discord bans).
 
+### Mutes
+
+- A muted player cannot chat, use `/me` or send private messages (`/msg`,
+  `/tell`, `/w`, `/teammsg`, `/tm`); the messages go nowhere, also not to
+  Discord. The player sees `texts.moderation.muted` (default `You are muted
+  until 2026-11-08 15:40. Reason: Spam`, red). Joining and playing work as
+  usual.
+- A mute always ends: the duration is required, at most 28 days (the
+  longest Discord timeout). Muting a muted player replaces the mute,
+  counted from the command (`MUTE UPDATED`).
+- Stored in `minecraftdiscordlink/mutes.json` (Minecraft has no mutes).
+  Ended mutes are removed within a minute and logged as `MUTE EXPIRED` with
+  the mod as moderator.
+- Logged like bans: `MUTE`, `MUTE UPDATED`, `UNMUTE`, `MUTE EXPIRED`
+  (gold 🔇, unmutes green 🔊).
+- Mutes on all servers (`all_servers`, `/discord networkmute`,
+  `/discord networkunmute`) work like bans on all servers.
+
+### Mute sync (`features.moderation.mute_sync`)
+
+Opt-in, only for linked accounts:
+
+| Action | Effect on the other side |
+|---|---|
+| Minecraft mute | the Discord account is timed out until the same end (reason `Minecraft mute: <reason>`) |
+| Minecraft unmute | the Discord timeout is removed |
+| Discord timeout (by anyone) | the Minecraft account is muted until the end of the timeout, moderator from the audit log, reason the timeout reason (`Timed out on Discord` if none) |
+| Discord timeout removed | the Minecraft mute is lifted |
+| Mute ends | both end at the same time; nothing to synchronize |
+
+Requires the bot permissions *Timeout Members* and *View Audit Log*; failed
+actions are logged as `SYNC FAILED` like for the ban sync.
+
 ### Bans on all servers
 
 With several servers sharing the Discord server (section 4f), a ban or unban
@@ -608,6 +650,7 @@ Placeholder values are inserted as plain text.
 | `texts.linking.kick_not_whitelisted`, `kick_no_longer_whitelisted` (*MC*) | kick | – |
 | `texts.linking.link_dm` | DM with a link code | `{player}`, `{code}`, `{minutes}` |
 | `texts.maintenance.kick` (*MC*) | kick during maintenance | `{reason}` |
+| `texts.moderation.muted` (*MC*) | note to a muted player who tries to write | `{until}`, `{reason}` |
 | `texts.notifications.server_start`, `server_stop`, `maintenance_off` | DM | `{server}`, `{Server}` |
 | `texts.notifications.maintenance_on` | DM | `{server}`, `{Server}`, `{reason}` |
 | `texts.notifications.player_online` | DM | `{player}`, `{server}`, `{Server}` |
@@ -669,6 +712,9 @@ because both can change.
   "today": { "date": "2026-10-28", "players": ["069a79f4-44e9-4726-a5be-fca90e38aaf5"] }
 }
 ```
+
+Further files: `moderation.log`, `mutes.json`, `report.json`,
+`subscriptions.json` and `state.json` (sections 4b–4e).
 
 Pending link codes are kept in memory only and are lost on restart.
 

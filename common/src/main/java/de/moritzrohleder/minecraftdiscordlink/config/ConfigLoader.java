@@ -133,6 +133,9 @@ public final class ConfigLoader {
         entry("features.moderation.ban_sync", false, comment(
                 "Bans across Minecraft and linked Discord accounts, in both directions.",
                 "Needs the bot permissions \"Ban Members\", \"Kick Members\" and \"View Audit Log\"."));
+        entry("features.moderation.mute_sync", false, comment(
+                "Mutes as Discord timeouts for linked accounts and vice versa.",
+                "Needs the bot permissions \"Timeout Members\" and \"View Audit Log\"."));
 
         section("features.maintenance",
                 comment("Maintenance mode: only operators and linked Discord admins may join."));
@@ -214,6 +217,11 @@ public final class ConfigLoader {
                         "Reply `refresh` to get a new code.",
                         "If this wasn't you, ignore this message."),
                 comment("Discord direct message with a link code. Placeholders: {player}, {code}, {minutes}"));
+
+        section("texts.moderation", comment("Moderation."));
+        entry("texts.moderation.muted", "&cYou are muted until {until}. Reason: {reason}",
+                comment("Note to a muted player who tries to write (Minecraft text).",
+                        "Placeholders: {until}, {reason}"));
 
         section("texts.maintenance", comment("Maintenance mode."));
         entry("texts.maintenance.kick", String.join("\n",
@@ -597,7 +605,8 @@ public final class ConfigLoader {
                     new ModConfig.Moderation(
                             bool("features.moderation.enabled"),
                             optionalChannel("moderation.channel_id", "moderation channel"),
-                            new ModConfig.BanSync(bool("features.moderation.ban_sync"), discordAction())),
+                            new ModConfig.BanSync(bool("features.moderation.ban_sync"), discordAction()),
+                            bool("features.moderation.mute_sync")),
                     new ModConfig.Maintenance(bool("features.maintenance.enabled")),
                     new ModConfig.Info(bool("features.info.enabled")),
                     new ModConfig.Monitoring(
@@ -639,7 +648,8 @@ public final class ConfigLoader {
                             string("texts.monitoring.lag_warning"),
                             string("texts.monitoring.lag_over_title"),
                             string("texts.monitoring.lag_over"),
-                            string("texts.monitoring.crash_title")));
+                            string("texts.monitoring.crash_title"),
+                            string("texts.moderation.muted")));
         }
 
         /**

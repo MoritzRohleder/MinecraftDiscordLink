@@ -48,6 +48,8 @@ import java.util.function.Consumer;
  *     <li>{@code /discord networkban <player> <reason>}, {@code /discord networktempban <player> <duration> <reason>}
  *     and {@code /discord networkunban <player> <reason>}: the same on all servers sharing the Discord server
  *     (admins only)</li>
+ *     <li>{@code /discord mute <player> <duration> <reason>}, {@code /discord unmute <player> <reason>} and the
+ *     variants on all servers {@code networkmute} and {@code networkunmute} (admins only)</li>
  *     <li>{@code /discord rolewhitelist status}: shows the whitelisted Discord roles (admins only)</li>
  *     <li>{@code /discord maintenance on [persistent] [reason]|off [reason]|status}: switches the maintenance mode
  *     (admins only)</li>
@@ -109,6 +111,28 @@ public final class DiscordCommand {
                         .then(Commands.argument("player", GameProfileArgument.gameProfile())
                                 .then(Commands.argument("reason", StringArgumentType.greedyString())
                                         .executes(DiscordCommand::networkUnban))))
+                .then(Commands.literal("mute")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .then(Commands.argument("duration", StringArgumentType.word())
+                                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                                .executes(context -> mute(context, true, false))))))
+                .then(Commands.literal("networkmute")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .then(Commands.argument("duration", StringArgumentType.word())
+                                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                                .executes(context -> mute(context, true, true))))))
+                .then(Commands.literal("unmute")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(context -> mute(context, false, false)))))
+                .then(Commands.literal("networkunmute")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(context -> mute(context, false, true)))))
                 .then(Commands.literal("rolewhitelist")
                         .requires(Services.PLATFORM::isAdmin)
                         .then(Commands.literal("status")
@@ -340,6 +364,47 @@ public final class DiscordCommand {
             }
         }
         return unbanned;
+    }
+
+    /**
+     * Runs {@code /discord mute}, {@code /discord unmute}, {@code /discord networkmute} and
+     * {@code /discord networkunmute}.
+     *
+     * @param context    the command context
+     * @param mute       whether to mute (with a duration) or to unmute
+     * @param allServers whether it applies to all servers sharing the Discord server
+     * @return the number of players changed
+     * @throws CommandSyntaxException if the player or the duration is invalid
+     */
+    private static int mute(CommandContext<CommandSourceStack> context, boolean mute, boolean allServers)
+            throws CommandSyntaxException {
+        if (switchedOff(context, ConfigManager.get().moderation().enabled())) {
+            return 0;
+        }
+        Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(context, "player");
+        Duration duration = mute ? Durations.parse(StringArgumentType.getString(context, "duration"))
+                .orElseThrow(INVALID_DURATION::create) : null;
+        String reason = StringArgumentType.getString(context, "reason");
+        CommandSourceStack source = context.getSource();
+        Optional<Moderation> moderation = MinecraftDiscordLink.moderation();
+        if (moderation.isEmpty()) {
+            source.sendFailure(Component.literal("The moderation is not available right now."));
+            return 0;
+        }
+        ModerationContext.Scope scope = ModerationContext.Scope.of(source.getTextName(), reason)
+                .withBanOptions(false, allServers);
+        int changed = 0;
+        for (GameProfile profile : profiles) {
+            Linking.Reply reply = mute ? moderation.get().mute(profile, reason, duration, scope)
+                    : moderation.get().unmute(profile, reason, scope);
+            if (reply.success()) {
+                changed++;
+                source.sendSuccess(() -> Component.literal(reply.message()), true);
+            } else {
+                source.sendFailure(Component.literal(reply.message()));
+            }
+        }
+        return changed;
     }
 
     /**

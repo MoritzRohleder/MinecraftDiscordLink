@@ -243,8 +243,9 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
      * @param enabled   whether the moderation commands of the mod are available; the log is always written
      * @param channelId ID of the moderation log channel, empty if moderation actions are only logged to the file
      * @param banSync   bans across Minecraft and Discord
+     * @param muteSync  whether mutes are synchronized with Discord timeouts
      */
-    public record Moderation(boolean enabled, OptionalLong channelId, BanSync banSync) {
+    public record Moderation(boolean enabled, OptionalLong channelId, BanSync banSync, boolean muteSync) {
     }
 
     /**
@@ -374,13 +375,15 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
      * @param lagOverTitle           title of an all-clear; {@code {tps}}
      * @param lagOver                text of an all-clear; {@code {duration}}
      * @param crashTitle             title of a crash notice
+     * @param muted                  note to a muted player who tries to write; {@code {until}}, {@code {reason}}
      */
     public record Messages(String join, String leave, String death, String advancement, String serverStart,
                            String serverStop, String kickNotLinked, String kickNotWhitelisted,
                            String kickNoLongerWhitelisted, String kickMaintenance, String linkDm,
                            String notifyServerStart, String notifyServerStop, String notifyMaintenanceOn,
                            String notifyMaintenanceOff, String notifyPlayerOnline, String lagWarningTitle,
-                           String lagWarning, String lagOverTitle, String lagOver, String crashTitle) {
+                           String lagWarning, String lagOverTitle, String lagOver, String crashTitle,
+                           String muted) {
     }
 
     /**

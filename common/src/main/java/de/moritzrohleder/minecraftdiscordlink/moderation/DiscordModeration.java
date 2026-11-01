@@ -1,5 +1,6 @@
 package de.moritzrohleder.minecraftdiscordlink.moderation;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,6 +26,24 @@ public interface DiscordModeration {
      * @param player the player's UUID
      */
     void onMinecraftUnban(UUID player);
+
+    /**
+     * Called when a player was muted in Minecraft, not by the sync itself. Times out the linked Discord account if
+     * the mute sync is enabled.
+     *
+     * @param player the player's UUID
+     * @param until  when the mute ends
+     * @param reason the reason
+     */
+    void onMinecraftMute(UUID player, Instant until, String reason);
+
+    /**
+     * Called when a player's mute was lifted in Minecraft, not by the sync itself. Removes the timeout of the linked
+     * Discord account if the mute sync is enabled.
+     *
+     * @param player the player's UUID
+     */
+    void onMinecraftUnmute(UUID player);
 
     /**
      * Checks whether bans on all servers can be sent to the other servers: this server has a name, the moderation

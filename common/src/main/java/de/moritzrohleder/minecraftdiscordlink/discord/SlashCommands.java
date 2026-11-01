@@ -72,6 +72,8 @@ final class SlashCommands extends ListenerAdapter {
     private static final String BUTTON_PREFIX = "mdl|";
     /** Name of the ban list in button IDs. */
     private static final String BANLIST = "bans";
+    /** Name of the mute list in button IDs. */
+    private static final String MUTELIST = "mutes";
     /** Name of the whitelist in button IDs. */
     private static final String WHITELIST = "whitelist";
 
@@ -169,6 +171,21 @@ final class SlashCommands extends ListenerAdapter {
                                                 "Lift the ban on all Minecraft servers sharing this Discord server",
                                                 false),
                                 new SubcommandData("banlist", "List the banned players")
+                                        .addOptions(pageOption()),
+                                new SubcommandData("mute", "Mute a player for a time")
+                                        .addOption(OptionType.STRING, "player", "The Minecraft name", true)
+                                        .addOption(OptionType.STRING, "reason", "Why the player is muted", true)
+                                        .addOption(OptionType.STRING, "duration",
+                                                "e.g. 30m, 12h, 7d or 1d12h; at most 28 days", true)
+                                        .addOption(OptionType.BOOLEAN, "all_servers",
+                                                "Mute on all Minecraft servers sharing this Discord server", false),
+                                new SubcommandData("unmute", "Lift the mute of a player")
+                                        .addOption(OptionType.STRING, "player", "The Minecraft name", true)
+                                        .addOption(OptionType.STRING, "reason", "Why the mute is lifted", true)
+                                        .addOption(OptionType.BOOLEAN, "all_servers",
+                                                "Lift the mute on all Minecraft servers sharing this Discord server",
+                                                false),
+                                new SubcommandData("mutelist", "List the muted players")
                                         .addOptions(pageOption()))
                         .addSubcommandGroups(
                                 new SubcommandGroupData("whitelist", "The vanilla whitelist").addSubcommands(
@@ -362,7 +379,8 @@ final class SlashCommands extends ListenerAdapter {
                                         profile.get().getName(), ServerInfo.playtime(server, profile.get()),
                                         stats.onlineSince(profile.get().getId()))))));
             }
-            case "mcadmin kick", "mcadmin ban", "mcadmin unban", "mcadmin banlist", "mcadmin whitelist add",
+            case "mcadmin kick", "mcadmin ban", "mcadmin unban", "mcadmin banlist", "mcadmin mute",
+                 "mcadmin unmute", "mcadmin mutelist", "mcadmin whitelist add",
                  "mcadmin whitelist remove", "mcadmin whitelist list", "mcadmin whitelist on",
                  "mcadmin whitelist off", "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove",
                  "mcadmin rolewhitelist status",
@@ -510,6 +528,23 @@ final class SlashCommands extends ListenerAdapter {
                 withPlayer(event, profile -> moderation.ban(profile, reason, duration,
                         scope.withBanOptions(deleteMessages, allServers)));
             }
+            case "mcadmin mute" -> {
+                String input = option(event, "duration");
+                Optional<Duration> duration = Durations.parse(input);
+                if (duration.isEmpty()) {
+                    reply(event, CommandEmbeds.error("Invalid duration **" + DiscordText.escape(input)
+                            + "**. Use e.g. 30m, 12h, 7d or 1d12h."));
+                    return;
+                }
+                boolean allServers = Boolean.TRUE.equals(event.getOption("all_servers", OptionMapping::getAsBoolean));
+                withPlayer(event, profile -> moderation.mute(profile, reason, duration.get(),
+                        scope.withBanOptions(false, allServers)));
+            }
+            case "mcadmin unmute" -> {
+                boolean allServers = Boolean.TRUE.equals(event.getOption("all_servers", OptionMapping::getAsBoolean));
+                withPlayer(event, profile -> moderation.unmute(profile, reason, scope.withBanOptions(false,
+                        allServers)));
+            }
             case "mcadmin unban" -> {
                 boolean allServers = Boolean.TRUE.equals(event.getOption("all_servers", OptionMapping::getAsBoolean));
                 withPlayer(event, profile -> moderation.unban(profile, reason, scope.withBanOptions(false,
@@ -526,8 +561,9 @@ final class SlashCommands extends ListenerAdapter {
                 deferred(event, onServerThread(() -> answer(add ? moderation.roleWhitelistAdd(roleId, scope)
                         : moderation.roleWhitelistRemove(roleId, scope))));
             }
-            case "mcadmin banlist", "mcadmin whitelist list" -> {
-                String list = command.equals("mcadmin banlist") ? BANLIST : WHITELIST;
+            case "mcadmin banlist", "mcadmin whitelist list", "mcadmin mutelist" -> {
+                String list = command.equals("mcadmin banlist") ? BANLIST
+                        : command.equals("mcadmin mutelist") ? MUTELIST : WHITELIST;
                 int page = Optional.ofNullable(event.getOption("page", OptionMapping::getAsInt)).orElse(1) - 1;
                 event.deferReply().queue();
                 onServerThread(() -> List.of(listPage(list, page))).thenAccept(embeds -> event.getHook()
@@ -565,30 +601,37 @@ final class SlashCommands extends ListenerAdapter {
     /**
      * Builds one page of a list. Must be called on the server thread.
      *
-     * @param list {@link #BANLIST} or {@link #WHITELIST}
+     * @param list {@link #BANLIST}, {@link #MUTELIST} or {@link #WHITELIST}
      * @param page the page, starting at 0
      * @return the page
      */
     private MessageEmbed listPage(String list, int page) {
-        return list.equals(BANLIST) ? CommandEmbeds.banlist(moderation.bans(), page)
-                : CommandEmbeds.whitelist(moderation.whitelisted(), moderation.whitelistOn(), page);
+        return switch (list) {
+            case BANLIST -> CommandEmbeds.banlist(moderation.bans(), page);
+            case MUTELIST -> CommandEmbeds.mutelist(moderation.mutes(), page);
+            default -> CommandEmbeds.whitelist(moderation.whitelisted(), moderation.whitelistOn(), page);
+        };
     }
 
     /**
      * Returns the number of entries of a list. Must be called on the server thread.
      *
-     * @param list {@link #BANLIST} or {@link #WHITELIST}
+     * @param list {@link #BANLIST}, {@link #MUTELIST} or {@link #WHITELIST}
      * @return the number of entries
      */
     private int listSize(String list) {
-        return list.equals(BANLIST) ? moderation.bans().size() : moderation.whitelisted().size();
+        return switch (list) {
+            case BANLIST -> moderation.bans().size();
+            case MUTELIST -> moderation.mutes().size();
+            default -> moderation.whitelisted().size();
+        };
     }
 
     /**
      * Creates the buttons to turn the pages of a list: ◀ and ▶, disabled on the first and last page. Their IDs name
      * the list, the target page, the user who may use them and this server.
      *
-     * @param list   {@link #BANLIST} or {@link #WHITELIST}
+     * @param list   {@link #BANLIST}, {@link #MUTELIST} or {@link #WHITELIST}
      * @param page   the current page, starting at 0
      * @param size   the number of entries
      * @param userId the user who ran the command

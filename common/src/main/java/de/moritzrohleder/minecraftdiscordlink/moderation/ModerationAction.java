@@ -10,6 +10,14 @@ public enum ModerationAction {
     BAN("BAN", "Banned"),
     /** The ban of a player who was already banned was replaced, e.g. with a new duration. */
     BAN_UPDATED("BAN UPDATED", "Ban updated:"),
+    /** A player was muted for a time. */
+    MUTE("MUTE", "Muted"),
+    /** The mute of a player who was already muted was replaced. */
+    MUTE_UPDATED("MUTE UPDATED", "Mute updated:"),
+    /** A player's mute was lifted. */
+    UNMUTE("UNMUTE", "Unmuted"),
+    /** A mute ended. */
+    MUTE_EXPIRED("MUTE EXPIRED", "Mute expired:"),
     /** A player's ban was lifted. */
     UNBAN("UNBAN", "Unbanned"),
     /** A temporary ban of a player or an IP address ended. */
@@ -69,7 +77,7 @@ public enum ModerationAction {
      * @return whether the log shows the duration
      */
     public boolean hasDuration() {
-        return this == BAN || this == BAN_UPDATED || this == IP_BAN;
+        return this == BAN || this == BAN_UPDATED || this == IP_BAN || this == MUTE || this == MUTE_UPDATED;
     }
 
     /**

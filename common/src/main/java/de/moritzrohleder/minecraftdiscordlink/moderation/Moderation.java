@@ -10,6 +10,7 @@ import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.mixin.StoredUserEntryAccessor;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext.Scope;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
+import de.moritzrohleder.minecraftdiscordlink.text.Messages;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -29,11 +30,14 @@ import net.minecraft.world.level.GameRules;
 import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -55,6 +59,10 @@ public final class Moderation {
     /** Answer when the config file could not be written. */
     private static final String CONFIG_ERROR =
             "The config file could not be changed. See the server log for details.";
+    /** The longest mute: the longest timeout Discord allows. */
+    public static final Duration MAX_MUTE = Duration.ofDays(28);
+    /** Format of the end of a mute for the muted player, in the server's time zone. */
+    private static final DateTimeFormatter MUTE_END = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     /** Marks the source of bans on all servers in {@code banned-players.json}. */
     public static final String ALL_SERVERS_SUFFIX = " (all servers)";
     /** Error when a ban on all servers is not possible. */
@@ -67,6 +75,7 @@ public final class Moderation {
 
     private final MinecraftServer server;
     private final ModerationLog log;
+    private final MuteStore mutes;
     private final Linking linking;
     private final Supplier<Optional<DiscordModeration>> discord;
 
@@ -75,13 +84,15 @@ public final class Moderation {
      *
      * @param server  the running server
      * @param log     the moderation log
+     * @param mutes   the mutes
      * @param linking the account linking, for the whitelist via Discord roles
      * @param discord the Discord side, empty while the bot is not ready
      */
-    public Moderation(MinecraftServer server, ModerationLog log, Linking linking,
+    public Moderation(MinecraftServer server, ModerationLog log, MuteStore mutes, Linking linking,
                       Supplier<Optional<DiscordModeration>> discord) {
         this.server = server;
         this.log = log;
+        this.mutes = mutes;
         this.linking = linking;
         this.discord = discord;
     }
@@ -178,6 +189,114 @@ public final class Moderation {
                     new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z").format(ban.getExpires())));
         }
         return message;
+    }
+
+    /**
+     * Mutes a player: the player cannot chat or send private messages until the mute ends. A player who is already
+     * muted gets the new mute, counted from now.
+     *
+     * @param profile  the player
+     * @param reason   the reason
+     * @param duration how long, at most {@link #MAX_MUTE}
+     * @param scope    the moderator and the options
+     * @return the result
+     */
+    public Reply mute(GameProfile profile, String reason, Duration duration, Scope scope) {
+        if (duration.compareTo(MAX_MUTE) > 0) {
+            return Reply.error("A mute lasts at most 28 days, the longest timeout Discord allows.");
+        }
+        return muteUntil(profile, reason, Instant.now().plus(duration), scope);
+    }
+
+    /**
+     * Mutes a player until a given time, see {@link #mute(GameProfile, String, Duration, Scope)}. Used for mutes
+     * from Discord timeouts and from other servers, which keep their end.
+     *
+     * @param profile the player
+     * @param reason  the reason
+     * @param until   when the mute ends
+     * @param scope   the moderator and the options
+     * @return the result
+     */
+    public Reply muteUntil(GameProfile profile, String reason, Instant until, Scope scope) {
+        if (scope.network() == ModerationEntry.Network.ALL_SERVERS && !networkReady()) {
+            return Reply.error(NETWORK_UNAVAILABLE);
+        }
+        Instant end = until.truncatedTo(ChronoUnit.SECONDS);
+        boolean update = mutes.put(new MuteStore.Mute(profile.getId(), profile.getName(), end, reason,
+                scope.moderator(), scope.network()));
+        record(update ? ModerationAction.MUTE_UPDATED : ModerationAction.MUTE, profile.getName(),
+                Optional.of(profile.getId()), scope.moderator(), Optional.of(end), Optional.of(reason),
+                scope.network());
+        if (!scope.fromSync()) {
+            discord.get().ifPresent(bot -> bot.onMinecraftMute(profile.getId(), end, reason));
+        }
+        ServerPlayer online = server.getPlayerList().getPlayer(profile.getId());
+        if (online != null) {
+            mutedNotice(profile.getId()).ifPresent(online::sendSystemMessage);
+        }
+        announce(scope, Component.literal("Muted " + profile.getName() + ": " + reason));
+        String length = " for " + Durations.formatCompact(Duration.between(Instant.now(), end).plusSeconds(30));
+        return Reply.success((update ? "Updated the mute of " + profile.getName() + ": now" + length
+                : "Muted " + profile.getName() + length) + ": " + reason
+                + (scope.allServers() ? " (on all servers)" : ""));
+    }
+
+    /**
+     * Lifts the mute of a player.
+     *
+     * @param profile the player
+     * @param reason  the reason
+     * @param scope   the moderator and the options
+     * @return the result
+     */
+    public Reply unmute(GameProfile profile, String reason, Scope scope) {
+        if (scope.network() == ModerationEntry.Network.ALL_SERVERS && !networkReady()) {
+            return Reply.error(NETWORK_UNAVAILABLE);
+        }
+        if (mutes.remove(profile.getId()).isEmpty()) {
+            return Reply.error(profile.getName() + " is not muted.");
+        }
+        record(ModerationAction.UNMUTE, profile.getName(), Optional.of(profile.getId()), scope.moderator(),
+                Optional.empty(), scope.reason(), scope.network());
+        if (!scope.fromSync()) {
+            discord.get().ifPresent(bot -> bot.onMinecraftUnmute(profile.getId()));
+        }
+        announce(scope, Component.literal("Unmuted " + profile.getName()));
+        return Reply.success("Unmuted " + profile.getName() + ": " + reason
+                + (scope.allServers() ? " (on all servers)" : ""));
+    }
+
+    /**
+     * Lists the muted players.
+     *
+     * @return the mutes, sorted by name
+     */
+    public List<MuteStore.Mute> mutes() {
+        return mutes.all();
+    }
+
+    /**
+     * Returns the note a muted player sees when trying to write.
+     *
+     * @param player the player's UUID
+     * @return the note, empty if the player is not muted
+     */
+    public Optional<Component> mutedNotice(UUID player) {
+        return mutes.get(player, Instant.now()).map(mute -> Messages.minecraft(ModConfig.Messages::muted, Map.of(
+                "until", MUTE_END.format(mute.until().atZone(ZoneId.systemDefault())),
+                "reason", mute.reason())));
+    }
+
+    /**
+     * Removes mutes that have ended and logs them. Discord ends its timeouts itself.
+     */
+    public void removeExpiredMutes() {
+        for (MuteStore.Mute mute : mutes.removeExpired(Instant.now())) {
+            // A mute on all servers ends everywhere at once; only the server that made it reports it
+            record(ModerationAction.MUTE_EXPIRED, mute.name(), Optional.of(mute.player()), Constants.MOD_NAME,
+                    Optional.empty(), Optional.of("Mute expired"), mute.network());
+        }
     }
 
     /**

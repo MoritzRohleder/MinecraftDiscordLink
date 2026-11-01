@@ -30,7 +30,7 @@ import java.util.OptionalLong;
 import java.util.UUID;
 
 /**
- * Bans and unbans on all servers sharing the Discord server.
+ * Bans, unbans, mutes and unmutes on all servers sharing the Discord server.
  * <p>
  * The servers do not talk to each other directly; each runs its own connection with the same bot. The server where
  * a ban on all servers is made posts it to the shared moderation channel as usual; the title of the embed links to the
@@ -81,6 +81,8 @@ final class NetworkBans extends ListenerAdapter {
         String action = switch (entry.action()) {
             case BAN, BAN_UPDATED -> "ban";
             case UNBAN -> "unban";
+            case MUTE, MUTE_UPDATED -> "mute";
+            case UNMUTE -> "unmute";
             default -> null;
         };
         if (action == null || entry.network() != ModerationEntry.Network.ALL_SERVERS || entry.player().isEmpty()) {
@@ -189,6 +191,11 @@ final class NetworkBans extends ListenerAdapter {
                     }
                 } else if ("unban".equals(values.get("action"))) {
                     moderation.unban(profile, reason, scope);
+                } else if ("mute".equals(values.get("action")) && until != 0
+                        && Instant.ofEpochSecond(until).isAfter(Instant.now())) {
+                    moderation.muteUntil(profile, reason, Instant.ofEpochSecond(until), scope);
+                } else if ("unmute".equals(values.get("action"))) {
+                    moderation.unmute(profile, reason, scope);
                 }
             });
         } catch (IllegalArgumentException | NullPointerException e) {

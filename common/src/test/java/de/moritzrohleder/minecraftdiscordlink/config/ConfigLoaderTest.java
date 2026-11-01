@@ -51,6 +51,7 @@ class ConfigLoaderTest {
         assertTrue(config.whitelist().enabled());
         assertTrue(config.moderation().channelId().isEmpty());
         assertFalse(config.moderation().banSync().enabled());
+        assertFalse(config.moderation().muteSync());
         assertEquals(ModConfig.DiscordAction.BAN, config.moderation().banSync().discordAction());
         assertEquals(60, config.linking().codeValidityMinutes());
         assertTrue(content.contains("[[leaderboard.categories]]"));

@@ -44,6 +44,12 @@ class ModerationTest {
                 "MinecraftDiscordLink", Optional.empty(), Optional.of("Temporary ban expired"));
         assertEquals("2026-10-30 15:40:12 | BAN EXPIRED | Steve | by MinecraftDiscordLink | Temporary ban expired",
                 expired.toLogLine(ZoneOffset.UTC));
+
+        ModerationEntry mute = new ModerationEntry(TIME, ModerationAction.MUTE, "Steve", Optional.of(STEVE),
+                "Server", Optional.of(TIME.plusSeconds(86400)), Optional.of("Spam"),
+                ModerationEntry.Network.ALL_SERVERS);
+        assertEquals("2026-10-30 15:40:12 | MUTE | Steve | by Server | 1d (until 2026-10-31 15:40) | all servers "
+                + "| Spam", mute.toLogLine(ZoneOffset.UTC));
     }
 
     @Test

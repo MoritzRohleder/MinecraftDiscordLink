@@ -10,6 +10,7 @@ import de.moritzrohleder.minecraftdiscordlink.linking.Linking.Reply;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.WhoisEntry;
 import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
+import de.moritzrohleder.minecraftdiscordlink.moderation.MuteStore;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -193,6 +194,27 @@ final class CommandEmbeds {
                         + " · " + DiscordText.escape(ban.reason()))
                 .toList();
         return pageFooter(embed.setDescription(limitLines(lines)), bans.size(), page).setColor(EmbedColors.RED)
+                .build();
+    }
+
+    /**
+     * Builds one page of the answer of {@code /mcadmin mutelist}: one mute per line with moderator, end and reason.
+     *
+     * @param mutes all mutes
+     * @param page  the page, starting at 0
+     * @return the embed
+     */
+    static MessageEmbed mutelist(List<MuteStore.Mute> mutes, int page) {
+        EmbedBuilder embed = new EmbedBuilder().setTitle("🔇 " + players(mutes.size()) + " muted");
+        if (mutes.isEmpty()) {
+            return embed.setDescription("Nobody is muted.").setColor(EmbedColors.GRAY).build();
+        }
+        List<String> lines = page(mutes, page).stream()
+                .map(mute -> "**" + DiscordText.escape(mute.name()) + "** · by "
+                        + DiscordText.escape(mute.moderator()) + " · until <t:" + mute.until().getEpochSecond()
+                        + ":f> · " + DiscordText.escape(mute.reason()))
+                .toList();
+        return pageFooter(embed.setDescription(limitLines(lines)), mutes.size(), page).setColor(EmbedColors.GOLD)
                 .build();
     }
 

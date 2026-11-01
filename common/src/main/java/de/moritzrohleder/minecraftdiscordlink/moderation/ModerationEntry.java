@@ -94,7 +94,7 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
     }
 
     /**
-     * Describes how long a ban lasts.
+     * Describes how long a ban or mute lasts.
      *
      * @param zone the time zone of the server
      * @return e.g. {@code 7d (until 2026-11-06 15:40)} or {@code permanent}

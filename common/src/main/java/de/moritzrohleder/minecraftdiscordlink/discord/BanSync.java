@@ -17,6 +17,7 @@ import net.dv8tion.jda.api.entities.UserSnowflake;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
 import net.dv8tion.jda.api.events.guild.GuildBanEvent;
 import net.dv8tion.jda.api.events.guild.GuildUnbanEvent;
+import net.dv8tion.jda.api.events.guild.member.update.GuildMemberUpdateTimeOutEvent;
 import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.exceptions.HierarchyException;
 import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
@@ -27,6 +28,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.UserBanList;
 import net.minecraft.server.players.UserBanListEntry;
 
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Optional;
@@ -50,6 +53,8 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
 
     /** Discord's maximum length of an audit log reason. */
     private static final int MAX_REASON_LENGTH = 512;
+    /** Reason of Minecraft mutes made from a Discord timeout without reason. */
+    private static final String DISCORD_MUTE_REASON = "Timed out on Discord";
     /** Reason of Minecraft bans made from a Discord ban without reason. */
     private static final String DISCORD_BAN_REASON = "Banned on Discord";
 
@@ -130,6 +135,86 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
         if (config.enabled() && config.discordAction() == ModConfig.DiscordAction.BAN && discordId.isPresent()) {
             unban(discordId.getAsLong(), player);
         }
+    }
+
+    @Override
+    public void onMinecraftMute(UUID player, Instant until, String reason) {
+        OptionalLong discordId = links.discordId(player);
+        if (!ConfigManager.get().moderation().muteSync() || discordId.isEmpty()) {
+            return;
+        }
+        try {
+            guild.timeoutUntil(UserSnowflake.fromId(discordId.getAsLong()), until)
+                    .reason(truncate("Minecraft mute: " + reason))
+                    .queue(null, error -> {
+                        if (!isError(error, ErrorResponse.UNKNOWN_MEMBER)) {
+                            failed(player, discordId.getAsLong(), "time out", error);
+                        }
+                    });
+        } catch (InsufficientPermissionException | HierarchyException e) {
+            if (e instanceof InsufficientPermissionException missing) {
+                PermissionWarnings.missing(missing.getPermission().getName(), "on the Discord server",
+                        "the mute sync");
+            }
+            failed(player, discordId.getAsLong(), "time out", e);
+        }
+    }
+
+    @Override
+    public void onMinecraftUnmute(UUID player) {
+        OptionalLong discordId = links.discordId(player);
+        if (!ConfigManager.get().moderation().muteSync() || discordId.isEmpty()) {
+            return;
+        }
+        try {
+            guild.removeTimeout(UserSnowflake.fromId(discordId.getAsLong())).reason("Minecraft unmute")
+                    .queue(null, error -> {
+                        if (!isError(error, ErrorResponse.UNKNOWN_MEMBER)) {
+                            failed(player, discordId.getAsLong(), "remove the timeout of", error);
+                        }
+                    });
+        } catch (InsufficientPermissionException | HierarchyException e) {
+            if (e instanceof InsufficientPermissionException missing) {
+                PermissionWarnings.missing(missing.getPermission().getName(), "on the Discord server",
+                        "the mute sync");
+            }
+            failed(player, discordId.getAsLong(), "remove the timeout of", e);
+        }
+    }
+
+    /**
+     * A member was timed out or the timeout was removed on Discord: mutes or unmutes the linked Minecraft account.
+     * Timeouts that simply end are not reported by Discord; the Minecraft mute ends at the same time.
+     *
+     * @param event the timeout event
+     */
+    @Override
+    public void onGuildMemberUpdateTimeOut(GuildMemberUpdateTimeOutEvent event) {
+        long userId = event.getUser().getIdLong();
+        Optional<UUID> player = links.player(userId);
+        if (!event.getGuild().equals(guild) || !ConfigManager.get().moderation().muteSync() || player.isEmpty()) {
+            return;
+        }
+        OffsetDateTime end = event.getNewTimeOutEnd();
+        boolean timedOut = end != null && end.toInstant().isAfter(Instant.now());
+        auditEntry(ActionType.MEMBER_UPDATE, userId, entry -> {
+            if (entry.isPresent() && entry.get().getUserIdLong() == guild.getSelfMember().getIdLong()) {
+                // Made by the mute sync itself
+                return;
+            }
+            String moderator = moderator(entry);
+            Optional<String> reason = entry.map(AuditLogEntry::getReason).filter(text -> !text.isBlank());
+            server.execute(() -> {
+                GameProfile profile = profile(player.get());
+                if (timedOut) {
+                    moderation.muteUntil(profile, reason.orElse(DISCORD_MUTE_REASON), end.toInstant(),
+                            ModerationContext.Scope.synced(moderator, reason.orElse(DISCORD_MUTE_REASON)));
+                } else {
+                    moderation.unmute(profile, reason.orElse("Timeout removed on Discord"),
+                            ModerationContext.Scope.synced(moderator, reason.orElse(null)));
+                }
+            });
+        });
     }
 
     @Override
