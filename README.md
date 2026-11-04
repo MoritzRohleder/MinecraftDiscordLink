@@ -20,7 +20,9 @@ needs to be installed on the dedicated server – players don't need it.
   linked members get a Discord role and appear with both names.
 - **Whitelist via Discord** – while the whitelist is on, linked members with
   configured roles may join, in addition to the vanilla whitelist. Unlinked
-  players get a link code when they try to join.
+  players get a link code when they try to join. Optional whitelist
+  applications: members apply with a form in Discord, staff accepts or denies
+  them with a button.
 - **Moderation** – kick, (temporary) ban, unban and whitelist from Discord,
   temporary bans also in Minecraft. Every moderation action, also from
   vanilla commands, goes to a moderation log file and optionally a Discord
@@ -121,6 +123,11 @@ settings per feature.
 | `console.channel_id` | – | Console channel |
 | `[[console.permissions]]` | none | Who may run which commands (see below) |
 | `whitelist.role_ids` | `[]` | Discord roles on the whitelist (while `/whitelist on`); also `/mcadmin rolewhitelist add\|remove` |
+| `whitelist.applications_channel_id` | – | Channel with the apply button (`features.whitelist.applications`) |
+| `whitelist.review_channel_id` | – | Channel for the applications to review; empty = moderation channel |
+| `whitelist.reviewer_role_ids` | `[]` | Roles that may accept and deny; empty = members with *Administrator* |
+| `whitelist.questions` | 2 questions | Questions of the form besides the Minecraft name, at most 4 |
+| `whitelist.reapply_after` | `"7d"` | Wait after a denial before applying again |
 | `linking.linked_role` | `"auto"` | Role for linked members: `"auto"`, a role ID or `""` |
 | `moderation.channel_id` | – | Channel for the moderation log (optional) |
 | `moderation.ban_sync_action` | `"ban"` | What a Minecraft ban does in Discord: `"ban"` or `"kick"` |

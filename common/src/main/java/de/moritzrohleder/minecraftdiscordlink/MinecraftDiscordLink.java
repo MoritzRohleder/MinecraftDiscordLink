@@ -1,6 +1,7 @@
 package de.moritzrohleder.minecraftdiscordlink;
 
 import com.mojang.authlib.GameProfile;
+import de.moritzrohleder.minecraftdiscordlink.applications.ApplicationStore;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.console.ConsoleCapture;
@@ -122,7 +123,7 @@ public final class MinecraftDiscordLink {
                 ConsoleCapture.install();
             }
             bot = new DiscordBot(token, config, server, startTime, stats, linking, state, moderation, maintenance,
-                    report, new SubscriptionStore(dataDirectory));
+                    report, new SubscriptionStore(dataDirectory), new ApplicationStore(dataDirectory));
             bot.connect();
         });
     }

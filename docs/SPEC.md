@@ -53,6 +53,7 @@ enabled = true
 enabled = true       # off: the linked role is removed, the links are kept
 [features.whitelist]
 roles = true         # Discord roles on the whitelist
+applications = false # whitelist applications via Discord (section 4b)
 [features.moderation]
 enabled = true       # the moderation commands; the log is always written
 ban_sync = false
@@ -88,6 +89,8 @@ format = "{online}/{max} online | {unique_today} players today | Uptime: {uptime
 maintenance_format = "🔧 Maintenance | {online}/{max} online | Last updated: {last_updated}"
 [texts.linking]
 # kick_not_linked, kick_not_whitelisted, kick_no_longer_whitelisted, link_dm
+[texts.applications]
+# message, button, accepted_dm, denied_dm
 [texts.moderation]
 muted = "&cYou are muted until {until}. Reason: {reason}"
 [texts.maintenance]
@@ -118,6 +121,11 @@ batch_interval_ms = 2000
 
 [whitelist]
 role_ids = []        # also changed by /mcadmin rolewhitelist add|remove
+applications_channel_id = ""   # channel with the apply button
+review_channel_id = ""         # "" = the moderation channel
+reviewer_role_ids = []         # [] = members with Administrator
+questions = ["How did you find the server?", "What do you want to do on the server?"]  # at most 4
+reapply_after = "7d"           # wait after a denial, "0m" = none
 
 [linking]
 code_validity_minutes = 60
@@ -427,12 +435,43 @@ Minecraft `whois`: `Steve is linked to @steve (online now)` /
   whitelist on kicks players without access if `enforce-whitelist` is on
   (vanilla behavior, extended by the roles).
 
+### Whitelist applications (`features.whitelist.applications`)
+
+- The bot keeps one message with an apply button (`texts.applications.message`
+  and `button`) in `whitelist.applications_channel_id`. A reload edits it,
+  moves it to a changed channel, or deletes it when the feature is switched
+  off; a deleted message is sent again on the next start or reload.
+- The button opens a form: the Minecraft name and the `whitelist.questions`
+  (at most 4, the Discord limit of 5 fields). Applying is only possible while
+  the whitelist is on, with no open application and not within
+  `reapply_after` after a denial; the member is told why otherwise (only
+  visible to them).
+- The name must exist (looked up like in vanilla). It must not be
+  whitelisted already or linked to another Discord account, and the
+  applicant's Discord account must not be linked to another player.
+- The application goes to `whitelist.review_channel_id` (otherwise the
+  moderation channel) as an embed with the applicant, the Minecraft name
+  (NameMC link) and the answers, with the buttons *Accept* and *Deny*. Only
+  members with a `reviewer_role_ids` role may use them, without roles members
+  with *Administrator*.
+- *Accept*: the accounts are linked (if linking is on and they are not linked
+  yet), the player is added to the vanilla whitelist (`WHITELIST ADD`, reason
+  `Whitelist application accepted`) and the decision is logged as
+  `APPLICATION ACCEPTED` with the staff member. The applicant gets
+  `texts.applications.accepted_dm`.
+- *Deny* asks for a reason, which is logged as `APPLICATION DENIED` with the
+  staff member and sent to the applicant with `texts.applications.denied_dm`.
+- The review embed then shows the decision (green or red, by whom, the
+  reason) and loses its buttons.
+- Stored in `minecraftdiscordlink/applications.json`: the latest application
+  of every member and the message with the button.
+
 ### Moderation log
 
 Every moderation action is logged, from Discord commands as well as from
 vanilla commands: kick, kick all, ban, ban updated, unban, ban expired, IP ban and IP
 unban (log only), whitelist add/remove/on/off, role add/remove, maintenance
-on/off and failed ban sync actions. Bans and whitelist changes by other mods
+on/off, accepted and denied whitelist applications and failed ban sync actions. Bans and whitelist changes by other mods
 are logged too; the moderator is then the stored source or `unknown` (the
 vanilla whitelist stores no source).
 
@@ -676,6 +715,9 @@ Placeholder values are inserted as plain text.
 | `texts.linking.kick_not_linked` (*MC*) | kick | `{code}`, `{minutes}` |
 | `texts.linking.kick_not_whitelisted`, `kick_no_longer_whitelisted` (*MC*) | kick | – |
 | `texts.linking.link_dm` | DM with a link code | `{player}`, `{code}`, `{minutes}` |
+| `texts.applications.message`, `button` | message with the apply button | – |
+| `texts.applications.accepted_dm` | DM to accepted applicants | `{player}` |
+| `texts.applications.denied_dm` | DM to denied applicants | `{player}`, `{reason}` |
 | `texts.maintenance.kick` (*MC*) | kick during maintenance | `{reason}` |
 | `texts.moderation.muted` (*MC*) | note to a muted player who tries to write | `{until}`, `{reason}` |
 | `texts.notifications.server_start`, `server_stop`, `maintenance_off` | DM | `{server}`, `{Server}` |
@@ -740,7 +782,7 @@ because both can change.
 }
 ```
 
-Further files: `moderation.log`, `moderation-history.json`, `mutes.json`, `report.json`,
+Further files: `moderation.log`, `moderation-history.json`, `applications.json`, `mutes.json`, `report.json`,
 `subscriptions.json` and `state.json` (sections 4b–4e).
 
 Pending link codes are kept in memory only and are lost on restart.

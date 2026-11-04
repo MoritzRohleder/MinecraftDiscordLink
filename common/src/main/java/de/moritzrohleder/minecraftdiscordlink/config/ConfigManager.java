@@ -84,18 +84,19 @@ public final class ConfigManager {
      * Changes the whitelisted Discord roles, e.g. by a command: writes {@code whitelist.role_ids} into the config file
      * and applies it. Other changes in the file are kept but not applied until the next reload.
      *
-     * @param whitelist the new whitelist settings; only the roles are written
+     * @param roleIds the new whitelisted roles
      * @return whether the config file was written; nothing is changed otherwise
      */
-    public static synchronized boolean updateWhitelist(ModConfig.Whitelist whitelist) {
+    public static synchronized boolean updateWhitelist(List<Long> roleIds) {
         Map<String, Object> values = new LinkedHashMap<>();
-        values.put("whitelist.role_ids", whitelist.roleIds().stream().map(String::valueOf).toList());
+        values.put("whitelist.role_ids", roleIds.stream().map(String::valueOf).toList());
         if (!ConfigLoader.update(file, values)) {
             return false;
         }
         ModConfig current = get();
         config = new ModConfig(current.server(), current.discord(), current.chat(), current.console(),
-                new ModConfig.Whitelist(whitelist.enabled(), List.copyOf(whitelist.roleIds())), current.linking(),
+                new ModConfig.Whitelist(current.whitelist().enabled(), List.copyOf(roleIds),
+                        current.whitelist().applications()), current.linking(),
                 current.moderation(), current.maintenance(), current.info(), current.monitoring(),
                 current.notifications(), current.leaderboard(), current.messages());
         return true;

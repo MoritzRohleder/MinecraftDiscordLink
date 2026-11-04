@@ -42,6 +42,8 @@ public final class Features {
                         part("Linked role", config.linking().linkedRole().mode() != ModConfig.LinkedRoleMode.NONE))),
                 new Feature("Whitelist roles", config.whitelist().enabled(), config.whitelist().roleIds().isEmpty()
                         ? Optional.of("no roles configured") : Optional.empty(), List.of()),
+                new Feature("Whitelist applications", config.whitelist().applications().enabled(),
+                        noChannel(config.whitelist().applications().channelId().isEmpty()), List.of()),
                 new Feature("Moderation commands", moderation.enabled(), Optional.empty(), List.of(
                         part("Moderation channel", moderation.channelId().isPresent()),
                         part("Ban sync", moderation.banSync().enabled()),

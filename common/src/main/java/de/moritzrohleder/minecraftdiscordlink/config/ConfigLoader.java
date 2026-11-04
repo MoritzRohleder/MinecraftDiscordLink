@@ -6,6 +6,7 @@ import com.electronwill.nightconfig.core.io.ParsingException;
 import com.electronwill.nightconfig.core.io.ParsingMode;
 import com.electronwill.nightconfig.toml.TomlFormat;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
+import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig.ActivityType;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig.PermissionMode;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig.WebhookMode;
@@ -16,6 +17,7 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -127,6 +129,9 @@ public final class ConfigLoader {
                 "Discord roles on the whitelist: while the whitelist is on (/whitelist on), linked members with",
                 "a whitelisted role may join in addition to the vanilla whitelist."));
         entry("features.whitelist.roles", true, null);
+        entry("features.whitelist.applications", false, comment(
+                "Whitelist applications: members apply with a form in Discord, staff accepts or denies them.",
+                "Accepted members are whitelisted and linked. Only possible while the whitelist is on."));
 
         section("features.moderation", comment("Moderation commands. The moderation log is always written."));
         entry("features.moderation.enabled", true, null);
@@ -217,6 +222,18 @@ public final class ConfigLoader {
                         "Reply `refresh` to get a new code.",
                         "If this wasn't you, ignore this message."),
                 comment("Discord direct message with a link code. Placeholders: {player}, {code}, {minutes}"));
+
+        section("texts.applications", comment("Whitelist applications (Discord texts)."));
+        entry("texts.applications.message", String.join("\n",
+                        "**Want to play on the Minecraft server?**",
+                        "Apply for the whitelist with the button below."),
+                comment("Message with the apply button in the application channel."));
+        entry("texts.applications.button", "Apply", comment("Label of the apply button."));
+        entry("texts.applications.accepted_dm",
+                "Your application was accepted. You can join the Minecraft server as **{player}** now.",
+                comment("Direct message to accepted applicants. Placeholders: {player}"));
+        entry("texts.applications.denied_dm", "Your application was denied. Reason: {reason}",
+                comment("Direct message to denied applicants. Placeholders: {player}, {reason}"));
 
         section("texts.moderation", comment("Moderation."));
         entry("texts.moderation.muted", "&cYou are muted until {until}. Reason: {reason}",
@@ -315,6 +332,16 @@ public final class ConfigLoader {
         entry("whitelist.role_ids", List.of(), comment(
                 "IDs of the whitelisted roles. Empty = only the vanilla whitelist counts.",
                 "Also changed by /mcadmin rolewhitelist add|remove."));
+        entry("whitelist.applications_channel_id", "", comment(
+                "ID of the channel with the apply button (features.whitelist.applications)."));
+        entry("whitelist.review_channel_id", "", comment(
+                "ID of the channel applications are sent to for review. \"\" = the moderation channel."));
+        entry("whitelist.reviewer_role_ids", List.of(), comment(
+                "IDs of the roles that may accept and deny applications. Empty = members with \"Administrator\"."));
+        entry("whitelist.questions", List.of("How did you find the server?", "What do you want to do on the server?"),
+                comment("Questions of the application form besides the Minecraft name, at most 4 (Discord limit)."));
+        entry("whitelist.reapply_after", "7d", comment(
+                "How long a denied member has to wait before applying again, e.g. 1d, 7d or 2w. \"0m\" = no wait."));
 
         section("linking", comment("Settings of the account linking."));
         entry("linking.code_validity_minutes", 60, comment("Validity of link codes in minutes. Minimum: 1."));
@@ -599,7 +626,18 @@ public final class ConfigLoader {
                             channel("console.channel_id", "console channel"),
                             integer("console.batch_interval_ms", 1000),
                             permissions()),
-                    new ModConfig.Whitelist(bool("features.whitelist.roles"), roleIds()),
+                    new ModConfig.Whitelist(bool("features.whitelist.roles"), roleIds("whitelist.role_ids"),
+                            new ModConfig.Applications(
+                                    bool("features.whitelist.applications"),
+                                    optionalChannel("whitelist.applications_channel_id", "application channel"),
+                                    optionalChannel("whitelist.review_channel_id", "application review channel"),
+                                    roleIds("whitelist.reviewer_role_ids"),
+                                    strings("whitelist.questions", 4),
+                                    duration("whitelist.reapply_after"),
+                                    string("texts.applications.message"),
+                                    string("texts.applications.button"),
+                                    string("texts.applications.accepted_dm"),
+                                    string("texts.applications.denied_dm"))),
                     new ModConfig.Linking(bool("features.linking.enabled"),
                             integer("linking.code_validity_minutes", 1), linkedRole()),
                     new ModConfig.Moderation(
@@ -914,12 +952,54 @@ public final class ConfigLoader {
         }
 
         /**
-         * Reads the whitelisted role IDs. Invalid IDs are logged and ignored.
+         * Reads a list of texts with at most a number of entries. Empty texts are ignored, further entries are
+         * logged and ignored.
          *
+         * @param path path of the entry
+         * @param max  the largest number of entries
+         * @return the texts
+         */
+        @SuppressWarnings("unchecked")
+        private List<String> strings(String path, int max) {
+            if (!(config.get(path) instanceof List<?> list)) {
+                return invalid(path, List.copyOf((List<String>) defaultValue(path)));
+            }
+            List<String> texts = list.stream().filter(String.class::isInstance).map(String.class::cast)
+                    .map(String::strip).filter(text -> !text.isEmpty()).toList();
+            if (texts.size() > max) {
+                Constants.LOG.error("'{}' in the config has more than {} entries. Only the first {} are used.",
+                        path, max, max);
+                return List.copyOf(texts.subList(0, max));
+            }
+            return texts;
+        }
+
+        /**
+         * Reads a duration such as {@code 7d}; {@code 0m} is no duration.
+         *
+         * @param path path of the entry
+         * @return the duration, or the default if invalid
+         */
+        private Duration duration(String path) {
+            if (config.get(path) instanceof String text) {
+                if (text.strip().matches("0+[mhdw]?")) {
+                    return Duration.ZERO;
+                }
+                Optional<Duration> duration = Durations.parse(text.strip());
+                if (duration.isPresent()) {
+                    return duration.get();
+                }
+            }
+            return invalid(path, Durations.parse((String) defaultValue(path)).orElseThrow());
+        }
+
+        /**
+         * Reads a list of role IDs. Invalid IDs are logged and ignored.
+         *
+         * @param path path of the entry
          * @return the valid role IDs
          */
-        private List<Long> roleIds() {
-            String path = "whitelist.role_ids";
+        private List<Long> roleIds(String path) {
             if (!(config.get(path) instanceof List<?> list)) {
                 return invalid(path, List.of());
             }

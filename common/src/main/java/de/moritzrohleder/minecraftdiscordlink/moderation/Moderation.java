@@ -440,7 +440,7 @@ public final class Moderation {
         }
         List<Long> roles = new ArrayList<>(current.roleIds());
         roles.add(roleId);
-        if (!ConfigManager.updateWhitelist(new ModConfig.Whitelist(current.enabled(), roles))) {
+        if (!ConfigManager.updateWhitelist(roles)) {
             return Reply.error(CONFIG_ERROR);
         }
         record(ModerationAction.ROLE_WHITELIST_ADD, roleLabel(roleId), Optional.empty(), scope.moderator(),
@@ -462,7 +462,7 @@ public final class Moderation {
         }
         List<Long> roles = new ArrayList<>(current.roleIds());
         roles.remove(roleId);
-        if (!ConfigManager.updateWhitelist(new ModConfig.Whitelist(current.enabled(), roles))) {
+        if (!ConfigManager.updateWhitelist(roles)) {
             return Reply.error(CONFIG_ERROR);
         }
         record(ModerationAction.ROLE_WHITELIST_REMOVE, roleLabel(roleId), Optional.empty(), scope.moderator(),
@@ -683,6 +683,36 @@ public final class Moderation {
     public void recordSyncFailure(String player, UUID uuid, String detail) {
         record(ModerationAction.SYNC_FAILED, player, Optional.of(uuid), Constants.MOD_NAME, Optional.empty(),
                 Optional.of(detail));
+    }
+
+    /**
+     * Accepts a whitelist application: adds the player to the vanilla whitelist and logs the decision. Linking the
+     * accounts is done before by the caller. Must be called on the server thread.
+     *
+     * @param profile   the applicant's Minecraft player
+     * @param moderator the staff member, e.g. {@code Discord @anedhel}
+     * @return the result
+     */
+    public Reply acceptApplication(GameProfile profile, String moderator) {
+        PlayerList players = server.getPlayerList();
+        if (!players.getWhiteList().isWhiteListed(profile)) {
+            whitelistAdd(profile, Scope.of(moderator, "Whitelist application accepted"));
+        }
+        record(ModerationAction.APPLICATION_ACCEPTED, profile.getName(), Optional.of(profile.getId()), moderator,
+                Optional.empty(), Optional.empty());
+        return Reply.success("Accepted the application of " + profile.getName() + ".");
+    }
+
+    /**
+     * Logs that a whitelist application was denied.
+     *
+     * @param profile   the applicant's Minecraft player
+     * @param moderator the staff member, e.g. {@code Discord @anedhel}
+     * @param reason    the reason given to the applicant
+     */
+    public void denyApplication(GameProfile profile, String moderator, String reason) {
+        record(ModerationAction.APPLICATION_DENIED, profile.getName(), Optional.of(profile.getId()), moderator,
+                Optional.empty(), Optional.of(reason));
     }
 
     // ---- Helpers ----

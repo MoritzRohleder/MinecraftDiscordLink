@@ -1,5 +1,6 @@
 package de.moritzrohleder.minecraftdiscordlink.config;
 
+import java.time.Duration;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -190,10 +191,11 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
      * Discord roles on the whitelist: while the vanilla whitelist is on, linked members with one of the roles may
      * join in addition to operators and the players on the vanilla whitelist.
      *
-     * @param enabled whether whitelisting by roles is used
-     * @param roleIds IDs of the whitelisted roles; without roles only the vanilla whitelist counts
+     * @param enabled      whether whitelisting by roles is used
+     * @param roleIds      IDs of the whitelisted roles; without roles only the vanilla whitelist counts
+     * @param applications the whitelist applications
      */
-    public record Whitelist(boolean enabled, List<Long> roleIds) {
+    public record Whitelist(boolean enabled, List<Long> roleIds, Applications applications) {
 
         /**
          * Checks whether whitelisting by roles is in effect while the whitelist is on: switched on and at least one
@@ -204,6 +206,25 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
         public boolean active() {
             return enabled && !roleIds.isEmpty();
         }
+    }
+
+    /**
+     * Whitelist applications: members apply with a form in Discord, staff accepts or denies them.
+     *
+     * @param enabled         whether applications are possible (only while the whitelist is on)
+     * @param channelId       the channel with the apply button
+     * @param reviewChannelId the channel applications are sent to, empty for the moderation channel
+     * @param reviewerRoleIds roles that may accept and deny applications, empty for members with Administrator
+     * @param questions       the questions besides the Minecraft name, at most 4
+     * @param reapplyAfter    how long a denied member has to wait before applying again, zero for no wait
+     * @param message         the message with the apply button
+     * @param button          the label of the apply button
+     * @param acceptedDm      the direct message to accepted applicants
+     * @param deniedDm        the direct message to denied applicants
+     */
+    public record Applications(boolean enabled, OptionalLong channelId, OptionalLong reviewChannelId,
+                               List<Long> reviewerRoleIds, List<String> questions, Duration reapplyAfter,
+                               String message, String button, String acceptedDm, String deniedDm) {
     }
 
     /**

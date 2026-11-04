@@ -45,7 +45,11 @@ public enum ModerationAction {
     /** The maintenance mode was switched on. */
     MAINTENANCE_ON("MAINTENANCE ON", "Maintenance mode switched on"),
     /** The maintenance mode was switched off. */
-    MAINTENANCE_OFF("MAINTENANCE OFF", "Maintenance mode switched off");
+    MAINTENANCE_OFF("MAINTENANCE OFF", "Maintenance mode switched off"),
+    /** A whitelist application was accepted; the target is the Minecraft name. */
+    APPLICATION_ACCEPTED("APPLICATION ACCEPTED", "Application accepted:"),
+    /** A whitelist application was denied; the target is the Minecraft name. */
+    APPLICATION_DENIED("APPLICATION DENIED", "Application denied:");
 
     private final String label;
     private final String title;

@@ -1,6 +1,7 @@
 package de.moritzrohleder.minecraftdiscordlink.discord;
 
 import de.moritzrohleder.minecraftdiscordlink.Constants;
+import de.moritzrohleder.minecraftdiscordlink.applications.ApplicationStore;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.console.ConsoleCapture;
@@ -97,6 +98,7 @@ public final class DiscordBot {
     private final Maintenance maintenance;
     private final ReportTracker report;
     private final SubscriptionStore subscriptions;
+    private final ApplicationStore applicationStore;
     private final ScheduledExecutorService executor;
 
     /** The bot, set as soon as it is built. */
@@ -121,6 +123,8 @@ public final class DiscordBot {
     private volatile NetworkBans networkBans;
     /** The ban sync, set once the bot is ready if one of the channels is available. */
     private volatile BanSync banSync;
+    /** The whitelist applications, set up with the guild features. */
+    private volatile Applications applications;
     /** Whether the bot is connected and ready. */
     private boolean ready;
     /** Whether the server has finished starting. */
@@ -140,10 +144,11 @@ public final class DiscordBot {
      * @param maintenance   the maintenance mode, for the topic and the bot status
      * @param report        the numbers of the daily report
      * @param subscriptions the subscriptions of the notifications
+     * @param applications  the stored whitelist applications
      */
     public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime, PlayerStats stats,
                       Linking linking, StateStore state, Moderation moderation, Maintenance maintenance,
-                      ReportTracker report, SubscriptionStore subscriptions) {
+                      ReportTracker report, SubscriptionStore subscriptions, ApplicationStore applications) {
         this.token = token;
         this.chatChannelId = config.chat().channelId();
         this.consoleChannelId = config.console().channelId();
@@ -156,6 +161,7 @@ public final class DiscordBot {
         this.maintenance = maintenance;
         this.report = report;
         this.subscriptions = subscriptions;
+        this.applicationStore = applications;
         this.executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, Constants.MOD_NAME + " Discord");
             thread.setDaemon(true);
@@ -283,6 +289,11 @@ public final class DiscordBot {
             accountLinking = accounts;
             featureGuildId = guild.getIdLong();
             accounts.apply();
+            Applications apps = new Applications(jda, server, linking, moderation, applicationStore, accounts,
+                    executor);
+            jda.addEventListener(apps);
+            applications = apps;
+            apps.apply();
         });
     }
 
@@ -410,6 +421,10 @@ public final class DiscordBot {
             setUpConsole();
         }
         setUpGuildFeatures();
+        Applications apps = applications;
+        if (apps != null) {
+            apps.apply();
+        }
         guild().filter(guild -> featureGuildId != 0 && guild.getIdLong() != featureGuildId).ifPresent(guild ->
                 Constants.LOG.warn("The chat or console channel is now on another Discord server ({}). Slash "
                         + "commands, roles, the whitelist roles and the ban sync stay on the previous Discord server "
