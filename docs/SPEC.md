@@ -771,5 +771,5 @@ Pending link codes are kept in memory only and are lost on restart.
 | Java | 21 |
 | Modules | `common`, `fabric`, `neoforge`, `forge` |
 | NeoForge | 21.1.x |
-| Forge | 52.x (ForgeGradle 6, Mojang names at runtime) |
+| Forge | 52.x (ForgeGradle 6, Mojang names at runtime); JEmoji is part of the mod jar itself because Forge enforces its module descriptor, which does not open it to Jackson |
 | Fabric | Fabric Loader + Fabric API |

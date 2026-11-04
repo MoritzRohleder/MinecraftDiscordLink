@@ -31,6 +31,7 @@ import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.ChunkingFilter;
 import net.dv8tion.jda.api.utils.MemberCachePolicy;
 import net.dv8tion.jda.api.utils.cache.CacheFlag;
+import net.dv8tion.jda.internal.utils.JDALogger;
 import net.minecraft.server.MinecraftServer;
 
 import java.awt.Color;
@@ -168,6 +169,8 @@ public final class DiscordBot {
     public void connect() {
         executor.execute(() -> {
             try {
+                // JDA cannot always detect SLF4J under the module system of Forge; Minecraft always provides it
+                JDALogger.setFallbackLoggerEnabled(false);
                 jda = JDABuilder.createLight(token, INTENTS)
                         // All members are cached to resolve mentions and roles by name
                         .setMemberCachePolicy(MemberCachePolicy.ALL)

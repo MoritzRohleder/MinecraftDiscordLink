@@ -57,10 +57,11 @@ dependencies {
     bundle "net.fellbaum:jemoji:${jemoji_version}"
 }
 
-// The mod jar contains the libraries; the jar without them is only an intermediate result
+// The mod jar contains the libraries; the jar without them is only an intermediate result and stays out of libs
 jarJar.enable()
 tasks.named('jar', Jar) {
     archiveClassifier = 'slim'
+    destinationDirectory = layout.buildDirectory.dir('tmp/slimJar')
 }
 tasks.named('jarJar') {
     archiveClassifier = ''
@@ -73,9 +74,30 @@ tasks.named('assemble') {
 configurations.jarJar.withDependencies { deps ->
     configurations.bundle.resolvedConfiguration.resolvedArtifacts.each { artifact ->
         def id = artifact.moduleVersion.id
+        if (id.group == 'net.fellbaum') {
+            return // put directly into the mod jar, see below
+        }
         def dependency = project.dependencies.create("${id.group}:${id.name}:[${id.version},)")
+        // The resolved set is complete; resolving again would add the excluded libraries back
+        dependency.transitive = false
         jarJar.pin(dependency, id.version)
         deps.add(dependency)
+    }
+}
+
+// JEmoji is a Java module that does not open its package to Jackson, which loads its emoji data. Forge enforces this,
+// so JEmoji goes into the mod jar itself without its module descriptor; the mod is an open automatic module.
+configurations {
+    jemoji {
+        transitive = false
+    }
+}
+dependencies {
+    jemoji "net.fellbaum:jemoji:${jemoji_version}"
+}
+tasks.named('jarJar', Jar) {
+    from({ project.configurations.jemoji.collect { zipTree(it) } }) {
+        exclude 'module-info.class', 'META-INF/MANIFEST.MF'
     }
 }
 
