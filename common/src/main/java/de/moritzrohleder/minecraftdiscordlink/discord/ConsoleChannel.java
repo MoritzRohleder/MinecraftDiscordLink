@@ -18,6 +18,7 @@ import net.minecraft.server.MinecraftServer;
 
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +37,8 @@ final class ConsoleChannel extends ListenerAdapter {
 
     /** Reaction on commands that were run. */
     private static final Emoji EXECUTED = Emoji.fromUnicode("✅");
+    /** Reaction on commands the author may not run. */
+    private static final Emoji DENIED = Emoji.fromUnicode("⛔");
 
     private final GuildMessageChannel channel;
     private final MinecraftServer server;
@@ -87,13 +90,14 @@ final class ConsoleChannel extends ListenerAdapter {
                 || message.isWebhookMessage() || message.getType().isSystem()) {
             return;
         }
-        String command = message.getContentRaw().strip();
+        String command = withLowerCaseName(message.getContentRaw().strip());
         if (command.isEmpty() || command.contains("\n")) {
             return;
         }
         List<Long> roleIds = member.getRoles().stream().map(Role::getIdLong).toList();
         if (!CommandPermissions.isAllowed(ConfigManager.get().console().permissions(), member.getIdLong(), roleIds,
                 command)) {
+            react(message, DENIED);
             return;
         }
 
@@ -104,17 +108,31 @@ final class ConsoleChannel extends ListenerAdapter {
                 Moderation.DISCORD_PREFIX + "@" + event.getAuthor().getName() + " (console)", null);
         server.execute(() -> ModerationContext.run(moderator, () ->
                 server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command)));
-        react(message);
+        react(message, EXECUTED);
     }
 
     /**
-     * Reacts with ✅ on a command that was run. A missing permission is logged once.
+     * Writes the name of a command in lower case, as Minecraft commands are case-sensitive and phones often
+     * capitalize the first letter: {@code List} becomes {@code list}, {@code Say Hello} becomes {@code say Hello}.
      *
-     * @param message the command message
+     * @param command the command as written
+     * @return the command with its name in lower case; the arguments are kept
      */
-    private void react(Message message) {
+    static String withLowerCaseName(String command) {
+        int space = command.indexOf(' ');
+        return space < 0 ? command.toLowerCase(Locale.ROOT)
+                : command.substring(0, space).toLowerCase(Locale.ROOT) + command.substring(space);
+    }
+
+    /**
+     * Reacts to a command: ✅ when it was run, ⛔ when the author may not run it.
+     *
+     * @param message  the command message
+     * @param reaction the reaction
+     */
+    private void react(Message message, Emoji reaction) {
         try {
-            message.addReaction(EXECUTED).queue(null, error ->
+            message.addReaction(reaction).queue(null, error ->
                     ConsoleCapture.LOG.error("Could not react to a command: {}", error.getMessage()));
         } catch (InsufficientPermissionException e) {
             PermissionWarnings.missing(e.getPermission().getName(), "in the console channel",

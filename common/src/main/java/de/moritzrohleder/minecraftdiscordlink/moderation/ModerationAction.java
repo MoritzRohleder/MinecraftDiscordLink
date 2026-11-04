@@ -6,6 +6,8 @@ package de.moritzrohleder.minecraftdiscordlink.moderation;
 public enum ModerationAction {
     /** A player was kicked. */
     KICK("KICK", "Kicked"),
+    /** All players, or all but the operators, were kicked; the target says how many. */
+    KICK_ALL("KICK ALL", "Kicked"),
     /** A player was banned, permanently or temporarily. */
     BAN("BAN", "Banned"),
     /** The ban of a player who was already banned was replaced, e.g. with a new duration. */

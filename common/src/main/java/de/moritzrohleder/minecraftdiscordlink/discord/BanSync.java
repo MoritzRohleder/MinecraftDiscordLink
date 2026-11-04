@@ -225,6 +225,11 @@ final class BanSync extends ListenerAdapter implements DiscordModeration {
     }
 
     @Override
+    public Optional<String> username(long discordId) {
+        return Optional.ofNullable(guild.getMemberById(discordId)).map(member -> member.getUser().getName());
+    }
+
+    @Override
     public Optional<String> roleName(long roleId) {
         return Optional.ofNullable(guild.getRoleById(roleId)).map(Role::getName);
     }

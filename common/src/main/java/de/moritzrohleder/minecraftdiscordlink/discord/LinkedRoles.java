@@ -8,8 +8,10 @@ import de.moritzrohleder.minecraftdiscordlink.linking.LinkStore;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Member;
 import net.dv8tion.jda.api.entities.Role;
+import net.dv8tion.jda.api.exceptions.ErrorResponseException;
 import net.dv8tion.jda.api.exceptions.HierarchyException;
 import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
+import net.dv8tion.jda.api.requests.ErrorResponse;
 
 import java.util.OptionalLong;
 import java.util.concurrent.RejectedExecutionException;
@@ -267,6 +269,11 @@ final class LinkedRoles {
      * @param error the error
      */
     private void logError(Throwable error) {
+        if (error instanceof ErrorResponseException response
+                && response.getErrorResponse() == ErrorResponse.UNKNOWN_ROLE) {
+            // The role was just deleted; it is created again by the role event
+            return;
+        }
         logError(error.getMessage());
     }
 

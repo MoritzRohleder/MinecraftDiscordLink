@@ -39,6 +39,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -126,6 +127,30 @@ public final class Moderation {
                 scope.moderator(), Optional.empty(), Optional.of(reason));
         announce(scope, Component.translatable("commands.kick.success", player.getGameProfile().getName(), reason));
         return Reply.success("Kicked " + player.getGameProfile().getName() + ": " + reason);
+    }
+
+    /**
+     * Kicks all online players, e.g. to empty the server. Operators stay unless included.
+     *
+     * @param reason            the reason, shown to the players
+     * @param includeOperators  whether operators are kicked as well
+     * @param scope             the moderator
+     * @return the result
+     */
+    public Reply kickAll(String reason, boolean includeOperators, Scope scope) {
+        List<ServerPlayer> players = List.copyOf(server.getPlayerList().getPlayers()).stream()
+                .filter(player -> includeOperators || !server.getPlayerList().isOp(player.getGameProfile()))
+                .toList();
+        if (players.isEmpty()) {
+            return Reply.error(includeOperators ? "Nobody is online." : "Nobody but operators is online.");
+        }
+        players.forEach(player -> player.connection.disconnect(Component.literal(reason)));
+        String target = (includeOperators ? "all players" : "all players but operators") + " (" + players.size()
+                + ")";
+        record(ModerationAction.KICK_ALL, target, Optional.empty(), scope.moderator(), Optional.empty(),
+                Optional.of(reason));
+        announce(scope, Component.literal("Kicked " + target + ": " + reason));
+        return Reply.success("Kicked " + target + ": " + reason);
     }
 
     /**
@@ -274,6 +299,16 @@ public final class Moderation {
      */
     public List<MuteStore.Mute> mutes() {
         return mutes.all();
+    }
+
+    /**
+     * Checks whether a player is muted.
+     *
+     * @param player the player's UUID
+     * @return whether the player is muted now
+     */
+    public boolean isMuted(UUID player) {
+        return mutes.get(player, Instant.now()).isPresent();
     }
 
     /**
@@ -669,8 +704,13 @@ public final class Moderation {
      */
     private void record(ModerationAction action, String target, Optional<UUID> player, String moderator,
                         Optional<Instant> until, Optional<String> reason, ModerationEntry.Network network) {
+        Optional<ModerationEntry.LinkedAccount> linked = player.flatMap(uuid -> {
+            OptionalLong discordId = linking.links().discordId(uuid);
+            return discordId.isEmpty() ? Optional.empty() : Optional.of(new ModerationEntry.LinkedAccount(
+                    discordId.getAsLong(), discord.get().flatMap(bot -> bot.username(discordId.getAsLong()))));
+        });
         log.record(new ModerationEntry(Instant.now().truncatedTo(ChronoUnit.SECONDS), action, target, player,
-                moderator, until, reason, network));
+                moderator, until, reason, network, linked));
     }
 
     /**

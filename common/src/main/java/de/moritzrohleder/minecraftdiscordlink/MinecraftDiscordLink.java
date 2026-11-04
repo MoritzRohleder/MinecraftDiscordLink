@@ -42,12 +42,13 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -217,7 +218,12 @@ public final class MinecraftDiscordLink {
      */
     public static void onPlayerJoin(ServerPlayer player) {
         if (stats != null) {
-            List<UUID> online = player.server.getPlayerList().getPlayers().stream().map(ServerPlayer::getUUID).toList();
+            List<UUID> online = new ArrayList<>(player.server.getPlayerList().getPlayers().stream()
+                    .map(ServerPlayer::getUUID).toList());
+            // The joining player is not always in the player list yet
+            if (!online.contains(player.getUUID())) {
+                online.add(player.getUUID());
+            }
             boolean isNew = !stats.isKnown(player.getUUID());
             stats.recordJoin(player.getUUID(), online);
             report.join(player.getUUID(), isNew, online.size());
@@ -418,19 +424,25 @@ public final class MinecraftDiscordLink {
      */
     public static boolean blockMutedCommand(ServerPlayer player, String command) {
         String name = command.strip().split(" ", 2)[0].toLowerCase(Locale.ROOT);
-        return CHAT_COMMANDS.contains(name.startsWith("/") ? name.substring(1) : name) && blockMuted(player);
+        return CHAT_COMMANDS.contains(name.startsWith("/") ? name.substring(1) : name)
+                && blockMuted(player, "/" + (command.startsWith("/") ? command.substring(1) : command));
     }
 
     /**
      * Checks whether a player may write: muted players cannot chat or send private messages. Called by mixins
-     * before a chat message is sent and before chat commands.
+     * before a chat message is sent and before chat commands. A blocked message is logged to the console, so staff
+     * sees who tried what.
      *
      * @param player the player
+     * @param text   the message or command the player tried to send
      * @return whether the player is muted; the player has been told so
      */
-    public static boolean blockMuted(ServerPlayer player) {
+    public static boolean blockMuted(ServerPlayer player, String text) {
         Optional<Component> notice = moderation != null ? moderation.mutedNotice(player.getUUID()) : Optional.empty();
-        notice.ifPresent(player::sendSystemMessage);
+        if (notice.isPresent()) {
+            player.sendSystemMessage(notice.get());
+            Constants.LOG.info("[Muted] {}: {}", player.getGameProfile().getName(), text);
+        }
         return notice.isPresent();
     }
 

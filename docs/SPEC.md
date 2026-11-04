@@ -216,6 +216,7 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mcadmin reload` | Administrator | Reload config |
 | `/mcadmin features` | Administrator | Show which features are switched on (section 4h) |
 | `/mcadmin kick <player> <reason>` | Administrator | Kick an online player |
+| `/mcadmin kickall <reason> [include_operators]` | Administrator | Kick all online players, operators only with `include_operators` (e.g. before switching the whitelist on: like vanilla, `whitelist on` only kicks unlisted players if `enforce-whitelist` is set) |
 | `/mcadmin ban <player> <reason> [duration] [delete_messages] [all_servers]` | Administrator | Ban a player, permanently without duration; a banned player gets the new ban |
 | `/mcadmin unban <player> <reason> [all_servers]` | Administrator | Lift a ban |
 | `/mcadmin banlist [page]` | Administrator | List the banned players with reason, source and end; ◀ ▶ buttons |
@@ -298,6 +299,8 @@ be added later). Discord Markdown is shown as typed.
 - `{name}`: server nickname, otherwise global display name, otherwise username.
 - Messages of bots and webhooks are ignored.
 - Messages consisting only of attachments are not forwarded.
+- Messages of members linked to a muted player are not forwarded (also
+  without mute sync); the bot reacts with 🔇.
 
 ### Console channel
 
@@ -305,6 +308,10 @@ Lines are batched per `batch_interval_ms`; a batch longer than 2000 characters
 is split into several messages. One line per log entry:
 
 `` `HH:mm:ss` **INFO** message ``
+
+Commands typed in the channel: the command name is lowercased (`List` →
+`list`, arguments unchanged). An executed command gets ✅, a command the
+author may not run gets ⛔ (nothing else is answered).
 
 ### Account linking
 
@@ -421,7 +428,7 @@ Minecraft `whois`: `Steve is linked to @steve (online now)` /
 ### Moderation log
 
 Every moderation action is logged, from Discord commands as well as from
-vanilla commands: kick, ban, ban updated, unban, ban expired, IP ban and IP
+vanilla commands: kick, kick all, ban, ban updated, unban, ban expired, IP ban and IP
 unban (log only), whitelist add/remove/on/off, role add/remove, maintenance
 on/off and failed ban sync actions. Bans and whitelist changes by other mods
 are logged too; the moderator is then the stored source or `unknown` (the
@@ -430,10 +437,12 @@ vanilla whitelist stores no source).
 - Server console (INFO).
 - `minecraftdiscordlink/moderation.log`, one line per action:
   `2026-10-30 15:40:12 | BAN | Steve | by Discord @anedhel | 7d (until 2026-11-06 15:40) | Griefing`
-  (bans on all servers add `| all servers`).
+  (bans on all servers add `| all servers`; a target with a linked Discord
+  account adds it: `| Steve (@steve) |`, the user ID if the name is unknown).
 - The moderation channel if `moderation.channel_id` is set (changeable by a
   reload): one embed per action with moderator, duration, reason and time
-  stamp; kick yellow, ban and failed sync red, unban and ban expired green,
+  stamp and, for players with a linked account, the Discord user; kick and
+  kick all yellow, ban and failed sync red, unban and ban expired green,
   whitelist blue, maintenance blurple.
 
 Admins in Minecraft see Discord actions like vanilla commands of other
@@ -472,7 +481,8 @@ Opt-in, only for linked accounts:
 
 - A muted player cannot chat, use `/me` or send private messages (`/msg`,
   `/tell`, `/w`, `/teammsg`, `/tm`); the messages go nowhere, also not to
-  Discord. The player sees `texts.moderation.muted` (default `You are muted
+  Discord; blocked attempts are logged in the console (`[Muted] Steve:
+  hello`). The player sees `texts.moderation.muted` (default `You are muted
   until 2026-11-08 15:40. Reason: Spam`, red). Joining and playing work as
   usual.
 - A mute always ends: the duration is required, at most 28 days (the

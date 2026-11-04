@@ -154,6 +154,10 @@ final class SlashCommands extends ListenerAdapter {
                                 new SubcommandData("kick", "Kick a player from the Minecraft server")
                                         .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                         .addOption(OptionType.STRING, "reason", "Why the player is kicked", true),
+                                new SubcommandData("kickall", "Kick all players from the Minecraft server")
+                                        .addOption(OptionType.STRING, "reason", "Why the players are kicked", true)
+                                        .addOption(OptionType.BOOLEAN, "include_operators",
+                                                "Kick the operators as well (default: no)", false),
                                 new SubcommandData("ban", "Ban a player, permanently or for a time")
                                         .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                         .addOption(OptionType.STRING, "reason", "Why the player is banned", true)
@@ -379,7 +383,7 @@ final class SlashCommands extends ListenerAdapter {
                                         profile.get().getName(), ServerInfo.playtime(server, profile.get()),
                                         stats.onlineSince(profile.get().getId()))))));
             }
-            case "mcadmin kick", "mcadmin ban", "mcadmin unban", "mcadmin banlist", "mcadmin mute",
+            case "mcadmin kick", "mcadmin kickall", "mcadmin ban", "mcadmin unban", "mcadmin banlist", "mcadmin mute",
                  "mcadmin unmute", "mcadmin mutelist", "mcadmin whitelist add",
                  "mcadmin whitelist remove", "mcadmin whitelist list", "mcadmin whitelist on",
                  "mcadmin whitelist off", "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove",
@@ -527,6 +531,11 @@ final class SlashCommands extends ListenerAdapter {
                 boolean allServers = Boolean.TRUE.equals(event.getOption("all_servers", OptionMapping::getAsBoolean));
                 withPlayer(event, profile -> moderation.ban(profile, reason, duration,
                         scope.withBanOptions(deleteMessages, allServers)));
+            }
+            case "mcadmin kickall" -> {
+                boolean operators = Boolean.TRUE.equals(event.getOption("include_operators",
+                        OptionMapping::getAsBoolean));
+                deferred(event, onServerThread(() -> answer(moderation.kickAll(reason, operators, scope))));
             }
             case "mcadmin mute" -> {
                 String input = option(event, "duration");

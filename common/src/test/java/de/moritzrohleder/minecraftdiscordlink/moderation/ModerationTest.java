@@ -50,6 +50,18 @@ class ModerationTest {
                 ModerationEntry.Network.ALL_SERVERS);
         assertEquals("2026-10-30 15:40:12 | MUTE | Steve | by Server | 1d (until 2026-10-31 15:40) | all servers "
                 + "| Spam", mute.toLogLine(ZoneOffset.UTC));
+
+        ModerationEntry linked = new ModerationEntry(TIME, ModerationAction.KICK, "Steve", Optional.of(STEVE),
+                "Server", Optional.empty(), Optional.of("AFK"), ModerationEntry.Network.LOCAL,
+                Optional.of(new ModerationEntry.LinkedAccount(42L, Optional.of("steve"))));
+        assertEquals("2026-10-30 15:40:12 | KICK | Steve (@steve) | by Server | AFK",
+                linked.toLogLine(ZoneOffset.UTC));
+
+        ModerationEntry unknownName = new ModerationEntry(TIME, ModerationAction.KICK, "Steve", Optional.of(STEVE),
+                "Server", Optional.empty(), Optional.of("AFK"), ModerationEntry.Network.LOCAL,
+                Optional.of(new ModerationEntry.LinkedAccount(42L, Optional.empty())));
+        assertEquals("2026-10-30 15:40:12 | KICK | Steve (42) | by Server | AFK",
+                unknownName.toLogLine(ZoneOffset.UTC));
     }
 
     @Test

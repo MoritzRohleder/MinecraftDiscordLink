@@ -1,6 +1,7 @@
 package de.moritzrohleder.minecraftdiscordlink.discord;
 
 import de.moritzrohleder.minecraftdiscordlink.Constants;
+import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
@@ -16,6 +17,7 @@ import net.dv8tion.jda.api.entities.Webhook;
 import net.dv8tion.jda.api.entities.WebhookClient;
 import net.dv8tion.jda.api.entities.channel.attribute.IWebhookContainer;
 import net.dv8tion.jda.api.entities.channel.middleman.GuildMessageChannel;
+import net.dv8tion.jda.api.entities.emoji.Emoji;
 import net.dv8tion.jda.api.entities.emoji.RichCustomEmoji;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.exceptions.InsufficientPermissionException;
@@ -28,6 +30,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -48,6 +51,9 @@ import static net.dv8tion.jda.api.entities.Message.MentionType;
  * The send methods may be called from any thread; sending happens asynchronously through JDA.
  */
 public final class ChatBridge extends ListenerAdapter {
+
+    /** Reaction on Discord messages of muted players, which are not sent to Minecraft. */
+    private static final Emoji MUTED = Emoji.fromUnicode("\uD83D\uDD07");
 
     /**
      * Name of the webhook the bot creates for {@code webhook = "auto"}. Discord does not allow "discord" in webhook
@@ -237,6 +243,18 @@ public final class ChatBridge extends ListenerAdapter {
                 CUSTOM_EMOJI.matcher(message.getContentDisplay()).replaceAll(":$1:")).strip();
         if (text.isEmpty()) {
             // Only attachments, stickers or embeds
+            return;
+        }
+        Optional<UUID> player = linking.links().player(event.getAuthor().getIdLong());
+        if (player.isPresent() && MinecraftDiscordLink.moderation().map(moderation -> moderation.isMuted(player.get()))
+                .orElse(false)) {
+            // A muted player cannot write to Minecraft through the linked Discord account either
+            try {
+                message.addReaction(MUTED).queue(null, error -> { });
+            } catch (InsufficientPermissionException e) {
+                PermissionWarnings.missing(e.getPermission().getName(), "in the chat channel",
+                        "the reaction on messages of muted players");
+            }
             return;
         }
         Member member = event.getMember();

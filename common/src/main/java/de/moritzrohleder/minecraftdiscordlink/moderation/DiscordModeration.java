@@ -54,6 +54,14 @@ public interface DiscordModeration {
     boolean networkReady();
 
     /**
+     * Looks up the username of a member of the Discord server.
+     *
+     * @param discordId the user ID
+     * @return the username, empty if the user is not a member
+     */
+    Optional<String> username(long discordId);
+
+    /**
      * Looks up the name of a role of the Discord server.
      *
      * @param roleId the role ID

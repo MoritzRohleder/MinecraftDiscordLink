@@ -72,7 +72,7 @@ installed on the dedicated server – players don't need it.
    | Permission | Used for |
    |---|---|
    | View Channels, Send Messages, Embed Links | All messages |
-   | Read Message History, Add Reactions | ✅ reaction on console commands |
+   | Read Message History, Add Reactions | ✅/⛔ reactions on console commands, 🔇 on messages of muted players |
    | Manage Webhooks | Chat messages as the player (`chat.webhook = "auto"`) |
    | Manage Channels | Channel topic of the chat channel |
    | Manage Roles | Linked role (`linking.linked_role`) |
@@ -195,7 +195,7 @@ Admins are operators of level 4 or players with the permission node
 | `/mc subscribe`, `/mc unsubscribe`, `/mc subscriptions` – DM notifications | everyone |
 | `/mc link <code>` – link with the code from the kick message | everyone |
 | `/mc unlink` | everyone |
-| `/mcadmin kick`, `ban [duration] [delete_messages] [all_servers]`, `unban [all_servers]`, `banlist [page]` – reason required except for `banlist` | members with *Administrator* |
+| `/mcadmin kick`, `kickall [include_operators]`, `ban [duration] [delete_messages] [all_servers]`, `unban [all_servers]`, `banlist [page]` – reason required except for `banlist` | members with *Administrator* |
 | `/mcadmin mute <duration> [all_servers]`, `unmute [all_servers]`, `mutelist [page]` – mutes last at most 28 days | members with *Administrator* |
 | `/mcadmin whitelist add\|remove\|list\|on\|off`, `/mcadmin rolewhitelist add\|remove\|status` | members with *Administrator* |
 | `/mcadmin maintenance on [keep_after_restart] [reason]`, `off`, `status` | members with *Administrator* |

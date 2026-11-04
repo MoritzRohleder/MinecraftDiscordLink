@@ -79,6 +79,7 @@ final class ModerationChannel {
                 .setTimestamp(entry.time());
         entry.player().ifPresent(uuid -> embed.setThumbnail(
                 ChatBridge.avatarUrl(ConfigManager.get().chat(), uuid, entry.target())));
+        entry.linked().ifPresent(account -> embed.addField("Discord", "<@" + account.id() + ">", true));
         embed.addField("Moderator", DiscordText.escape(entry.moderator()), true);
         if (action.hasDuration()) {
             embed.addField("Duration", entry.until()
@@ -101,7 +102,7 @@ final class ModerationChannel {
      */
     private static String emoji(ModerationAction action) {
         return switch (action) {
-            case KICK -> "👢";
+            case KICK, KICK_ALL -> "👢";
             case BAN, BAN_UPDATED, IP_BAN -> "🔨";
             case MUTE, MUTE_UPDATED -> "🔇";
             case UNMUTE, MUTE_EXPIRED -> "🔊";
@@ -121,7 +122,7 @@ final class ModerationChannel {
      */
     private static Color color(ModerationAction action) {
         return switch (action) {
-            case KICK -> EmbedColors.YELLOW;
+            case KICK, KICK_ALL -> EmbedColors.YELLOW;
             case BAN, BAN_UPDATED, IP_BAN, SYNC_FAILED -> EmbedColors.RED;
             case UNBAN, IP_UNBAN, BAN_EXPIRED, UNMUTE, MUTE_EXPIRED -> EmbedColors.GREEN;
             case MUTE, MUTE_UPDATED -> EmbedColors.GOLD;

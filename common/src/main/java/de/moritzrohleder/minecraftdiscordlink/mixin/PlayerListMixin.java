@@ -37,7 +37,7 @@ public abstract class PlayerListMixin {
                                                              Predicate<ServerPlayer> filter,
                                                              @Nullable ServerPlayer sender, ChatType.Bound bound,
                                                              CallbackInfo ci) {
-        if (sender != null && MinecraftDiscordLink.blockMuted(sender)) {
+        if (sender != null && MinecraftDiscordLink.blockMuted(sender, message.signedContent())) {
             // Muted players can neither chat nor use /me; the message goes nowhere
             ci.cancel();
             return;

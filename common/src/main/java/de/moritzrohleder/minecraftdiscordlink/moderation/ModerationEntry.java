@@ -20,9 +20,28 @@ import java.util.UUID;
  * @param until     when a temporary ban ends, empty otherwise
  * @param reason    the reason, empty if none was given
  * @param network   whether the action applies to all servers sharing the Discord server
+ * @param linked    the Discord account linked to the target player, if any
  */
 public record ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
-                              String moderator, Optional<Instant> until, Optional<String> reason, Network network) {
+                              String moderator, Optional<Instant> until, Optional<String> reason, Network network,
+                              Optional<LinkedAccount> linked) {
+
+    /**
+     * Creates an entry without a linked Discord account.
+     *
+     * @param time      when the action happened
+     * @param action    the kind of action
+     * @param target    the player name, IP address or role
+     * @param player    the UUID of the target player
+     * @param moderator who did it
+     * @param until     when a temporary ban or mute ends
+     * @param reason    the reason
+     * @param network   whether the action applies to all servers
+     */
+    public ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
+                           String moderator, Optional<Instant> until, Optional<String> reason, Network network) {
+        this(time, action, target, player, moderator, until, reason, network, Optional.empty());
+    }
 
     /**
      * Creates an entry of an action on this server only.
@@ -37,7 +56,25 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
      */
     public ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
                            String moderator, Optional<Instant> until, Optional<String> reason) {
-        this(time, action, target, player, moderator, until, reason, Network.LOCAL);
+        this(time, action, target, player, moderator, until, reason, Network.LOCAL, Optional.empty());
+    }
+
+    /**
+     * The Discord account linked to a player.
+     *
+     * @param id       the Discord user ID
+     * @param username the username, empty if unknown (e.g. the member left the Discord server)
+     */
+    public record LinkedAccount(long id, Optional<String> username) {
+
+        /**
+         * Formats the account for the log file.
+         *
+         * @return e.g. {@code @anedhel}, or the ID if the username is unknown
+         */
+        public String label() {
+            return username.map(name -> "@" + name).orElse(String.valueOf(id));
+        }
     }
 
     /**
@@ -82,6 +119,7 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
                 .append(" | ").append(action.label());
         if (action.hasTarget()) {
             line.append(" | ").append(target);
+            linked.ifPresent(account -> line.append(" (").append(account.label()).append(')'));
         }
         line.append(" | by ").append(moderator);
         if (action.hasDuration()) {
