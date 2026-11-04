@@ -107,6 +107,17 @@ public final class Moderation {
         return log;
     }
 
+    /**
+     * Lists the moderation history of a player, newest first.
+     *
+     * @param player the player's UUID
+     * @param name   the player's current name, for entries taken over from the log file without UUID
+     * @return the entries
+     */
+    public List<ModerationEntry> history(UUID player, String name) {
+        return log.history().of(player, name);
+    }
+
     // ---- Actions ----
 
     /**

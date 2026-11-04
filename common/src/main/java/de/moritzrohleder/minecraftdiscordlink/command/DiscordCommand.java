@@ -2,6 +2,7 @@ package de.moritzrohleder.minecraftdiscordlink.command;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.authlib.GameProfile;
@@ -16,6 +17,7 @@ import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext;
+import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationEntry;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 import net.minecraft.ChatFormatting;
@@ -28,7 +30,10 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.time.Duration;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
@@ -50,6 +55,7 @@ import java.util.function.Consumer;
  *     (admins only)</li>
  *     <li>{@code /discord mute <player> <duration> <reason>}, {@code /discord unmute <player> <reason>} and the
  *     variants on all servers {@code networkmute} and {@code networkunmute} (admins only)</li>
+ *     <li>{@code /discord history <player> [page]}: shows the moderation actions on a player (admins only)</li>
  *     <li>{@code /discord rolewhitelist status}: shows the whitelisted Discord roles (admins only)</li>
  *     <li>{@code /discord maintenance on [persistent] [reason]|off [reason]|status}: switches the maintenance mode
  *     (admins only)</li>
@@ -58,6 +64,10 @@ import java.util.function.Consumer;
  */
 public final class DiscordCommand {
 
+    /** Entries per page of {@code /discord history}. */
+    private static final int HISTORY_PAGE_SIZE = 10;
+    /** Format of the times in {@code /discord history}, in the server's time zone. */
+    private static final DateTimeFormatter HISTORY_DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     /** Error for an invalid ban duration. */
     private static final SimpleCommandExceptionType INVALID_DURATION = new SimpleCommandExceptionType(
             Component.literal("Invalid duration. Use e.g. 30m, 12h, 7d, 2w or 1d12h."));
@@ -133,6 +143,13 @@ public final class DiscordCommand {
                         .then(Commands.argument("player", GameProfileArgument.gameProfile())
                                 .then(Commands.argument("reason", StringArgumentType.greedyString())
                                         .executes(context -> mute(context, false, true)))))
+                .then(Commands.literal("history")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .executes(context -> history(context, 1))
+                                .then(Commands.argument("page", IntegerArgumentType.integer(1))
+                                        .executes(context -> history(context,
+                                                IntegerArgumentType.getInteger(context, "page"))))))
                 .then(Commands.literal("rolewhitelist")
                         .requires(Services.PLATFORM::isAdmin)
                         .then(Commands.literal("status")
@@ -405,6 +422,49 @@ public final class DiscordCommand {
             }
         }
         return changed;
+    }
+
+    /**
+     * Runs {@code /discord history <player> [page]}: the player's moderation actions, newest first, with their
+     * numbers.
+     *
+     * @param context the command context
+     * @param page    the page, starting at 1
+     * @return the number of entries shown
+     * @throws CommandSyntaxException if the player argument is invalid
+     */
+    private static int history(CommandContext<CommandSourceStack> context, int page) throws CommandSyntaxException {
+        if (switchedOff(context, ConfigManager.get().moderation().enabled())) {
+            return 0;
+        }
+        CommandSourceStack source = context.getSource();
+        Optional<Moderation> moderation = MinecraftDiscordLink.moderation();
+        if (moderation.isEmpty()) {
+            source.sendFailure(Component.literal("The moderation is not available right now."));
+            return 0;
+        }
+        int shown = 0;
+        for (GameProfile profile : GameProfileArgument.getGameProfiles(context, "player")) {
+            List<ModerationEntry> entries = moderation.get().history(profile.getId(), profile.getName());
+            if (entries.isEmpty()) {
+                source.sendSystemMessage(Component.literal("No moderation actions on " + profile.getName() + "."));
+                continue;
+            }
+            int pages = (entries.size() + HISTORY_PAGE_SIZE - 1) / HISTORY_PAGE_SIZE;
+            int current = Math.min(page, pages);
+            source.sendSystemMessage(Component.literal("Moderation history of " + profile.getName() + " ("
+                    + entries.size() + ", page " + current + "/" + pages + "):").withStyle(ChatFormatting.GOLD));
+            ZoneId zone = moderation.get().log().zone();
+            for (ModerationEntry entry : entries.subList((current - 1) * HISTORY_PAGE_SIZE,
+                    Math.min(entries.size(), current * HISTORY_PAGE_SIZE))) {
+                source.sendSystemMessage(Component.literal("#" + entry.id() + " ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(HISTORY_DATE.format(entry.time().atZone(zone)) + " ")
+                                .withStyle(ChatFormatting.GRAY))
+                        .append(Component.literal(entry.historyText(zone)).withStyle(ChatFormatting.WHITE)));
+                shown++;
+            }
+        }
+        return shown;
     }
 
     /**

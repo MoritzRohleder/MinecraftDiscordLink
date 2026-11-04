@@ -47,6 +47,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -74,6 +75,8 @@ final class SlashCommands extends ListenerAdapter {
     private static final String BANLIST = "bans";
     /** Name of the mute list in button IDs. */
     private static final String MUTELIST = "mutes";
+    /** Start of the name of a player's moderation history in button IDs, followed by the player's UUID. */
+    private static final String HISTORY = "h:";
     /** Name of the whitelist in button IDs. */
     private static final String WHITELIST = "whitelist";
 
@@ -190,6 +193,9 @@ final class SlashCommands extends ListenerAdapter {
                                                 "Lift the mute on all Minecraft servers sharing this Discord server",
                                                 false),
                                 new SubcommandData("mutelist", "List the muted players")
+                                        .addOptions(pageOption()),
+                                new SubcommandData("history", "List the moderation actions on a player")
+                                        .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                         .addOptions(pageOption()))
                         .addSubcommandGroups(
                                 new SubcommandGroupData("whitelist", "The vanilla whitelist").addSubcommands(
@@ -384,7 +390,7 @@ final class SlashCommands extends ListenerAdapter {
                                         stats.onlineSince(profile.get().getId()))))));
             }
             case "mcadmin kick", "mcadmin kickall", "mcadmin ban", "mcadmin unban", "mcadmin banlist", "mcadmin mute",
-                 "mcadmin unmute", "mcadmin mutelist", "mcadmin whitelist add",
+                 "mcadmin unmute", "mcadmin mutelist", "mcadmin history", "mcadmin whitelist add",
                  "mcadmin whitelist remove", "mcadmin whitelist list", "mcadmin whitelist on",
                  "mcadmin whitelist off", "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove",
                  "mcadmin rolewhitelist status",
@@ -580,6 +586,23 @@ final class SlashCommands extends ListenerAdapter {
                                 listSize(list), event.getUser().getIdLong()))
                         .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue());
             }
+            case "mcadmin history" -> {
+                String player = option(event, "player");
+                int page = Optional.ofNullable(event.getOption("page", OptionMapping::getAsInt)).orElse(1) - 1;
+                event.deferReply().queue();
+                CompletableFuture.supplyAsync(() -> server.getProfileCache().get(player)).thenAccept(profile -> {
+                    if (profile.isEmpty()) {
+                        event.getHook().sendMessageEmbeds(tag(List.of(CommandEmbeds.error("No Minecraft player "
+                                + "named **" + DiscordText.escape(player) + "** was found.")))).queue();
+                        return;
+                    }
+                    String list = HISTORY + profile.get().getId();
+                    onServerThread(() -> List.of(listPage(list, page))).thenAccept(embeds -> event.getHook()
+                            .sendMessageEmbeds(tag(embeds)).setComponents(pageButtons(list, page,
+                                    listSize(list), event.getUser().getIdLong()))
+                            .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue());
+                });
+            }
             case "mcadmin rolewhitelist status" -> deferred(event, onServerThread(() -> List.of(
                     CommandEmbeds.roleWhitelist(ConfigManager.get().whitelist(), moderation.whitelistOn()))));
             case "mcadmin maintenance on", "mcadmin maintenance off" -> {
@@ -610,11 +633,16 @@ final class SlashCommands extends ListenerAdapter {
     /**
      * Builds one page of a list. Must be called on the server thread.
      *
-     * @param list {@link #BANLIST}, {@link #MUTELIST} or {@link #WHITELIST}
+     * @param list {@link #BANLIST}, {@link #MUTELIST}, {@link #WHITELIST} or {@link #HISTORY} with a UUID
      * @param page the page, starting at 0
      * @return the page
      */
     private MessageEmbed listPage(String list, int page) {
+        if (list.startsWith(HISTORY)) {
+            UUID uuid = UUID.fromString(list.substring(HISTORY.length()));
+            String name = Leaderboards.playerName(server, uuid);
+            return CommandEmbeds.history(uuid, name, moderation.history(uuid, name), page, moderation.log().zone());
+        }
         return switch (list) {
             case BANLIST -> CommandEmbeds.banlist(moderation.bans(), page);
             case MUTELIST -> CommandEmbeds.mutelist(moderation.mutes(), page);
@@ -625,10 +653,14 @@ final class SlashCommands extends ListenerAdapter {
     /**
      * Returns the number of entries of a list. Must be called on the server thread.
      *
-     * @param list {@link #BANLIST}, {@link #MUTELIST} or {@link #WHITELIST}
+     * @param list {@link #BANLIST}, {@link #MUTELIST}, {@link #WHITELIST} or {@link #HISTORY} with a UUID
      * @return the number of entries
      */
     private int listSize(String list) {
+        if (list.startsWith(HISTORY)) {
+            UUID uuid = UUID.fromString(list.substring(HISTORY.length()));
+            return moderation.history(uuid, Leaderboards.playerName(server, uuid)).size();
+        }
         return switch (list) {
             case BANLIST -> moderation.bans().size();
             case MUTELIST -> moderation.mutes().size();

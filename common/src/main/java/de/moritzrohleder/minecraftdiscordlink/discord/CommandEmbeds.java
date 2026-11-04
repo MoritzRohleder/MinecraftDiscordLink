@@ -10,6 +10,7 @@ import de.moritzrohleder.minecraftdiscordlink.linking.Linking.Reply;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking.WhoisEntry;
 import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
+import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationEntry;
 import de.moritzrohleder.minecraftdiscordlink.moderation.MuteStore;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
@@ -19,6 +20,7 @@ import net.dv8tion.jda.api.entities.MessageEmbed;
 import java.awt.Color;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -216,6 +218,30 @@ final class CommandEmbeds {
                 .toList();
         return pageFooter(embed.setDescription(limitLines(lines)), mutes.size(), page).setColor(EmbedColors.GOLD)
                 .build();
+    }
+
+    /**
+     * Builds one page of the answer of {@code /mcadmin history}: one moderation action per line, newest first, with
+     * its number and time.
+     *
+     * @param uuid    the player's UUID, for the head
+     * @param name    the player's name
+     * @param entries the player's moderation history, newest first
+     * @param page    the page, starting at 0
+     * @param zone    the time zone of the server, for the end of bans and mutes
+     * @return the embed
+     */
+    static MessageEmbed history(UUID uuid, String name, List<ModerationEntry> entries, int page, ZoneId zone) {
+        EmbedBuilder embed = new EmbedBuilder().setAuthor("Moderation history of " + name, null, head(uuid, name));
+        if (entries.isEmpty()) {
+            return embed.setDescription("No moderation actions.").setColor(EmbedColors.GRAY).build();
+        }
+        List<String> lines = page(entries, page).stream()
+                .map(entry -> "`#" + entry.id() + "` <t:" + entry.time().getEpochSecond() + ":d> "
+                        + DiscordText.escape(entry.historyText(zone)))
+                .toList();
+        return pageFooter(embed.setDescription(limitLines(lines)), entries.size(), page)
+                .setColor(EmbedColors.BLURPLE).build();
     }
 
     /**

@@ -11,8 +11,8 @@ import java.time.ZoneId;
 import java.util.function.Consumer;
 
 /**
- * The moderation log: every entry goes to the server console, to {@code minecraftdiscordlink/moderation.log} and to
- * a listener, which sends it to the moderation channel.
+ * The moderation log: every entry gets a number in the {@link ModerationHistory} and goes to the server console, to
+ * {@code minecraftdiscordlink/moderation.log} and to a listener, which sends it to the moderation channel.
  * <p>
  * All methods are thread-safe.
  */
@@ -23,6 +23,7 @@ public final class ModerationLog {
 
     private final Path file;
     private final ZoneId zone;
+    private final ModerationHistory history;
     private volatile Consumer<ModerationEntry> listener = entry -> { };
 
     /**
@@ -34,6 +35,25 @@ public final class ModerationLog {
     public ModerationLog(Path dataDirectory, ZoneId zone) {
         this.file = dataDirectory.resolve(FILE_NAME);
         this.zone = zone;
+        this.history = new ModerationHistory(dataDirectory, zone);
+    }
+
+    /**
+     * Returns the moderation history with all numbered entries.
+     *
+     * @return the history
+     */
+    public ModerationHistory history() {
+        return history;
+    }
+
+    /**
+     * Returns the time zone of the times in the log, normally the server's.
+     *
+     * @return the time zone
+     */
+    public ZoneId zone() {
+        return zone;
     }
 
     /**
@@ -46,11 +66,13 @@ public final class ModerationLog {
     }
 
     /**
-     * Logs a moderation action.
+     * Logs a moderation action, numbering it.
      *
-     * @param entry the action
+     * @param action the action, without number
+     * @return the numbered entry
      */
-    public void record(ModerationEntry entry) {
+    public ModerationEntry record(ModerationEntry action) {
+        ModerationEntry entry = history.add(action);
         String line = entry.toLogLine(zone);
         Constants.LOG.info("[Moderation] {}", line);
         synchronized (this) {
@@ -67,5 +89,6 @@ public final class ModerationLog {
         } catch (RuntimeException e) {
             Constants.LOG.error("Could not send the moderation log entry to Discord: {}", e.toString());
         }
+        return entry;
     }
 }

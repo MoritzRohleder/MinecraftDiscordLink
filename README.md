@@ -180,6 +180,7 @@ values are logged as errors and replaced by their default.
 | `/discord tempban <player> <duration> <reason>` – e.g. `7d`, `12h`, `1d12h` | admins |
 | `/discord networkban`, `networktempban`, `networkunban` – the same on all servers | admins |
 | `/discord mute <player> <duration> <reason>`, `unmute`, `networkmute`, `networkunmute` | admins |
+| `/discord history <player> [page]` – moderation actions on a player | admins |
 | `/discord rolewhitelist status` | admins |
 | `/discord maintenance on [persistent] [reason]`, `off [reason]`, `status` | admins |
 | `/discord reload`, `/discord features` | admins |
@@ -198,6 +199,7 @@ Admins are operators of level 4 or players with the permission node
 | `/mc unlink` | everyone |
 | `/mcadmin kick`, `kickall [include_operators]`, `ban [duration] [delete_messages] [all_servers]`, `unban [all_servers]`, `banlist [page]` – reason required except for `banlist` | members with *Administrator* |
 | `/mcadmin mute <duration> [all_servers]`, `unmute [all_servers]`, `mutelist [page]` – mutes last at most 28 days | members with *Administrator* |
+| `/mcadmin history <player> [page]` – moderation actions on a player, with their numbers | members with *Administrator* |
 | `/mcadmin whitelist add\|remove\|list\|on\|off`, `/mcadmin rolewhitelist add\|remove\|status` | members with *Administrator* |
 | `/mcadmin maintenance on [keep_after_restart] [reason]`, `off`, `status` | members with *Administrator* |
 | `/mcadmin link <player> <user>`, `/mcadmin reload`, `/mcadmin features` | members with *Administrator* (adjustable in the server's integration settings) |

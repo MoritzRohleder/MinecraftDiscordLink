@@ -88,8 +88,12 @@ final class ModerationChannel {
                     .orElse("permanent"), true);
         }
         embed.addField("Reason", entry.reason().map(DiscordText::escape).orElse(ModerationEntry.NO_REASON), false);
+        String footer = entry.id() > 0 ? "#" + entry.id() : "";
         if (entry.network() == ModerationEntry.Network.ALL_SERVERS) {
-            embed.setFooter("All servers");
+            footer = footer.isEmpty() ? "All servers" : footer + " · All servers";
+        }
+        if (!footer.isEmpty()) {
+            embed.setFooter(footer);
         }
         return embed.build();
     }

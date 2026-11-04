@@ -21,10 +21,30 @@ import java.util.UUID;
  * @param reason    the reason, empty if none was given
  * @param network   whether the action applies to all servers sharing the Discord server
  * @param linked    the Discord account linked to the target player, if any
+ * @param id        the number of the entry in the moderation history, 0 before it is recorded
  */
 public record ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
                               String moderator, Optional<Instant> until, Optional<String> reason, Network network,
-                              Optional<LinkedAccount> linked) {
+                              Optional<LinkedAccount> linked, long id) {
+
+    /**
+     * Creates an entry that is not recorded yet.
+     *
+     * @param time      when the action happened
+     * @param action    the kind of action
+     * @param target    the player name, IP address or role
+     * @param player    the UUID of the target player
+     * @param moderator who did it
+     * @param until     when a temporary ban or mute ends
+     * @param reason    the reason
+     * @param network   whether the action applies to all servers
+     * @param linked    the Discord account linked to the target player
+     */
+    public ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
+                           String moderator, Optional<Instant> until, Optional<String> reason, Network network,
+                           Optional<LinkedAccount> linked) {
+        this(time, action, target, player, moderator, until, reason, network, linked, 0);
+    }
 
     /**
      * Creates an entry without a linked Discord account.
@@ -40,7 +60,7 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
      */
     public ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
                            String moderator, Optional<Instant> until, Optional<String> reason, Network network) {
-        this(time, action, target, player, moderator, until, reason, network, Optional.empty());
+        this(time, action, target, player, moderator, until, reason, network, Optional.empty(), 0);
     }
 
     /**
@@ -56,7 +76,7 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
      */
     public ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
                            String moderator, Optional<Instant> until, Optional<String> reason) {
-        this(time, action, target, player, moderator, until, reason, Network.LOCAL, Optional.empty());
+        this(time, action, target, player, moderator, until, reason, Network.LOCAL, Optional.empty(), 0);
     }
 
     /**
@@ -97,6 +117,43 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
     public static final String NO_REASON = "no reason given";
 
     /**
+     * Returns this entry with its number in the moderation history.
+     *
+     * @param id the number
+     * @return the numbered entry
+     */
+    public ModerationEntry withId(long id) {
+        return new ModerationEntry(time, action, target, player, moderator, until, reason, network, linked, id);
+    }
+
+    /**
+     * Returns this entry with another reason, e.g. after it was edited.
+     *
+     * @param newReason the new reason
+     * @return the changed entry
+     */
+    public ModerationEntry withReason(Optional<String> newReason) {
+        return new ModerationEntry(time, action, target, player, moderator, until, newReason, network, linked, id);
+    }
+
+    /**
+     * Describes the entry for the moderation history of a player, without number and time.
+     *
+     * @param zone the time zone of the server
+     * @return e.g. {@code BAN · 7d (until 2026-11-06 15:40) · by Discord @anedhel · Griefing}
+     */
+    public String historyText(ZoneId zone) {
+        StringBuilder text = new StringBuilder(action.label());
+        if (action.hasDuration()) {
+            text.append(" · ").append(durationText(zone));
+        }
+        if (network != Network.LOCAL) {
+            text.append(" · all servers");
+        }
+        return text.append(" · by ").append(moderator).append(" · ").append(reason.orElse(NO_REASON)).toString();
+    }
+
+    /**
      * Returns the duration of a temporary ban, rounded to minutes.
      *
      * @return the duration, empty if the ban is permanent or the action is no ban
@@ -108,15 +165,19 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
 
     /**
      * Formats the line of the moderation log file, e.g.
-     * {@code 2026-10-30 15:40:12 | BAN | Steve | by Discord @anedhel | 7d (until 2026-11-06 15:40) | Griefing}.
-     * Permanent bans show {@code permanent}; actions without duration leave that column out.
+     * {@code 2026-10-30 15:40:12 | #42 | BAN | Steve | by Discord @anedhel | 7d (until 2026-11-06 15:40) | Griefing}.
+     * Permanent bans show {@code permanent}; actions without duration leave that column out, entries without number
+     * the number.
      *
      * @param zone the time zone of the server
      * @return the line, without line break
      */
     public String toLogLine(ZoneId zone) {
-        StringBuilder line = new StringBuilder(TIME.format(time.atZone(zone)))
-                .append(" | ").append(action.label());
+        StringBuilder line = new StringBuilder(TIME.format(time.atZone(zone)));
+        if (id > 0) {
+            line.append(" | #").append(id);
+        }
+        line.append(" | ").append(action.label());
         if (action.hasTarget()) {
             line.append(" | ").append(target);
             linked.ifPresent(account -> line.append(" (").append(account.label()).append(')'));

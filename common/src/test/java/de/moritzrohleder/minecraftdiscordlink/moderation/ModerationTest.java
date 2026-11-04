@@ -73,11 +73,13 @@ class ModerationTest {
                 "Alex", Optional.empty(), Optional.of("Spam"));
 
         log.record(kick);
-        log.record(kick);
+        ModerationEntry second = log.record(kick);
 
-        assertEquals(List.of(kick.toLogLine(ZoneOffset.UTC), kick.toLogLine(ZoneOffset.UTC)),
+        assertEquals(2, second.id());
+        assertEquals(List.of("2026-10-30 15:40:12 | #1 | KICK | Steve | by Alex | Spam",
+                        "2026-10-30 15:40:12 | #2 | KICK | Steve | by Alex | Spam"),
                 Files.readAllLines(dir.resolve(ModerationLog.FILE_NAME)));
-        assertEquals(2, sent.size());
+        assertEquals(List.of(1L, 2L), sent.stream().map(ModerationEntry::id).toList());
     }
 
     @Test

@@ -186,6 +186,7 @@ The file is ordered: this server and the bot, then all switches
 | `/discord mute <player> <duration> <reason>` | admin | Mute a player for a time (at most 28 days) |
 | `/discord unmute <player> <reason>` | admin | Lift a mute |
 | `/discord networkmute <player> <duration> <reason>`, `networkunmute <player> <reason>` | admin | The same on all servers |
+| `/discord history <player> [page]` | admin | The moderation actions on a player, newest first, with their numbers (10 per page) |
 | `/discord rolewhitelist status` | admin | Show whether the whitelist is on and the whitelisted roles |
 | `/discord maintenance on [persistent] [reason]` | admin | Switch the maintenance mode on; `persistent` = `true` keeps it after a restart |
 | `/discord maintenance off [reason]` | admin | Switch the maintenance mode off |
@@ -223,6 +224,7 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mcadmin mute <player> <reason> <duration> [all_servers]` | Administrator | Mute a player for a time (at most 28 days); a muted player gets the new mute |
 | `/mcadmin unmute <player> <reason> [all_servers]` | Administrator | Lift a mute |
 | `/mcadmin mutelist [page]` | Administrator | List the muted players; ◀ ▶ buttons |
+| `/mcadmin history <player> [page]` | Administrator | The moderation actions on a player, newest first, with their numbers; ◀ ▶ buttons |
 | `/mcadmin whitelist add <player> [reason]` | Administrator | Add a player to the vanilla whitelist |
 | `/mcadmin whitelist remove <player> [reason]` | Administrator | Remove a player from the vanilla whitelist |
 | `/mcadmin whitelist list [page]` | Administrator | List the whitelisted players; ◀ ▶ buttons |
@@ -434,9 +436,13 @@ on/off and failed ban sync actions. Bans and whitelist changes by other mods
 are logged too; the moderator is then the stored source or `unknown` (the
 vanilla whitelist stores no source).
 
+Every action gets a number (`#42`), counted per server from 1 and never
+reused. It is shown in the log file, in the footer of the embed and in the
+history.
+
 - Server console (INFO).
 - `minecraftdiscordlink/moderation.log`, one line per action:
-  `2026-10-30 15:40:12 | BAN | Steve | by Discord @anedhel | 7d (until 2026-11-06 15:40) | Griefing`
+  `2026-10-30 15:40:12 | #42 | BAN | Steve | by Discord @anedhel | 7d (until 2026-11-06 15:40) | Griefing`
   (bans on all servers add `| all servers`; a target with a linked Discord
   account adds it: `| Steve (@steve) |`, the user ID if the name is unknown).
 - The moderation channel if `moderation.channel_id` is set (changeable by a
@@ -447,6 +453,17 @@ vanilla whitelist stores no source).
 
 Admins in Minecraft see Discord actions like vanilla commands of other
 operators: `[@anedhel: Banned Steve: Griefing]` (gray, italic).
+
+### Moderation history
+
+- Every action is also stored with its number in
+  `minecraftdiscordlink/moderation-history.json`, with the player's UUID, so
+  the history of a player survives a name change.
+- When the file does not exist yet, the entries of an existing
+  `moderation.log` are taken over once, numbered in their order. They have no
+  UUID and are found by the player's current name.
+- `/mcadmin history` and `/discord history` list all actions on a player,
+  newest first: `#42 2026-11-04 15:40 BAN · 7d (until …) · by Discord @anedhel · Griefing`.
 
 ### Ban sync (`features.moderation.ban_sync`)
 
@@ -723,7 +740,7 @@ because both can change.
 }
 ```
 
-Further files: `moderation.log`, `mutes.json`, `report.json`,
+Further files: `moderation.log`, `moderation-history.json`, `mutes.json`, `report.json`,
 `subscriptions.json` and `state.json` (sections 4b–4e).
 
 Pending link codes are kept in memory only and are lost on restart.
