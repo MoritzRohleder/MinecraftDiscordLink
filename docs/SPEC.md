@@ -769,6 +769,7 @@ Pending link codes are kept in memory only and are lost on restart.
 | Mod ID | `minecraftdiscordlink` |
 | Java package | `de.moritzrohleder.minecraftdiscordlink` |
 | Java | 21 |
-| Modules | `common`, `fabric`, `neoforge` |
+| Modules | `common`, `fabric`, `neoforge`, `forge` |
 | NeoForge | 21.1.x |
+| Forge | 52.x (ForgeGradle 6, Mojang names at runtime) |
 | Fabric | Fabric Loader + Fabric API |

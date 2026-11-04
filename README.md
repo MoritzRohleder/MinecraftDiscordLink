@@ -1,8 +1,8 @@
 # MinecraftDiscordLink
 
 A server-side Minecraft mod that links a Minecraft server with a Discord server.
-Works on **NeoForge** and **Fabric** (Minecraft 1.21.1) and only needs to be
-installed on the dedicated server – players don't need it.
+Works on **NeoForge**, **Forge** and **Fabric** (Minecraft 1.21.1) and only
+needs to be installed on the dedicated server – players don't need it.
 
 ## Features
 
@@ -43,7 +43,8 @@ installed on the dedicated server – players don't need it.
 ## Installation
 
 1. Put the jar for your loader into the server's `mods` folder:
-   `minecraftdiscordlink-neoforge-<version>.jar` or
+   `minecraftdiscordlink-neoforge-<version>.jar`,
+   `minecraftdiscordlink-forge-<version>.jar` or
    `minecraftdiscordlink-fabric-<version>.jar`. On Fabric the
    [Fabric API](https://modrinth.com/mod/fabric-api) is required.
 2. Start the server once. The mod creates `config/minecraftdiscordlink.toml`
@@ -221,8 +222,9 @@ Requires Java 21.
 ./gradlew build
 ```
 
-The jars are written to `fabric/build/libs` and `neoforge/build/libs`.
-GitHub Actions builds both on every push to `master`.
+The jars are written to `fabric/build/libs`, `neoforge/build/libs` and
+`forge/build/libs` (the Forge jar without the `-slim` suffix contains the
+libraries). GitHub Actions builds all three on every push to `master`.
 
 Concept and specification: [docs/CONCEPT.md](docs/CONCEPT.md),
 [docs/SPEC.md](docs/SPEC.md).

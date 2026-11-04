@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        loader: [fabric, neoforge]
+        loader: [fabric, neoforge, forge]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -37,4 +37,5 @@ jobs:
             ${{ matrix.loader }}/build/libs/*.jar
             !${{ matrix.loader }}/build/libs/*-sources.jar
             !${{ matrix.loader }}/build/libs/*-javadoc.jar
+            !${{ matrix.loader }}/build/libs/*-slim.jar
           if-no-files-found: error

@@ -1,0 +1,94 @@
+plugins {
+    id 'multiloader-loader'
+    id 'net.minecraftforge.gradle'
+}
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+    // Forge runs with Mojang names since 1.20.6: no reobfuscation and no refmap
+    reobf = false
+    copyIdeResources = true
+    // Automatically enable Forge AccessTransformers if the file exists
+    def at = project(':common').file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformer = at
+    }
+    runs {
+        server {
+            workingDirectory file('runs/server')
+            ideaModule "${rootProject.name}.${project.name}.main"
+            taskName 'Server'
+            mods {
+                modServerRun {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+// Forge expects classes and resources of the mod in one directory in the development environment
+sourceSets.each {
+    def dir = layout.buildDirectory.dir("sourcesSets/$it.name")
+    it.output.resourcesDir = dir
+    it.java.destinationDirectory = dir
+}
+
+configurations {
+    // Libraries that are shipped inside the mod jar
+    bundle
+    implementation.extendsFrom bundle
+    // Required on the game layer in the development environment
+    minecraftLibrary.extendsFrom bundle
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // Forge's development environment needs exactly this version
+    implementation('net.sf.jopt-simple:jopt-simple:5.0.4') { version { strictly '5.0.4' } }
+
+    bundle("net.dv8tion:JDA:${jda_version}") {
+        // Voice support is not needed
+        exclude module: 'opus-java'
+        exclude module: 'tink'
+        // Provided by Minecraft
+        exclude group: 'org.slf4j'
+    }
+    bundle "net.fellbaum:jemoji:${jemoji_version}"
+}
+
+// The mod jar contains the libraries; the jar without them is only an intermediate result
+jarJar.enable()
+tasks.named('jar', Jar) {
+    archiveClassifier = 'slim'
+}
+tasks.named('jarJar') {
+    archiveClassifier = ''
+}
+tasks.named('assemble') {
+    dependsOn 'jarJar'
+}
+
+// jarJar is not transitive, so every resolved library is added explicitly, pinned to the resolved version
+configurations.jarJar.withDependencies { deps ->
+    configurations.bundle.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+        def id = artifact.moduleVersion.id
+        def dependency = project.dependencies.create("${id.group}:${id.name}:[${id.version},)")
+        jarJar.pin(dependency, id.version)
+        deps.add(dependency)
+    }
+}
+
+jar {
+    manifest {
+        // Forge reads the Mixin configurations from the manifest
+        attributes('MixinConfigs': "${mod_id}.mixins.json")
+    }
+}
+
+// Forge runs with Mojang names and needs no refmap; without the reference Mixin does not warn about it
+processResources {
+    filesMatching("${mod_id}.mixins.json") {
+        filter { line -> line.contains('"refmap"') ? null : line }
+    }
+}
