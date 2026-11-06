@@ -47,7 +47,8 @@ public final class Features {
                 new Feature("Moderation commands", moderation.enabled(), Optional.empty(), List.of(
                         part("Moderation channel", moderation.channelId().isPresent()),
                         part("Ban sync", moderation.banSync().enabled()),
-                        part("Mute sync", moderation.muteSync()))),
+                        part("Mute sync", moderation.muteSync()),
+                        part("Warnings", moderation.warnings().enabled()))),
                 new Feature("Maintenance mode", config.maintenance().enabled(), Optional.empty(), List.of()),
                 new Feature("Information commands", config.info().enabled(), Optional.empty(), List.of()),
                 new Feature("Leaderboards", config.leaderboard().enabled(), config.leaderboard().categories()

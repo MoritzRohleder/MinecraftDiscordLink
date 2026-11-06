@@ -148,6 +148,10 @@ public final class ModerationHistory {
                     target = linked.group(1);
                 }
             }
+            long ref = 0;
+            if (!columns.isEmpty() && columns.getFirst().matches("#\\d+")) {
+                ref = Long.parseLong(columns.removeFirst().substring(1));
+            }
             String by = columns.removeFirst();
             if (!by.startsWith("by ")) {
                 return Optional.empty();
@@ -169,7 +173,7 @@ public final class ModerationHistory {
             String reason = String.join(" | ", columns);
             return Optional.of(new ModerationEntry(time, action, target, Optional.empty(), by.substring(3), until,
                     reason.isEmpty() || reason.equals(ModerationEntry.NO_REASON) ? Optional.empty()
-                            : Optional.of(reason), network));
+                            : Optional.of(reason), network).withRef(ref));
         } catch (DateTimeParseException | java.util.NoSuchElementException e) {
             return Optional.empty();
         }
@@ -217,7 +221,7 @@ public final class ModerationHistory {
                         ModerationEntry.Network.valueOf(entry.network().toUpperCase(Locale.ROOT)),
                         Optional.ofNullable(entry.discordId()).map(id -> new ModerationEntry.LinkedAccount(id,
                                 Optional.ofNullable(entry.discordName()))),
-                        entry.id());
+                        entry.id(), entry.ref() == null ? 0 : entry.ref());
                 entries.put(moderation.id(), moderation);
             } catch (IllegalArgumentException | NullPointerException | DateTimeParseException ignored) {
                 // An invalid entry is skipped
@@ -236,7 +240,8 @@ public final class ModerationHistory {
                 entry.moderator(), entry.until().map(Instant::toString).orElse(null), entry.reason().orElse(null),
                 entry.network().name().toLowerCase(Locale.ROOT),
                 entry.linked().map(ModerationEntry.LinkedAccount::id).orElse(null),
-                entry.linked().flatMap(ModerationEntry.LinkedAccount::username).orElse(null))).toList();
+                entry.linked().flatMap(ModerationEntry.LinkedAccount::username).orElse(null),
+                entry.ref() == 0 ? null : entry.ref())).toList();
         file.write(new Data(nextId, list));
     }
 
@@ -263,9 +268,10 @@ public final class ModerationHistory {
      * @param network     {@code local}, {@code all_servers} or {@code received}
      * @param discordId   the linked Discord account, {@code null} if none
      * @param discordName the linked Discord account's name, {@code null} if unknown
+     * @param ref         the number of the referenced entry, {@code null} if none
      */
     private record Entry(long id, String time, String action, String target, String uuid, String moderator,
                          String until, String reason, String network, @SerializedName("discord_id") Long discordId,
-                         @SerializedName("discord_name") String discordName) {
+                         @SerializedName("discord_name") String discordName, Long ref) {
     }
 }

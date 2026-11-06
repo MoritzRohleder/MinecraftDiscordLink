@@ -5,6 +5,7 @@ import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
+import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationAction;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationEntry;
 import net.dv8tion.jda.api.JDA;
@@ -30,7 +31,7 @@ import java.util.OptionalLong;
 import java.util.UUID;
 
 /**
- * Bans, unbans, mutes and unmutes on all servers sharing the Discord server.
+ * Bans, unbans, mutes, unmutes and warnings on all servers sharing the Discord server.
  * <p>
  * The servers do not talk to each other directly; each runs its own connection with the same bot. The server where
  * a ban on all servers is made posts it to the shared moderation channel as usual; the title of the embed links to the
@@ -83,6 +84,9 @@ final class NetworkBans extends ListenerAdapter {
             case UNBAN -> "unban";
             case MUTE, MUTE_UPDATED -> "mute";
             case UNMUTE -> "unmute";
+            case WARN -> "warn";
+            case UNWARN -> "unwarn";
+            case WARN_REACTIVATED -> "rewarn";
             default -> null;
         };
         if (action == null || entry.network() != ModerationEntry.Network.ALL_SERVERS || entry.player().isEmpty()) {
@@ -98,6 +102,12 @@ final class NetworkBans extends ListenerAdapter {
         String reason = entry.reason().orElse("");
         values.put("reason", reason.length() > MAX_REASON ? reason.substring(0, MAX_REASON) : reason);
         values.put("origin", ConfigManager.get().server().name());
+        if (entry.action() == ModerationAction.WARN) {
+            values.put("id", String.valueOf(entry.id()));
+        } else if (entry.ref() > 0) {
+            // The warning a change refers to, by its number on this server
+            values.put("ref", String.valueOf(entry.ref()));
+        }
         StringBuilder url = new StringBuilder(DATA_URL).append(entry.player().get()).append('?');
         values.forEach((key, value) -> url.append(url.charAt(url.length() - 1) == '?' ? "" : "&").append(key)
                 .append('=').append(URLEncoder.encode(value, StandardCharsets.UTF_8)));
@@ -196,6 +206,12 @@ final class NetworkBans extends ListenerAdapter {
                     moderation.muteUntil(profile, reason, Instant.ofEpochSecond(until), scope);
                 } else if ("unmute".equals(values.get("action"))) {
                     moderation.unmute(profile, reason, scope);
+                } else if ("warn".equals(values.get("action"))) {
+                    moderation.receiveWarning(profile, reason, scope, values.get("origin"),
+                            Long.parseLong(values.get("id")));
+                } else if ("unwarn".equals(values.get("action")) || "rewarn".equals(values.get("action"))) {
+                    moderation.receiveWarningChange(values.get("origin"), Long.parseLong(values.get("ref")),
+                            "rewarn".equals(values.get("action")), reason, scope);
                 }
             });
         } catch (IllegalArgumentException | NullPointerException e) {

@@ -3,6 +3,7 @@ package de.moritzrohleder.minecraftdiscordlink.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.authlib.GameProfile;
@@ -18,6 +19,7 @@ import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationContext;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationEntry;
+import de.moritzrohleder.minecraftdiscordlink.moderation.WarningStore;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 import net.minecraft.ChatFormatting;
@@ -34,6 +36,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
@@ -56,6 +59,10 @@ import java.util.function.Consumer;
  *     <li>{@code /discord mute <player> <duration> <reason>}, {@code /discord unmute <player> <reason>} and the
  *     variants on all servers {@code networkmute} and {@code networkunmute} (admins only)</li>
  *     <li>{@code /discord history <player> [page]}: shows the moderation actions on a player (admins only)</li>
+ *     <li>{@code /discord warn <player> <reason>}, {@code /discord networkwarn <player> <reason>},
+ *     {@code /discord unwarn <id> <reason>} and {@code /discord warnings <player>}: warnings (admins only)</li>
+ *     <li>{@code /discord case <id>}, {@code /discord case reason <id> <reason>} and
+ *     {@code /discord case reactivate <id> <reason>}: a moderation action by its number (admins only)</li>
  *     <li>{@code /discord rolewhitelist status}: shows the whitelisted Discord roles (admins only)</li>
  *     <li>{@code /discord maintenance on [persistent] [reason]|off [reason]|status}: switches the maintenance mode
  *     (admins only)</li>
@@ -143,6 +150,37 @@ public final class DiscordCommand {
                         .then(Commands.argument("player", GameProfileArgument.gameProfile())
                                 .then(Commands.argument("reason", StringArgumentType.greedyString())
                                         .executes(context -> mute(context, false, true)))))
+                .then(Commands.literal("warn")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(context -> warn(context, false)))))
+                .then(Commands.literal("networkwarn")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(context -> warn(context, true)))))
+                .then(Commands.literal("unwarn")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("id", LongArgumentType.longArg(1))
+                                .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                        .executes(context -> caseAction(context, CaseAction.UNWARN)))))
+                .then(Commands.literal("warnings")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                                .executes(DiscordCommand::warnings)))
+                .then(Commands.literal("case")
+                        .requires(Services.PLATFORM::isAdmin)
+                        .then(Commands.argument("id", LongArgumentType.longArg(1))
+                                .executes(DiscordCommand::showCase))
+                        .then(Commands.literal("reason")
+                                .then(Commands.argument("id", LongArgumentType.longArg(1))
+                                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                                .executes(context -> caseAction(context, CaseAction.REASON)))))
+                        .then(Commands.literal("reactivate")
+                                .then(Commands.argument("id", LongArgumentType.longArg(1))
+                                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                                .executes(context -> caseAction(context, CaseAction.REACTIVATE))))))
                 .then(Commands.literal("history")
                         .requires(Services.PLATFORM::isAdmin)
                         .then(Commands.argument("player", GameProfileArgument.gameProfile())
@@ -422,6 +460,183 @@ public final class DiscordCommand {
             }
         }
         return changed;
+    }
+
+    /**
+     * Changes of a moderation action by its number.
+     */
+    private enum CaseAction {
+        /** {@code /discord unwarn <id> <reason>}. */
+        UNWARN,
+        /** {@code /discord case reactivate <id> <reason>}. */
+        REACTIVATE,
+        /** {@code /discord case reason <id> <reason>}. */
+        REASON
+    }
+
+    /**
+     * Runs {@code /discord warn <player> <reason>} and {@code /discord networkwarn <player> <reason>}.
+     *
+     * @param context    the command context
+     * @param allServers whether the warning applies to all servers
+     * @return the number of warned players
+     * @throws CommandSyntaxException if the player argument is invalid
+     */
+    private static int warn(CommandContext<CommandSourceStack> context, boolean allServers)
+            throws CommandSyntaxException {
+        if (switchedOff(context, warningsEnabled())) {
+            return 0;
+        }
+        Optional<Moderation> moderation = moderationOrFail(context);
+        if (moderation.isEmpty()) {
+            return 0;
+        }
+        String reason = StringArgumentType.getString(context, "reason");
+        CommandSourceStack source = context.getSource();
+        ModerationContext.Scope scope = ModerationContext.Scope.of(source.getTextName(), reason)
+                .withBanOptions(false, allServers);
+        int warned = 0;
+        for (GameProfile profile : GameProfileArgument.getGameProfiles(context, "player")) {
+            warned += sendReply(source, moderation.get().warn(profile, reason, scope));
+        }
+        return warned;
+    }
+
+    /**
+     * Runs {@code /discord unwarn}, {@code /discord case reactivate} and {@code /discord case reason}.
+     *
+     * @param context the command context
+     * @param action  what to change
+     * @return 1 on success, 0 otherwise
+     */
+    private static int caseAction(CommandContext<CommandSourceStack> context, CaseAction action) {
+        boolean enabled = action == CaseAction.REASON ? ConfigManager.get().moderation().enabled()
+                : warningsEnabled();
+        if (switchedOff(context, enabled)) {
+            return 0;
+        }
+        Optional<Moderation> moderation = moderationOrFail(context);
+        if (moderation.isEmpty()) {
+            return 0;
+        }
+        long id = LongArgumentType.getLong(context, "id");
+        String reason = StringArgumentType.getString(context, "reason");
+        ModerationContext.Scope scope = ModerationContext.Scope.of(context.getSource().getTextName(), reason);
+        return sendReply(context.getSource(), switch (action) {
+            case UNWARN -> moderation.get().unwarn(id, reason, scope);
+            case REACTIVATE -> moderation.get().reactivateWarning(id, reason, scope);
+            case REASON -> moderation.get().changeReason(id, reason, scope);
+        });
+    }
+
+    /**
+     * Runs {@code /discord warnings <player>}: all warnings of the player, newest first, with their state.
+     *
+     * @param context the command context
+     * @return the number of warnings shown
+     * @throws CommandSyntaxException if the player argument is invalid
+     */
+    private static int warnings(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        if (switchedOff(context, warningsEnabled())) {
+            return 0;
+        }
+        Optional<Moderation> moderation = moderationOrFail(context);
+        if (moderation.isEmpty()) {
+            return 0;
+        }
+        CommandSourceStack source = context.getSource();
+        ZoneId zone = moderation.get().log().zone();
+        int shown = 0;
+        for (GameProfile profile : GameProfileArgument.getGameProfiles(context, "player")) {
+            List<WarningStore.Warning> warnings = moderation.get().warnings(profile.getId());
+            long active = warnings.stream()
+                    .filter(warning -> moderation.get().status(warning) == WarningStore.Status.ACTIVE).count();
+            source.sendSystemMessage(Component.literal("Warnings of " + profile.getName() + ": " + active
+                    + " active, " + warnings.size() + " in total").withStyle(ChatFormatting.GOLD));
+            for (WarningStore.Warning warning : warnings) {
+                WarningStore.Status status = moderation.get().status(warning);
+                source.sendSystemMessage(Component.literal("#" + warning.id() + " "
+                                + HISTORY_DATE.format(warning.time().atZone(zone)) + " ").withStyle(ChatFormatting.GRAY)
+                        .append(Component.literal(status.name().toLowerCase(Locale.ROOT)).withStyle(
+                                status == WarningStore.Status.ACTIVE ? ChatFormatting.YELLOW : ChatFormatting.GRAY))
+                        .append(Component.literal(" · by " + warning.moderator() + " · " + warning.reason())
+                                .withStyle(status == WarningStore.Status.ACTIVE ? ChatFormatting.WHITE
+                                        : ChatFormatting.GRAY)));
+                shown++;
+            }
+        }
+        return shown;
+    }
+
+    /**
+     * Runs {@code /discord case <id>}: all details of a moderation action.
+     *
+     * @param context the command context
+     * @return 1 if the action exists, 0 otherwise
+     */
+    private static int showCase(CommandContext<CommandSourceStack> context) {
+        if (switchedOff(context, ConfigManager.get().moderation().enabled())) {
+            return 0;
+        }
+        Optional<Moderation> moderation = moderationOrFail(context);
+        if (moderation.isEmpty()) {
+            return 0;
+        }
+        long id = LongArgumentType.getLong(context, "id");
+        CommandSourceStack source = context.getSource();
+        Optional<ModerationEntry> entry = moderation.get().entry(id);
+        if (entry.isEmpty()) {
+            source.sendFailure(Component.literal("There is no moderation action #" + id + "."));
+            return 0;
+        }
+        ZoneId zone = moderation.get().log().zone();
+        source.sendSystemMessage(Component.literal("#" + id + " " + entry.get().action().label()
+                + (entry.get().action().hasTarget() ? " " + entry.get().target() : "")).withStyle(ChatFormatting.GOLD));
+        source.sendSystemMessage(Component.literal(HISTORY_DATE.format(entry.get().time().atZone(zone)) + " · "
+                + entry.get().historyText(zone)));
+        moderation.get().warning(id).ifPresent(warning -> source.sendSystemMessage(Component.literal("Warning: "
+                + moderation.get().status(warning).name().toLowerCase(Locale.ROOT)).withStyle(ChatFormatting.GRAY)));
+        return 1;
+    }
+
+    /**
+     * Checks whether the warnings are switched on.
+     *
+     * @return whether moderation and warnings are switched on
+     */
+    private static boolean warningsEnabled() {
+        ModConfig.Moderation moderation = ConfigManager.get().moderation();
+        return moderation.enabled() && moderation.warnings().enabled();
+    }
+
+    /**
+     * Returns the moderation, telling the source if it is not available.
+     *
+     * @param context the command context
+     * @return the moderation, empty if not available
+     */
+    private static Optional<Moderation> moderationOrFail(CommandContext<CommandSourceStack> context) {
+        Optional<Moderation> moderation = MinecraftDiscordLink.moderation();
+        if (moderation.isEmpty()) {
+            context.getSource().sendFailure(Component.literal("The moderation is not available right now."));
+        }
+        return moderation;
+    }
+
+    /**
+     * Sends the result of a moderation action to the source, like a vanilla command.
+     *
+     * @param source the command source
+     * @param reply  the result
+     * @return 1 on success, 0 otherwise
+     */
+    private static int sendReply(CommandSourceStack source, Linking.Reply reply) {
+        if (reply.success()) {
+            source.sendSuccess(() -> Component.literal(reply.message()), true);
+            return 1;
+        }
+        source.sendFailure(Component.literal(reply.message()));
+        return 0;
     }
 
     /**

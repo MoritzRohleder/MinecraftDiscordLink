@@ -6,10 +6,10 @@ import com.electronwill.nightconfig.core.io.ParsingException;
 import com.electronwill.nightconfig.core.io.ParsingMode;
 import com.electronwill.nightconfig.toml.TomlFormat;
 import de.moritzrohleder.minecraftdiscordlink.Constants;
-import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig.ActivityType;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig.PermissionMode;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig.WebhookMode;
+import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -52,6 +52,8 @@ public final class ConfigLoader {
 
     /** Discord allows at most 25 choices for an option, one per leaderboard category. */
     private static final int MAX_CATEGORIES = 25;
+    /** Longest mute of a warning rule, the longest Discord timeout. */
+    private static final Duration MAX_MUTE = Duration.ofDays(28);
     /** Largest number of players shown by {@code /mc top}, so the answer stays readable. */
     public static final int MAX_LEADERBOARD_SIZE = 25;
 
@@ -141,6 +143,8 @@ public final class ConfigLoader {
         entry("features.moderation.mute_sync", false, comment(
                 "Mutes as Discord timeouts for linked accounts and vice versa.",
                 "Needs the bot permissions \"Timeout Members\" and \"View Audit Log\"."));
+        entry("features.moderation.warnings", true, comment(
+                "Warnings (/mcadmin warn, /discord warn) and the rules in [[moderation.warning_rules]]."));
 
         section("features.maintenance",
                 comment("Maintenance mode: only operators and linked Discord admins may join."));
@@ -239,6 +243,9 @@ public final class ConfigLoader {
         entry("texts.moderation.muted", "&cYou are muted until {until}. Reason: {reason}",
                 comment("Note to a muted player who tries to write (Minecraft text).",
                         "Placeholders: {until}, {reason}"));
+        entry("texts.moderation.warned", "&cYou were warned: {reason} &7(active warnings: {count})",
+                comment("Note to a warned player who is online (Minecraft text).",
+                        "Placeholders: {reason}, {count}"));
 
         section("texts.maintenance", comment("Maintenance mode."));
         entry("texts.maintenance.kick", String.join("\n",
@@ -352,13 +359,27 @@ public final class ConfigLoader {
                 "  \"\"      no role"));
 
         section("moderation", comment("Settings of the moderation. Every kick, ban and whitelist change is logged",
-                "to the console and to minecraftdiscordlink/moderation.log."));
+                "to the console and to minecraftdiscordlink/moderation.log.",
+                "",
+                "Warning rules: after every warning, each [[moderation.warning_rules]] entry counts the player's",
+                "active warnings; if several rules apply, only the strictest punishment is given (ban > mute > kick,",
+                "then the longer one). Example:",
+                "  [[moderation.warning_rules]]",
+                "  count = 3          # number of warnings",
+                "  within = \"4w\"     # optional: only warnings of the last 4 weeks; without = all warnings",
+                "  action = \"mute\"   # \"kick\", \"mute\" or \"ban\"",
+                "  duration = \"1d\"   # mute: required, at most 28d; ban: optional, without = permanent",
+                "  repeat = true      # true: every further warning from count on punishes again;",
+                "                     # false: only the warning that reaches count"));
         entry("moderation.channel_id", "", comment(
                 "ID of a channel the moderation log is also sent to. \"\" = only the log file.",
                 "Bans on all servers need the same channel on all servers sharing the Discord server."));
         entry("moderation.ban_sync_action", "ban", comment(
                 "What a Minecraft ban does to the linked Discord account: \"ban\" or \"kick\" (removed from the",
                 "Discord server, but can come back with an invite)."));
+        entry("moderation.warning_expire_after", "", comment(
+                "How long a warning counts, e.g. 90d. \"\" = forever. Expired warnings stay in the history and can",
+                "be reactivated with /mcadmin case reactivate."));
 
         section("monitoring", comment("Settings of the monitoring channel."));
         entry("monitoring.channel_id", "", comment("ID of the monitoring channel. \"\" = monitoring off."));
@@ -644,7 +665,9 @@ public final class ConfigLoader {
                             bool("features.moderation.enabled"),
                             optionalChannel("moderation.channel_id", "moderation channel"),
                             new ModConfig.BanSync(bool("features.moderation.ban_sync"), discordAction()),
-                            bool("features.moderation.mute_sync")),
+                            bool("features.moderation.mute_sync"),
+                            new ModConfig.Warnings(bool("features.moderation.warnings"),
+                                    optionalDuration("moderation.warning_expire_after"), warningRules())),
                     new ModConfig.Maintenance(bool("features.maintenance.enabled")),
                     new ModConfig.Info(bool("features.info.enabled")),
                     new ModConfig.Monitoring(
@@ -687,7 +710,8 @@ public final class ConfigLoader {
                             string("texts.monitoring.lag_over_title"),
                             string("texts.monitoring.lag_over"),
                             string("texts.monitoring.crash_title"),
-                            string("texts.moderation.muted")));
+                            string("texts.moderation.muted"),
+                            string("texts.moderation.warned")));
         }
 
         /**
@@ -991,6 +1015,105 @@ public final class ConfigLoader {
                 }
             }
             return invalid(path, Durations.parse((String) defaultValue(path)).orElseThrow());
+        }
+
+        /**
+         * Reads an optional duration such as {@code 90d}; an empty text means none.
+         *
+         * @param path path of the entry
+         * @return the duration, empty if none or invalid
+         */
+        private Optional<Duration> optionalDuration(String path) {
+            if (config.get(path) instanceof String text) {
+                if (text.isBlank()) {
+                    return Optional.empty();
+                }
+                Optional<Duration> duration = Durations.parse(text.strip());
+                if (duration.isPresent()) {
+                    return duration;
+                }
+            }
+            return invalid(path, Optional.empty());
+        }
+
+        /**
+         * Reads the {@code [[moderation.warning_rules]]} entries. Invalid entries are logged and ignored.
+         *
+         * @return the valid rules
+         */
+        private List<ModConfig.WarningRule> warningRules() {
+            String path = "moderation.warning_rules";
+            List<ModConfig.WarningRule> rules = new ArrayList<>();
+            if (!(config.get(path) instanceof List<?> entries)) {
+                if (config.contains(path)) {
+                    Constants.LOG.error("Invalid value for '{}' in the config. No warning rules are used.", path);
+                }
+                return rules;
+            }
+            for (int i = 0; i < entries.size(); i++) {
+                String name = path + " entry " + (i + 1);
+                Optional<ModConfig.WarningRule> rule = entries.get(i) instanceof UnmodifiableConfig entry
+                        ? warningRule(entry) : Optional.empty();
+                if (rule.isPresent()) {
+                    rules.add(rule.get());
+                } else {
+                    Constants.LOG.error("Invalid {} in the config (needs 'count' of at least 1, 'action' \"kick\", "
+                            + "\"mute\" or \"ban\", a 'duration' of at most 28d for mutes and valid durations). The "
+                            + "entry is ignored.", name);
+                }
+            }
+            return List.copyOf(rules);
+        }
+
+        /**
+         * Parses one warning rule.
+         *
+         * @param entry the entry
+         * @return the rule, empty if invalid
+         */
+        private static Optional<ModConfig.WarningRule> warningRule(UnmodifiableConfig entry) {
+            if (!(entry.get("count") instanceof Number count) || count.longValue() < 1
+                    || count.longValue() > Integer.MAX_VALUE || !(entry.get("action") instanceof String action)) {
+                return Optional.empty();
+            }
+            ModConfig.WarningAction kind;
+            try {
+                kind = ModConfig.WarningAction.valueOf(action.strip().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                return Optional.empty();
+            }
+            Optional<Optional<Duration>> within = ruleDuration(entry.get("within"));
+            Optional<Optional<Duration>> duration = ruleDuration(entry.get("duration"));
+            if (within.isEmpty() || duration.isEmpty()) {
+                return Optional.empty();
+            }
+            if (kind == ModConfig.WarningAction.MUTE && (duration.get().isEmpty()
+                    || duration.get().get().compareTo(MAX_MUTE) > 0)) {
+                return Optional.empty();
+            }
+            Object repeat = entry.get("repeat");
+            if (repeat != null && !(repeat instanceof Boolean)) {
+                return Optional.empty();
+            }
+            return Optional.of(new ModConfig.WarningRule(count.intValue(), within.get(), kind,
+                    kind == ModConfig.WarningAction.KICK ? Optional.empty() : duration.get(),
+                    repeat == null || (Boolean) repeat));
+        }
+
+        /**
+         * Parses an optional duration of a warning rule.
+         *
+         * @param value the raw value, {@code null} if missing
+         * @return the duration (empty inside if missing), empty if invalid
+         */
+        private static Optional<Optional<Duration>> ruleDuration(Object value) {
+            if (value == null || value instanceof String text && text.isBlank()) {
+                return Optional.of(Optional.empty());
+            }
+            if (value instanceof String text) {
+                return Durations.parse(text.strip()).map(Optional::of);
+            }
+            return Optional.empty();
         }
 
         /**

@@ -58,6 +58,7 @@ applications = false # whitelist applications via Discord (section 4b)
 enabled = true       # the moderation commands; the log is always written
 ban_sync = false
 mute_sync = false    # mutes as Discord timeouts and vice versa
+warnings = true      # warnings and their rules
 [features.maintenance]
 enabled = true
 [features.info]
@@ -93,6 +94,7 @@ maintenance_format = "🔧 Maintenance | {online}/{max} online | Last updated: {
 # message, button, accepted_dm, denied_dm
 [texts.moderation]
 muted = "&cYou are muted until {until}. Reason: {reason}"
+warned = "&cYou were warned: {reason} &7(active warnings: {count})"
 [texts.maintenance]
 # kick
 [texts.notifications]
@@ -134,6 +136,11 @@ linked_role = "auto" # "auto" (role "Linked Account"), a role ID or ""
 [moderation]
 channel_id = ""      # optional; the same on all servers for bans on all servers
 ban_sync_action = "ban"  # what a Minecraft ban does in Discord: "ban" or "kick"
+warning_expire_after = ""  # how long a warning counts, e.g. "90d"; "" = forever
+# One [[moderation.warning_rules]] entry per rule (none by default):
+#   count = 3, within = "4w" (optional), action = "kick"|"mute"|"ban",
+#   duration = "1d" (mute: required, at most 28d; ban: optional = permanent),
+#   repeat = true (every further warning punishes again) | false (only the one reaching count)
 
 [monitoring]
 channel_id = ""
@@ -194,6 +201,11 @@ The file is ordered: this server and the bot, then all switches
 | `/discord mute <player> <duration> <reason>` | admin | Mute a player for a time (at most 28 days) |
 | `/discord unmute <player> <reason>` | admin | Lift a mute |
 | `/discord networkmute <player> <duration> <reason>`, `networkunmute <player> <reason>` | admin | The same on all servers |
+| `/discord warn <player> <reason>`, `networkwarn <player> <reason>` | admin | Warn a player (on all servers); the warning rules may punish them |
+| `/discord unwarn <id> <reason>` | admin | Lift a warning; it stays in the history |
+| `/discord warnings <player>` | admin | The warnings of a player with their state |
+| `/discord case <id>` | admin | A moderation action by its number |
+| `/discord case reason <id> <reason>`, `case reactivate <id> <reason>` | admin | Change the reason of an action; let a lifted or expired warning count again |
 | `/discord history <player> [page]` | admin | The moderation actions on a player, newest first, with their numbers (10 per page) |
 | `/discord rolewhitelist status` | admin | Show whether the whitelist is on and the whitelisted roles |
 | `/discord maintenance on [persistent] [reason]` | admin | Switch the maintenance mode on; `persistent` = `true` keeps it after a restart |
@@ -232,6 +244,12 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mcadmin mute <player> <reason> <duration> [all_servers]` | Administrator | Mute a player for a time (at most 28 days); a muted player gets the new mute |
 | `/mcadmin unmute <player> <reason> [all_servers]` | Administrator | Lift a mute |
 | `/mcadmin mutelist [page]` | Administrator | List the muted players; ◀ ▶ buttons |
+| `/mcadmin warn <player> <reason> [all_servers]` | Administrator | Warn a player; the warning rules may punish them |
+| `/mcadmin unwarn <id> <reason>` | Administrator | Lift a warning; it stays in the history |
+| `/mcadmin warnings <player> [page]` | Administrator | The warnings of a player, newest first, with their state (active, expired, lifted); ◀ ▶ buttons |
+| `/mcadmin case show <id>` | Administrator | All details of a moderation action |
+| `/mcadmin case reason <id> <reason>` | Administrator | Change the reason of a moderation action |
+| `/mcadmin case reactivate <id> <reason>` | Administrator | Let a lifted or expired warning count again |
 | `/mcadmin history <player> [page]` | Administrator | The moderation actions on a player, newest first, with their numbers; ◀ ▶ buttons |
 | `/mcadmin whitelist add <player> [reason]` | Administrator | Add a player to the vanilla whitelist |
 | `/mcadmin whitelist remove <player> [reason]` | Administrator | Remove a player from the vanilla whitelist |
@@ -471,7 +489,8 @@ Minecraft `whois`: `Steve is linked to @steve (online now)` /
 Every moderation action is logged, from Discord commands as well as from
 vanilla commands: kick, kick all, ban, ban updated, unban, ban expired, IP ban and IP
 unban (log only), whitelist add/remove/on/off, role add/remove, maintenance
-on/off, accepted and denied whitelist applications and failed ban sync actions. Bans and whitelist changes by other mods
+on/off, warnings and their changes, changed reasons, accepted and denied
+whitelist applications and failed ban sync actions. Bans and whitelist changes by other mods
 are logged too; the moderator is then the stored source or `unknown` (the
 vanilla whitelist stores no source).
 
@@ -551,6 +570,45 @@ Opt-in, only for linked accounts:
   (gold 🔇, unmutes green 🔊).
 - Mutes on all servers (`all_servers`, `/discord networkmute`,
   `/discord networkunmute`) work like bans on all servers.
+
+### Warnings (`features.moderation.warnings`)
+
+- `/mcadmin warn`, `/discord warn` and `/discord networkwarn` warn a player
+  (reason required). An online player sees `texts.moderation.warned`.
+  Logged as `WARN` (yellow 📝).
+- A warning counts until it is lifted or, with
+  `moderation.warning_expire_after`, until it has expired. Lifted and expired
+  warnings stay in the history and in `/mcadmin warnings`, marked as such.
+- `unwarn <id>` lifts a warning (`UNWARN`, green 🧹),
+  `case reactivate <id>` lets a lifted or expired warning count again, from
+  the reactivation on (`WARN REACTIVATED`). Both entries refer to the
+  warning (`| #70 |` in the log, "Refers to" in the embed).
+- After every warning and reactivation, each `[[moderation.warning_rules]]`
+  entry counts the player's active warnings, all of them or those of the
+  last `within`. A rule applies when the count reaches `count`; with
+  `repeat = true` (default) also at every further warning, with
+  `repeat = false` only at exactly `count`. If several rules apply, only the
+  strictest punishment is given: ban over mute over kick, then the longer
+  one (a permanent ban is the longest).
+- The punishment is a normal kick, mute or ban by `MinecraftDiscordLink` with
+  the reason `3 warnings within 28d (latest #70: Spam)`, logged and synced
+  like any other. A kick of an offline player is skipped and mentioned in the
+  answer.
+- Warnings on all servers (`all_servers`, `networkwarn`) work like bans on
+  all servers. Only the server they were made on applies the rules, and its
+  punishment then applies to all servers. Lifting or reactivating such a
+  warning on that server carries over to the others; on another server it
+  stays local.
+- Stored in `minecraftdiscordlink/warnings.json`.
+
+### Moderation actions by number
+
+- `/mcadmin case show <id>` and `/discord case <id>` show one action with all
+  details (and the state of a warning).
+- `case reason <id> <reason>` changes the reason in the history and the
+  warnings, logged as `CASE UPDATED` (✏️) referring to the action. The log
+  file keeps the old line; an active ban or mute keeps the reason it was
+  given with.
 
 ### Mute sync (`features.moderation.mute_sync`)
 
@@ -720,6 +778,7 @@ Placeholder values are inserted as plain text.
 | `texts.applications.denied_dm` | DM to denied applicants | `{player}`, `{reason}` |
 | `texts.maintenance.kick` (*MC*) | kick during maintenance | `{reason}` |
 | `texts.moderation.muted` (*MC*) | note to a muted player who tries to write | `{until}`, `{reason}` |
+| `texts.moderation.warned` (*MC*) | note to a warned player who is online | `{reason}`, `{count}` (active warnings) |
 | `texts.notifications.server_start`, `server_stop`, `maintenance_off` | DM | `{server}`, `{Server}` |
 | `texts.notifications.maintenance_on` | DM | `{server}`, `{Server}`, `{reason}` |
 | `texts.notifications.player_online` | DM | `{player}`, `{server}`, `{Server}` |
@@ -782,7 +841,7 @@ because both can change.
 }
 ```
 
-Further files: `moderation.log`, `moderation-history.json`, `applications.json`, `mutes.json`, `report.json`,
+Further files: `moderation.log`, `moderation-history.json`, `applications.json`, `mutes.json`, `warnings.json`, `report.json`,
 `subscriptions.json` and `state.json` (sections 4b–4e).
 
 Pending link codes are kept in memory only and are lost on restart.

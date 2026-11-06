@@ -46,6 +46,14 @@ public enum ModerationAction {
     MAINTENANCE_ON("MAINTENANCE ON", "Maintenance mode switched on"),
     /** The maintenance mode was switched off. */
     MAINTENANCE_OFF("MAINTENANCE OFF", "Maintenance mode switched off"),
+    /** A player was warned. */
+    WARN("WARN", "Warned"),
+    /** A warning was lifted; the entry refers to the warning. */
+    UNWARN("UNWARN", "Warning lifted:"),
+    /** A lifted or expired warning counts again; the entry refers to the warning. */
+    WARN_REACTIVATED("WARN REACTIVATED", "Warning reactivated:"),
+    /** The reason of an entry was changed; the entry refers to it and has the new reason. */
+    CASE_UPDATED("CASE UPDATED", "Reason changed:"),
     /** A whitelist application was accepted; the target is the Minecraft name. */
     APPLICATION_ACCEPTED("APPLICATION ACCEPTED", "Application accepted:"),
     /** A whitelist application was denied; the target is the Minecraft name. */

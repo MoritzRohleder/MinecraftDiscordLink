@@ -26,7 +26,9 @@ needs to be installed on the dedicated server – players don't need it.
 - **Moderation** – kick, (temporary) ban, unban and whitelist from Discord,
   temporary bans also in Minecraft. Every moderation action, also from
   vanilla commands, goes to a moderation log file and optionally a Discord
-  channel. Temporary mutes (chat and private messages). Optional ban and mute
+  channel. Temporary mutes (chat and private messages). Warnings with
+  configurable rules that mute, kick or ban automatically. Every action has
+  a number for the history and later changes. Optional ban and mute
   sync with linked Discord accounts (bans and timeouts), bans and mutes on all
   servers sharing the Discord server.
 - **Maintenance mode** – only operators and linked Discord admins may join;
@@ -131,6 +133,8 @@ settings per feature.
 | `linking.linked_role` | `"auto"` | Role for linked members: `"auto"`, a role ID or `""` |
 | `moderation.channel_id` | – | Channel for the moderation log (optional) |
 | `moderation.ban_sync_action` | `"ban"` | What a Minecraft ban does in Discord: `"ban"` or `"kick"` |
+| `moderation.warning_expire_after` | `""` | How long a warning counts, e.g. `"90d"`; empty = forever |
+| `[[moderation.warning_rules]]` | none | Punishments for warnings: `count`, optional `within`, `action` (`kick`/`mute`/`ban`), `duration`, `repeat` (see the comment in the config) |
 | `monitoring.channel_id` | – | Monitoring channel (lag, crashes, daily report, pinned status message) |
 | `monitoring.*` | 15 TPS / 60 s, `00:00`, 5 min | Lag threshold, report time, status message interval |
 | `leaderboard.size` | `10` | Players shown by `/mc top` |
@@ -188,6 +192,8 @@ values are logged as errors and replaced by their default.
 | `/discord networkban`, `networktempban`, `networkunban` – the same on all servers | admins |
 | `/discord mute <player> <duration> <reason>`, `unmute`, `networkmute`, `networkunmute` | admins |
 | `/discord history <player> [page]` – moderation actions on a player | admins |
+| `/discord warn <player> <reason>`, `networkwarn`, `unwarn <id> <reason>`, `warnings <player>` | admins |
+| `/discord case <id>`, `case reason <id> <reason>`, `case reactivate <id> <reason>` | admins |
 | `/discord rolewhitelist status` | admins |
 | `/discord maintenance on [persistent] [reason]`, `off [reason]`, `status` | admins |
 | `/discord reload`, `/discord features` | admins |
@@ -207,6 +213,8 @@ Admins are operators of level 4 or players with the permission node
 | `/mcadmin kick`, `kickall [include_operators]`, `ban [duration] [delete_messages] [all_servers]`, `unban [all_servers]`, `banlist [page]` – reason required except for `banlist` | members with *Administrator* |
 | `/mcadmin mute <duration> [all_servers]`, `unmute [all_servers]`, `mutelist [page]` – mutes last at most 28 days | members with *Administrator* |
 | `/mcadmin history <player> [page]` – moderation actions on a player, with their numbers | members with *Administrator* |
+| `/mcadmin warn <player> <reason> [all_servers]`, `unwarn <id> <reason>`, `warnings <player> [page]` | members with *Administrator* |
+| `/mcadmin case show <id>`, `case reason <id> <reason>`, `case reactivate <id> <reason>` | members with *Administrator* |
 | `/mcadmin whitelist add\|remove\|list\|on\|off`, `/mcadmin rolewhitelist add\|remove\|status` | members with *Administrator* |
 | `/mcadmin maintenance on [keep_after_restart] [reason]`, `off`, `status` | members with *Administrator* |
 | `/mcadmin link <player> <user>`, `/mcadmin reload`, `/mcadmin features` | members with *Administrator* (adjustable in the server's integration settings) |

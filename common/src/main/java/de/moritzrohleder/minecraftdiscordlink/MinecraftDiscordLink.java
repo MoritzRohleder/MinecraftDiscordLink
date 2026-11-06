@@ -16,6 +16,7 @@ import de.moritzrohleder.minecraftdiscordlink.moderation.DiscordModeration;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationLog;
 import de.moritzrohleder.minecraftdiscordlink.moderation.MuteStore;
+import de.moritzrohleder.minecraftdiscordlink.moderation.WarningStore;
 import de.moritzrohleder.minecraftdiscordlink.monitoring.ReportTracker;
 import de.moritzrohleder.minecraftdiscordlink.notifications.SubscriptionStore;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
@@ -115,7 +116,8 @@ public final class MinecraftDiscordLink {
         maintenance = new Maintenance(server, state, linking.links(), discordId -> accountLinking()
                 .map(accounts -> accounts.isAdministrator(discordId)).orElse(false));
         moderation = new Moderation(server, new ModerationLog(dataDirectory, ZoneId.systemDefault()),
-                new MuteStore(dataDirectory), linking, MinecraftDiscordLink::discordModeration);
+                new MuteStore(dataDirectory), new WarningStore(dataDirectory), linking,
+                MinecraftDiscordLink::discordModeration);
         ModConfig config = ConfigManager.get();
         config.discord().token().ifPresent(token -> {
             if (config.console().channelId().isPresent()) {

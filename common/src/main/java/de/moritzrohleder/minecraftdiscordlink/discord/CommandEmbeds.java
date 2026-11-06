@@ -12,6 +12,7 @@ import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
 import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationEntry;
 import de.moritzrohleder.minecraftdiscordlink.moderation.MuteStore;
+import de.moritzrohleder.minecraftdiscordlink.moderation.WarningStore;
 import de.moritzrohleder.minecraftdiscordlink.text.DiscordText;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
 import net.dv8tion.jda.api.EmbedBuilder;
@@ -242,6 +243,81 @@ final class CommandEmbeds {
                 .toList();
         return pageFooter(embed.setDescription(limitLines(lines)), entries.size(), page)
                 .setColor(EmbedColors.BLURPLE).build();
+    }
+
+    /**
+     * Builds one page of the answer of {@code /mcadmin warnings}: one warning per line, newest first, with its
+     * number, state, moderator and reason.
+     *
+     * @param uuid     the player's UUID, for the head
+     * @param name     the player's name
+     * @param warnings the player's warnings, newest first
+     * @param status   the state of a warning
+     * @param page     the page, starting at 0
+     * @return the embed
+     */
+    static MessageEmbed warnings(UUID uuid, String name, List<WarningStore.Warning> warnings,
+                                 Function<WarningStore.Warning, WarningStore.Status> status, int page) {
+        long active = warnings.stream().filter(warning -> status.apply(warning) == WarningStore.Status.ACTIVE)
+                .count();
+        EmbedBuilder embed = new EmbedBuilder().setAuthor("Warnings of " + name + " · " + active + " active", null,
+                head(uuid, name));
+        if (warnings.isEmpty()) {
+            return embed.setDescription("No warnings.").setColor(EmbedColors.GRAY).build();
+        }
+        List<String> lines = page(warnings, page).stream().map(warning -> {
+            String text = "`#" + warning.id() + "` <t:" + warning.time().getEpochSecond() + ":d> "
+                    + statusLabel(status.apply(warning)) + " · by " + DiscordText.escape(warning.moderator()) + " · "
+                    + DiscordText.escape(warning.reason());
+            return status.apply(warning) == WarningStore.Status.ACTIVE ? text : "~~" + text + "~~";
+        }).toList();
+        return pageFooter(embed.setDescription(limitLines(lines)), warnings.size(), page)
+                .setColor(active > 0 ? EmbedColors.YELLOW : EmbedColors.GRAY).build();
+    }
+
+    /**
+     * Builds the answer of {@code /mcadmin case show}: all details of a moderation action.
+     *
+     * @param entry   the moderation action
+     * @param warning the state of the warning, if the action is a warning
+     * @param zone    the time zone of the server
+     * @return the embed
+     */
+    static MessageEmbed moderationCase(ModerationEntry entry, Optional<WarningStore.Status> warning, ZoneId zone) {
+        EmbedBuilder embed = new EmbedBuilder()
+                .setTitle("#" + entry.id() + " · " + entry.action().label()
+                        + (entry.action().hasTarget() ? " · " + DiscordText.escape(entry.target()) : ""))
+                .setColor(EmbedColors.BLURPLE)
+                .setTimestamp(entry.time())
+                .addField("Time", "<t:" + entry.time().getEpochSecond() + ":f>", true)
+                .addField("Moderator", DiscordText.escape(entry.moderator()), true);
+        entry.linked().ifPresent(account -> embed.addField("Discord", "<@" + account.id() + ">", true));
+        if (entry.action().hasDuration()) {
+            embed.addField("Duration", DiscordText.escape(entry.durationText(zone)), true);
+        }
+        if (entry.ref() > 0) {
+            embed.addField("Refers to", "#" + entry.ref(), true);
+        }
+        if (entry.network() != ModerationEntry.Network.LOCAL) {
+            embed.addField("Servers", "all servers", true);
+        }
+        warning.ifPresent(status -> embed.addField("Warning", statusLabel(status), true));
+        return embed.addField("Reason", entry.reason().map(DiscordText::escape).orElse(ModerationEntry.NO_REASON),
+                false).build();
+    }
+
+    /**
+     * Names the state of a warning.
+     *
+     * @param status the state
+     * @return e.g. {@code active}
+     */
+    private static String statusLabel(WarningStore.Status status) {
+        return switch (status) {
+            case ACTIVE -> "**active**";
+            case EXPIRED -> "expired";
+            case LIFTED -> "lifted";
+        };
     }
 
     /**

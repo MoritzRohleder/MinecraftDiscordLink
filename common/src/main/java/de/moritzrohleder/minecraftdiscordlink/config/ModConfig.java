@@ -265,8 +265,46 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
      * @param channelId ID of the moderation log channel, empty if moderation actions are only logged to the file
      * @param banSync   bans across Minecraft and Discord
      * @param muteSync  whether mutes are synchronized with Discord timeouts
+     * @param warnings  the warnings and their rules
      */
-    public record Moderation(boolean enabled, OptionalLong channelId, BanSync banSync, boolean muteSync) {
+    public record Moderation(boolean enabled, OptionalLong channelId, BanSync banSync, boolean muteSync,
+                             Warnings warnings) {
+    }
+
+    /**
+     * Warnings and the punishments they lead to.
+     *
+     * @param enabled     whether the warning commands are available
+     * @param expireAfter how long a warning counts, empty if forever
+     * @param rules       the rules, checked after every warning
+     */
+    public record Warnings(boolean enabled, Optional<Duration> expireAfter, List<WarningRule> rules) {
+    }
+
+    /**
+     * A rule turning warnings into a punishment, e.g. 3 warnings within 4 weeks lead to a mute of 1 day.
+     *
+     * @param count    how many warnings count
+     * @param within   the period the warnings must be in, empty for all of the player's warnings
+     * @param action   the punishment
+     * @param duration how long a mute or ban lasts, empty for a permanent ban (mutes always have one)
+     * @param repeat   whether every further warning from {@code count} on leads to the punishment again, or only
+     *                 the warning that reaches {@code count}
+     */
+    public record WarningRule(int count, Optional<Duration> within, WarningAction action, Optional<Duration> duration,
+                              boolean repeat) {
+    }
+
+    /**
+     * Punishments of warning rules, from the mildest to the strictest.
+     */
+    public enum WarningAction {
+        /** The player is kicked if online. */
+        KICK,
+        /** The player is muted for the rule's duration. */
+        MUTE,
+        /** The player is banned, for the rule's duration or permanently. */
+        BAN
     }
 
     /**
@@ -397,6 +435,7 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
      * @param lagOver                text of an all-clear; {@code {duration}}
      * @param crashTitle             title of a crash notice
      * @param muted                  note to a muted player who tries to write; {@code {until}}, {@code {reason}}
+     * @param warned                 note to a warned player; {@code {reason}}, {@code {count}}
      */
     public record Messages(String join, String leave, String death, String advancement, String serverStart,
                            String serverStop, String kickNotLinked, String kickNotWhitelisted,
@@ -404,7 +443,7 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
                            String notifyServerStart, String notifyServerStop, String notifyMaintenanceOn,
                            String notifyMaintenanceOff, String notifyPlayerOnline, String lagWarningTitle,
                            String lagWarning, String lagOverTitle, String lagOver, String crashTitle,
-                           String muted) {
+                           String muted, String warned) {
     }
 
     /**

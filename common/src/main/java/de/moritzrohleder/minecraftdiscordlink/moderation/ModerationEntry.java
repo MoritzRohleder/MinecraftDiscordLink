@@ -22,10 +22,11 @@ import java.util.UUID;
  * @param network   whether the action applies to all servers sharing the Discord server
  * @param linked    the Discord account linked to the target player, if any
  * @param id        the number of the entry in the moderation history, 0 before it is recorded
+ * @param ref       the number of the entry this one refers to, e.g. the warning a revocation lifts; 0 if none
  */
 public record ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
                               String moderator, Optional<Instant> until, Optional<String> reason, Network network,
-                              Optional<LinkedAccount> linked, long id) {
+                              Optional<LinkedAccount> linked, long id, long ref) {
 
     /**
      * Creates an entry that is not recorded yet.
@@ -43,7 +44,7 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
     public ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
                            String moderator, Optional<Instant> until, Optional<String> reason, Network network,
                            Optional<LinkedAccount> linked) {
-        this(time, action, target, player, moderator, until, reason, network, linked, 0);
+        this(time, action, target, player, moderator, until, reason, network, linked, 0, 0);
     }
 
     /**
@@ -60,7 +61,7 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
      */
     public ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
                            String moderator, Optional<Instant> until, Optional<String> reason, Network network) {
-        this(time, action, target, player, moderator, until, reason, network, Optional.empty(), 0);
+        this(time, action, target, player, moderator, until, reason, network, Optional.empty(), 0, 0);
     }
 
     /**
@@ -76,7 +77,7 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
      */
     public ModerationEntry(Instant time, ModerationAction action, String target, Optional<UUID> player,
                            String moderator, Optional<Instant> until, Optional<String> reason) {
-        this(time, action, target, player, moderator, until, reason, Network.LOCAL, Optional.empty(), 0);
+        this(time, action, target, player, moderator, until, reason, Network.LOCAL, Optional.empty(), 0, 0);
     }
 
     /**
@@ -123,7 +124,18 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
      * @return the numbered entry
      */
     public ModerationEntry withId(long id) {
-        return new ModerationEntry(time, action, target, player, moderator, until, reason, network, linked, id);
+        return new ModerationEntry(time, action, target, player, moderator, until, reason, network, linked, id, ref);
+    }
+
+    /**
+     * Returns this entry with a reference to another entry.
+     *
+     * @param referenced the number of the referenced entry
+     * @return the changed entry
+     */
+    public ModerationEntry withRef(long referenced) {
+        return new ModerationEntry(time, action, target, player, moderator, until, reason, network, linked, id,
+                referenced);
     }
 
     /**
@@ -133,7 +145,8 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
      * @return the changed entry
      */
     public ModerationEntry withReason(Optional<String> newReason) {
-        return new ModerationEntry(time, action, target, player, moderator, until, newReason, network, linked, id);
+        return new ModerationEntry(time, action, target, player, moderator, until, newReason, network, linked, id,
+                ref);
     }
 
     /**
@@ -144,6 +157,9 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
      */
     public String historyText(ZoneId zone) {
         StringBuilder text = new StringBuilder(action.label());
+        if (ref > 0) {
+            text.append(" #").append(ref);
+        }
         if (action.hasDuration()) {
             text.append(" · ").append(durationText(zone));
         }
@@ -181,6 +197,9 @@ public record ModerationEntry(Instant time, ModerationAction action, String targ
         if (action.hasTarget()) {
             line.append(" | ").append(target);
             linked.ifPresent(account -> line.append(" (").append(account.label()).append(')'));
+        }
+        if (ref > 0) {
+            line.append(" | #").append(ref);
         }
         line.append(" | by ").append(moderator);
         if (action.hasDuration()) {

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -231,6 +232,62 @@ class ConfigLoaderTest {
         assertEquals(List.of(new ModConfig.Permission(123456789012345678L, PermissionMode.BLACKLIST,
                         List.of("stop", "gamerule dodaylightcycle"))),
                 config.console().permissions());
+    }
+
+    @Test
+    void readsWarningRulesAndSkipsInvalidOnes() throws IOException {
+        Path file = dir.resolve("config.toml");
+        ModConfig defaults = ConfigLoader.load(file);
+        assertTrue(defaults.moderation().warnings().enabled());
+        assertTrue(defaults.moderation().warnings().rules().isEmpty());
+        assertTrue(defaults.moderation().warnings().expireAfter().isEmpty());
+        Files.writeString(file, Files.readString(file).replace("warning_expire_after = \"\"",
+                "warning_expire_after = \"90d\"") + """
+
+                [[moderation.warning_rules]]
+                count = 3
+                within = "4w"
+                action = "mute"
+                duration = "1d"
+
+                [[moderation.warning_rules]]
+                count = 10
+                action = "ban"
+                repeat = false
+
+                [[moderation.warning_rules]]
+                count = 2
+                action = "kick"
+                duration = "1d"
+
+                [[moderation.warning_rules]]
+                count = 2
+                action = "mute"
+
+                [[moderation.warning_rules]]
+                count = 2
+                action = "mute"
+                duration = "30d"
+
+                [[moderation.warning_rules]]
+                count = 0
+                action = "ban"
+
+                [[moderation.warning_rules]]
+                count = 2
+                action = "jail"
+                """);
+
+        ModConfig.Warnings warnings = ConfigLoader.load(file).moderation().warnings();
+
+        assertEquals(Optional.of(Duration.ofDays(90)), warnings.expireAfter());
+        assertEquals(List.of(
+                new ModConfig.WarningRule(3, Optional.of(Duration.ofDays(28)), ModConfig.WarningAction.MUTE,
+                        Optional.of(Duration.ofDays(1)), true),
+                new ModConfig.WarningRule(10, Optional.empty(), ModConfig.WarningAction.BAN, Optional.empty(), false),
+                // A kick has no duration
+                new ModConfig.WarningRule(2, Optional.empty(), ModConfig.WarningAction.KICK, Optional.empty(), true)),
+                warnings.rules());
     }
 
     @Test

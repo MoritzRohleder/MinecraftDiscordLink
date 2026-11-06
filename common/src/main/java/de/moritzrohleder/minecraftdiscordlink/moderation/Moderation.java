@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -77,6 +78,7 @@ public final class Moderation {
     private final MinecraftServer server;
     private final ModerationLog log;
     private final MuteStore mutes;
+    private final WarningStore warnings;
     private final Linking linking;
     private final Supplier<Optional<DiscordModeration>> discord;
 
@@ -85,15 +87,17 @@ public final class Moderation {
      *
      * @param server  the running server
      * @param log     the moderation log
-     * @param mutes   the mutes
-     * @param linking the account linking, for the whitelist via Discord roles
-     * @param discord the Discord side, empty while the bot is not ready
+     * @param mutes    the mutes
+     * @param warnings the warnings
+     * @param linking  the account linking, for the whitelist via Discord roles
+     * @param discord  the Discord side, empty while the bot is not ready
      */
-    public Moderation(MinecraftServer server, ModerationLog log, MuteStore mutes, Linking linking,
-                      Supplier<Optional<DiscordModeration>> discord) {
+    public Moderation(MinecraftServer server, ModerationLog log, MuteStore mutes, WarningStore warnings,
+                      Linking linking, Supplier<Optional<DiscordModeration>> discord) {
         this.server = server;
         this.log = log;
         this.mutes = mutes;
+        this.warnings = warnings;
         this.linking = linking;
         this.discord = discord;
     }
@@ -715,6 +719,257 @@ public final class Moderation {
                 Optional.empty(), Optional.of(reason));
     }
 
+    // ---- Warnings and cases ----
+
+    /**
+     * Warns a player and gives the punishment of the strictest warning rule that applies. The player sees the
+     * warning if online.
+     *
+     * @param profile the player
+     * @param reason  the reason
+     * @param scope   the moderator and whether the warning applies to all servers
+     * @return the result, with the punishment if one was given
+     */
+    public Reply warn(GameProfile profile, String reason, Scope scope) {
+        return warn(profile, reason, scope, Optional.empty(), 0);
+    }
+
+    /**
+     * Applies a warning on all servers received from another server. The warning rules are not applied: the server
+     * the warning was made on gives the punishment, on all servers.
+     *
+     * @param profile  the player
+     * @param reason   the reason
+     * @param scope    the moderator, with the server it was made on
+     * @param origin   the server the warning was made on
+     * @param originId the number of the warning there
+     */
+    public void receiveWarning(GameProfile profile, String reason, Scope scope, String origin, long originId) {
+        if (warnings.received(origin, originId).isEmpty()) {
+            warn(profile, reason, scope, Optional.of(origin), originId);
+        }
+    }
+
+    private Reply warn(GameProfile profile, String reason, Scope scope, Optional<String> origin, long originId) {
+        if (scope.network() == ModerationEntry.Network.ALL_SERVERS && !networkReady()) {
+            return Reply.error(NETWORK_UNAVAILABLE);
+        }
+        ModerationEntry entry = record(ModerationAction.WARN, profile.getName(), Optional.of(profile.getId()),
+                scope.moderator(), Optional.empty(), Optional.of(reason), scope.network());
+        WarningStore.Warning warning = new WarningStore.Warning(entry.id(), profile.getId(), profile.getName(),
+                entry.time(), scope.moderator(), reason, scope.network(), false, Optional.empty(), origin, originId);
+        warnings.add(warning);
+        int active = activeWarnings(profile.getId()).size();
+        ServerPlayer online = server.getPlayerList().getPlayer(profile.getId());
+        if (online != null) {
+            online.sendSystemMessage(Messages.minecraft(ModConfig.Messages::warned,
+                    Map.of("reason", reason, "count", String.valueOf(active))));
+        }
+        announce(scope, Component.literal("Warned " + profile.getName() + ": " + reason));
+        String punishment = scope.network() == ModerationEntry.Network.RECEIVED ? "" : punish(profile, warning);
+        return Reply.success("Warned " + profile.getName() + " (#" + entry.id() + ", " + active + " active): "
+                + reason + (scope.allServers() ? " (on all servers)" : "") + punishment);
+    }
+
+    /**
+     * Lifts a warning: it no longer counts, but stays in the history. A warning on all servers made on this server
+     * is lifted on all servers.
+     *
+     * @param id     the number of the warning
+     * @param reason the reason
+     * @param scope  the moderator
+     * @return the result
+     */
+    public Reply unwarn(long id, String reason, Scope scope) {
+        Optional<WarningStore.Warning> warning = warnings.get(id);
+        if (warning.isEmpty()) {
+            return Reply.error("#" + id + " is no warning.");
+        }
+        if (warning.get().lifted()) {
+            return Reply.error("The warning #" + id + " is already lifted.");
+        }
+        ModerationEntry.Network network = networkOf(warning.get(), scope);
+        if (network == ModerationEntry.Network.ALL_SERVERS && !networkReady()) {
+            return Reply.error(NETWORK_UNAVAILABLE);
+        }
+        warnings.replace(warning.get().asLifted());
+        record(ModerationAction.UNWARN, warning.get().name(), Optional.of(warning.get().player()),
+                scope.moderator(), Optional.empty(), Optional.of(reason), network, id);
+        return Reply.success("Lifted the warning #" + id + " of " + warning.get().name() + ": " + reason
+                + (network == ModerationEntry.Network.ALL_SERVERS ? " (on all servers)" : ""));
+    }
+
+    /**
+     * Reactivates a lifted or expired warning: it counts again from now on, and the warning rules are applied.
+     *
+     * @param id     the number of the warning
+     * @param reason the reason
+     * @param scope  the moderator
+     * @return the result, with the punishment if one was given
+     */
+    public Reply reactivateWarning(long id, String reason, Scope scope) {
+        Optional<WarningStore.Warning> warning = warnings.get(id);
+        if (warning.isEmpty()) {
+            return Reply.error("#" + id + " is no warning.");
+        }
+        if (warning.get().status(Instant.now(), warningConfig().expireAfter()) == WarningStore.Status.ACTIVE) {
+            return Reply.error("The warning #" + id + " counts already.");
+        }
+        ModerationEntry.Network network = networkOf(warning.get(), scope);
+        if (network == ModerationEntry.Network.ALL_SERVERS && !networkReady()) {
+            return Reply.error(NETWORK_UNAVAILABLE);
+        }
+        WarningStore.Warning reactivated = warning.get().reactivatedAt(Instant.now().truncatedTo(ChronoUnit.SECONDS));
+        warnings.replace(reactivated);
+        record(ModerationAction.WARN_REACTIVATED, reactivated.name(), Optional.of(reactivated.player()),
+                scope.moderator(), Optional.empty(), Optional.of(reason), network, id);
+        String punishment = scope.network() == ModerationEntry.Network.RECEIVED ? ""
+                : punish(new GameProfile(reactivated.player(), reactivated.name()), reactivated);
+        return Reply.success("Reactivated the warning #" + id + " of " + reactivated.name() + ": " + reason
+                + punishment);
+    }
+
+    /**
+     * Lifts or reactivates a warning received from another server, see {@link #unwarn(long, String, Scope)}.
+     *
+     * @param origin     the server the warning was made on
+     * @param originId   the number of the warning there
+     * @param reactivate {@code true} to reactivate, {@code false} to lift
+     * @param reason     the reason
+     * @param scope      the moderator, with the server it was made on
+     */
+    public void receiveWarningChange(String origin, long originId, boolean reactivate, String reason, Scope scope) {
+        warnings.received(origin, originId).ifPresent(warning -> {
+            if (reactivate) {
+                reactivateWarning(warning.id(), reason, scope);
+            } else {
+                unwarn(warning.id(), reason, scope);
+            }
+        });
+    }
+
+    /**
+     * Changes the reason of a moderation log entry, e.g. of a warning. A ban or mute that is still active keeps the
+     * reason it was given with.
+     *
+     * @param id     the number of the entry
+     * @param reason the new reason
+     * @param scope  the moderator
+     * @return the result
+     */
+    public Reply changeReason(long id, String reason, Scope scope) {
+        Optional<ModerationEntry> entry = log.history().get(id);
+        if (entry.isEmpty()) {
+            return Reply.error("There is no entry #" + id + ".");
+        }
+        log.history().replace(entry.get().withReason(Optional.of(reason)));
+        warnings.get(id).ifPresent(warning -> warnings.replace(warning.withReason(reason)));
+        record(ModerationAction.CASE_UPDATED, entry.get().target(), entry.get().player(), scope.moderator(),
+                Optional.empty(), Optional.of(reason), ModerationEntry.Network.LOCAL, id);
+        return Reply.success("Changed the reason of #" + id + " to: " + reason);
+    }
+
+    /**
+     * Returns a moderation log entry.
+     *
+     * @param id the number of the entry
+     * @return the entry, empty if there is none
+     */
+    public Optional<ModerationEntry> entry(long id) {
+        return log.history().get(id);
+    }
+
+    /**
+     * Returns the warning of a moderation log entry.
+     *
+     * @param id the number of the entry
+     * @return the warning, empty if the entry is no warning
+     */
+    public Optional<WarningStore.Warning> warning(long id) {
+        return warnings.get(id);
+    }
+
+    /**
+     * Lists the warnings of a player, newest first, lifted and expired ones included.
+     *
+     * @param player the player's UUID
+     * @return the warnings
+     */
+    public List<WarningStore.Warning> warnings(UUID player) {
+        return warnings.of(player);
+    }
+
+    /**
+     * Returns the state of a warning now.
+     *
+     * @param warning the warning
+     * @return active, expired or lifted
+     */
+    public WarningStore.Status status(WarningStore.Warning warning) {
+        return warning.status(Instant.now(), warningConfig().expireAfter());
+    }
+
+    /**
+     * Lists the warnings of a player that count.
+     *
+     * @param player the player's UUID
+     * @return the active warnings
+     */
+    private List<WarningStore.Warning> activeWarnings(UUID player) {
+        return warnings.of(player).stream().filter(warning -> status(warning) == WarningStore.Status.ACTIVE).toList();
+    }
+
+    /**
+     * Gives the punishment of the strictest warning rule that applies after a warning.
+     *
+     * @param profile the warned player
+     * @param warning the new or reactivated warning
+     * @return the punishment for the answer, e.g. {@code  → Muted for 1d}, empty if none
+     */
+    private String punish(GameProfile profile, WarningStore.Warning warning) {
+        Instant now = Instant.now();
+        List<Instant> active = activeWarnings(profile.getId()).stream().map(WarningStore.Warning::countsFrom)
+                .toList();
+        Optional<WarningRules.Match> match = WarningRules.evaluate(active, now, warningConfig().rules());
+        if (match.isEmpty()) {
+            return "";
+        }
+        ModConfig.WarningRule rule = match.get().rule();
+        String reason = match.get().count() + " warnings"
+                + rule.within().map(within -> " within " + Durations.formatCompact(within)).orElse("")
+                + " (latest #" + warning.id() + ": " + warning.reason() + ")";
+        Scope scope = new Scope(Constants.MOD_NAME, Optional.of(reason), false, false,
+                warning.network() == ModerationEntry.Network.ALL_SERVERS && networkReady()
+                        ? ModerationEntry.Network.ALL_SERVERS : ModerationEntry.Network.LOCAL);
+        Reply result = switch (rule.action()) {
+            case KICK -> kick(profile.getName(), reason, scope);
+            case MUTE -> mute(profile, reason, rule.duration().orElse(MAX_MUTE), scope);
+            case BAN -> ban(profile, reason, rule.duration(), scope);
+        };
+        return result.success() ? " → " + result.message()
+                : " → no " + rule.action().name().toLowerCase(Locale.ROOT) + ": " + result.message();
+    }
+
+    /**
+     * Determines whether a change of a warning applies to all servers: changes of a warning on all servers made on
+     * this server do.
+     *
+     * @param warning the warning
+     * @param scope   the scope of the change
+     * @return the network of the change
+     */
+    private static ModerationEntry.Network networkOf(WarningStore.Warning warning, Scope scope) {
+        if (scope.network() == ModerationEntry.Network.RECEIVED) {
+            return ModerationEntry.Network.RECEIVED;
+        }
+        return warning.network() == ModerationEntry.Network.ALL_SERVERS ? ModerationEntry.Network.ALL_SERVERS
+                : ModerationEntry.Network.LOCAL;
+    }
+
+    private static ModConfig.Warnings warningConfig() {
+        return ConfigManager.get().moderation().warnings();
+    }
+
     // ---- Helpers ----
 
     /**
@@ -743,15 +998,35 @@ public final class Moderation {
      * @param reason    the reason
      * @param network   whether the action applies to all servers
      */
-    private void record(ModerationAction action, String target, Optional<UUID> player, String moderator,
-                        Optional<Instant> until, Optional<String> reason, ModerationEntry.Network network) {
+    private ModerationEntry record(ModerationAction action, String target, Optional<UUID> player, String moderator,
+                                   Optional<Instant> until, Optional<String> reason,
+                                   ModerationEntry.Network network) {
+        return record(action, target, player, moderator, until, reason, network, 0);
+    }
+
+    /**
+     * Writes an entry referring to another entry to the moderation log.
+     *
+     * @param action    the kind of action
+     * @param target    the player name, IP address or role
+     * @param player    the target player's UUID
+     * @param moderator who did it
+     * @param until     the end of a temporary ban
+     * @param reason    the reason
+     * @param network   whether the action applies to all servers
+     * @param ref       the number of the referenced entry, 0 if none
+     * @return the numbered entry
+     */
+    private ModerationEntry record(ModerationAction action, String target, Optional<UUID> player, String moderator,
+                                   Optional<Instant> until, Optional<String> reason,
+                                   ModerationEntry.Network network, long ref) {
         Optional<ModerationEntry.LinkedAccount> linked = player.flatMap(uuid -> {
             OptionalLong discordId = linking.links().discordId(uuid);
             return discordId.isEmpty() ? Optional.empty() : Optional.of(new ModerationEntry.LinkedAccount(
                     discordId.getAsLong(), discord.get().flatMap(bot -> bot.username(discordId.getAsLong()))));
         });
-        log.record(new ModerationEntry(Instant.now().truncatedTo(ChronoUnit.SECONDS), action, target, player,
-                moderator, until, reason, network, linked));
+        return log.record(new ModerationEntry(Instant.now().truncatedTo(ChronoUnit.SECONDS), action, target, player,
+                moderator, until, reason, network, linked).withRef(ref));
     }
 
     /**

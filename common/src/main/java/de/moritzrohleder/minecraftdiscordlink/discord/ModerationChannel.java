@@ -87,6 +87,9 @@ final class ModerationChannel {
                             + end.getEpochSecond() + ":R>)")
                     .orElse("permanent"), true);
         }
+        if (entry.ref() > 0) {
+            embed.addField("Refers to", "#" + entry.ref(), true);
+        }
         embed.addField("Reason", entry.reason().map(DiscordText::escape).orElse(ModerationEntry.NO_REASON), false);
         String footer = entry.id() > 0 ? "#" + entry.id() : "";
         if (entry.network() == ModerationEntry.Network.ALL_SERVERS) {
@@ -113,6 +116,9 @@ final class ModerationChannel {
             case SYNC_FAILED -> "⚠️";
             case UNBAN, IP_UNBAN, BAN_EXPIRED -> "🔓";
             case MAINTENANCE_ON, MAINTENANCE_OFF -> "🔧";
+            case WARN, WARN_REACTIVATED -> "📝";
+            case UNWARN -> "🧹";
+            case CASE_UPDATED -> "✏️";
             case APPLICATION_ACCEPTED -> "✅";
             case APPLICATION_DENIED -> "❌";
             default -> "📋";
@@ -128,9 +134,9 @@ final class ModerationChannel {
      */
     private static Color color(ModerationAction action) {
         return switch (action) {
-            case KICK, KICK_ALL -> EmbedColors.YELLOW;
+            case KICK, KICK_ALL, WARN, WARN_REACTIVATED -> EmbedColors.YELLOW;
             case BAN, BAN_UPDATED, IP_BAN, SYNC_FAILED -> EmbedColors.RED;
-            case UNBAN, IP_UNBAN, BAN_EXPIRED, UNMUTE, MUTE_EXPIRED, APPLICATION_ACCEPTED -> EmbedColors.GREEN;
+            case UNBAN, IP_UNBAN, BAN_EXPIRED, UNMUTE, MUTE_EXPIRED, UNWARN, APPLICATION_ACCEPTED -> EmbedColors.GREEN;
             case APPLICATION_DENIED -> EmbedColors.RED;
             case MUTE, MUTE_UPDATED -> EmbedColors.GOLD;
             case MAINTENANCE_ON, MAINTENANCE_OFF -> EmbedColors.BLURPLE;

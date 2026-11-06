@@ -77,6 +77,8 @@ final class SlashCommands extends ListenerAdapter {
     private static final String MUTELIST = "mutes";
     /** Start of the name of a player's moderation history in button IDs, followed by the player's UUID. */
     private static final String HISTORY = "h:";
+    /** Start of the name of a player's warnings in button IDs, followed by the player's UUID. */
+    private static final String WARNINGS = "w:";
     /** Name of the whitelist in button IDs. */
     private static final String WHITELIST = "whitelist";
 
@@ -196,8 +198,29 @@ final class SlashCommands extends ListenerAdapter {
                                         .addOptions(pageOption()),
                                 new SubcommandData("history", "List the moderation actions on a player")
                                         .addOption(OptionType.STRING, "player", "The Minecraft name", true)
+                                        .addOptions(pageOption()),
+                                new SubcommandData("warn", "Warn a player; the warning rules may punish them")
+                                        .addOption(OptionType.STRING, "player", "The Minecraft name", true)
+                                        .addOption(OptionType.STRING, "reason", "Why the player is warned", true)
+                                        .addOption(OptionType.BOOLEAN, "all_servers",
+                                                "Warn on all Minecraft servers sharing this Discord server", false),
+                                new SubcommandData("unwarn", "Lift a warning; it stays in the history")
+                                        .addOptions(caseOption())
+                                        .addOption(OptionType.STRING, "reason", "Why the warning is lifted", true),
+                                new SubcommandData("warnings", "List the warnings of a player")
+                                        .addOption(OptionType.STRING, "player", "The Minecraft name", true)
                                         .addOptions(pageOption()))
                         .addSubcommandGroups(
+                                new SubcommandGroupData("case", "A moderation action by its number").addSubcommands(
+                                        new SubcommandData("show", "Show a moderation action")
+                                                .addOptions(caseOption()),
+                                        new SubcommandData("reason", "Change the reason of a moderation action")
+                                                .addOptions(caseOption())
+                                                .addOption(OptionType.STRING, "reason", "The new reason", true),
+                                        new SubcommandData("reactivate",
+                                                "Let a lifted or expired warning count again")
+                                                .addOptions(caseOption())
+                                                .addOption(OptionType.STRING, "reason", "Why", true)),
                                 new SubcommandGroupData("whitelist", "The vanilla whitelist").addSubcommands(
                                         new SubcommandData("add", "Add a player to the whitelist")
                                                 .addOption(OptionType.STRING, "player", "The Minecraft name", true)
@@ -314,6 +337,8 @@ final class SlashCommands extends ListenerAdapter {
             return config.maintenance().enabled();
         }
         return switch (command) {
+            case "mcadmin warn", "mcadmin unwarn", "mcadmin warnings", "mcadmin case reactivate" ->
+                    config.moderation().enabled() && config.moderation().warnings().enabled();
             case "mc online", "mc status", "mc whois", "mc playtime" -> config.info().enabled();
             case "mc top", "mc stats" -> config.leaderboard().enabled();
             case "mc unlink", "mcadmin link" -> config.linking().enabled();
@@ -390,7 +415,9 @@ final class SlashCommands extends ListenerAdapter {
                                         stats.onlineSince(profile.get().getId()))))));
             }
             case "mcadmin kick", "mcadmin kickall", "mcadmin ban", "mcadmin unban", "mcadmin banlist", "mcadmin mute",
-                 "mcadmin unmute", "mcadmin mutelist", "mcadmin history", "mcadmin whitelist add",
+                 "mcadmin unmute", "mcadmin mutelist", "mcadmin history", "mcadmin warn", "mcadmin unwarn",
+                 "mcadmin warnings", "mcadmin case show", "mcadmin case reason", "mcadmin case reactivate",
+                 "mcadmin whitelist add",
                  "mcadmin whitelist remove", "mcadmin whitelist list", "mcadmin whitelist on",
                  "mcadmin whitelist off", "mcadmin rolewhitelist add", "mcadmin rolewhitelist remove",
                  "mcadmin rolewhitelist status",
@@ -538,6 +565,30 @@ final class SlashCommands extends ListenerAdapter {
                 withPlayer(event, profile -> moderation.ban(profile, reason, duration,
                         scope.withBanOptions(deleteMessages, allServers)));
             }
+            case "mcadmin warn" -> {
+                boolean allServers = Boolean.TRUE.equals(event.getOption("all_servers", OptionMapping::getAsBoolean));
+                withPlayer(event, profile -> moderation.warn(profile, reason,
+                        scope.withBanOptions(false, allServers)));
+            }
+            case "mcadmin unwarn" -> {
+                long id = event.getOption("id", OptionMapping::getAsLong);
+                deferred(event, onServerThread(() -> answer(moderation.unwarn(id, reason, scope))));
+            }
+            case "mcadmin case reactivate" -> {
+                long id = event.getOption("id", OptionMapping::getAsLong);
+                deferred(event, onServerThread(() -> answer(moderation.reactivateWarning(id, reason, scope))));
+            }
+            case "mcadmin case reason" -> {
+                long id = event.getOption("id", OptionMapping::getAsLong);
+                deferred(event, onServerThread(() -> answer(moderation.changeReason(id, reason, scope))));
+            }
+            case "mcadmin case show" -> {
+                long id = event.getOption("id", OptionMapping::getAsLong);
+                deferred(event, onServerThread(() -> List.of(moderation.entry(id)
+                        .map(entry -> CommandEmbeds.moderationCase(entry, moderation.warning(id)
+                                .map(warning -> moderation.status(warning)), moderation.log().zone()))
+                        .orElse(CommandEmbeds.error("There is no moderation action #" + id + ".")))));
+            }
             case "mcadmin kickall" -> {
                 boolean operators = Boolean.TRUE.equals(event.getOption("include_operators",
                         OptionMapping::getAsBoolean));
@@ -586,7 +637,8 @@ final class SlashCommands extends ListenerAdapter {
                                 listSize(list), event.getUser().getIdLong()))
                         .setAllowedMentions(EnumSet.noneOf(Message.MentionType.class)).queue());
             }
-            case "mcadmin history" -> {
+            case "mcadmin history", "mcadmin warnings" -> {
+                String prefix = command.equals("mcadmin history") ? HISTORY : WARNINGS;
                 String player = option(event, "player");
                 int page = Optional.ofNullable(event.getOption("page", OptionMapping::getAsInt)).orElse(1) - 1;
                 event.deferReply().queue();
@@ -596,7 +648,7 @@ final class SlashCommands extends ListenerAdapter {
                                 + "named **" + DiscordText.escape(player) + "** was found.")))).queue();
                         return;
                     }
-                    String list = HISTORY + profile.get().getId();
+                    String list = prefix + profile.get().getId();
                     onServerThread(() -> List.of(listPage(list, page))).thenAccept(embeds -> event.getHook()
                             .sendMessageEmbeds(tag(embeds)).setComponents(pageButtons(list, page,
                                     listSize(list), event.getUser().getIdLong()))
@@ -622,6 +674,16 @@ final class SlashCommands extends ListenerAdapter {
     }
 
     /**
+     * Creates the required {@code id} option: the number of a moderation action.
+     *
+     * @return the option
+     */
+    private static OptionData caseOption() {
+        return new OptionData(OptionType.INTEGER, "id", "The number of the moderation action, e.g. 42", true)
+                .setMinValue(1);
+    }
+
+    /**
      * Creates the optional {@code page} option of the lists.
      *
      * @return the option
@@ -643,6 +705,11 @@ final class SlashCommands extends ListenerAdapter {
             String name = Leaderboards.playerName(server, uuid);
             return CommandEmbeds.history(uuid, name, moderation.history(uuid, name), page, moderation.log().zone());
         }
+        if (list.startsWith(WARNINGS)) {
+            UUID uuid = UUID.fromString(list.substring(WARNINGS.length()));
+            return CommandEmbeds.warnings(uuid, Leaderboards.playerName(server, uuid), moderation.warnings(uuid),
+                    moderation::status, page);
+        }
         return switch (list) {
             case BANLIST -> CommandEmbeds.banlist(moderation.bans(), page);
             case MUTELIST -> CommandEmbeds.mutelist(moderation.mutes(), page);
@@ -660,6 +727,9 @@ final class SlashCommands extends ListenerAdapter {
         if (list.startsWith(HISTORY)) {
             UUID uuid = UUID.fromString(list.substring(HISTORY.length()));
             return moderation.history(uuid, Leaderboards.playerName(server, uuid)).size();
+        }
+        if (list.startsWith(WARNINGS)) {
+            return moderation.warnings(UUID.fromString(list.substring(WARNINGS.length()))).size();
         }
         return switch (list) {
             case BANLIST -> moderation.bans().size();
