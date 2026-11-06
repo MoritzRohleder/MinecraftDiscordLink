@@ -28,7 +28,8 @@ needs to be installed on the dedicated server – players don't need it.
   vanilla commands, goes to a moderation log file and optionally a Discord
   channel. Temporary mutes (chat and private messages). Warnings with
   configurable rules that mute, kick or ban automatically. Every action has
-  a number for the history and later changes. Optional ban and mute
+  a number for the history and later changes. Reports from Minecraft and
+  Discord with buttons for the staff. Optional ban and mute
   sync with linked Discord accounts (bans and timeouts), bans and mutes on all
   servers sharing the Discord server.
 - **Maintenance mode** – only operators and linked Discord admins may join;
@@ -133,6 +134,9 @@ settings per feature.
 | `linking.linked_role` | `"auto"` | Role for linked members: `"auto"`, a role ID or `""` |
 | `moderation.channel_id` | – | Channel for the moderation log (optional) |
 | `moderation.ban_sync_action` | `"ban"` | What a Minecraft ban does in Discord: `"ban"` or `"kick"` |
+| `moderation.reports_channel_id` | – | Channel for reports; empty = moderation channel |
+| `moderation.report_role_ids` | `[]` | Roles that may act on reports; empty = members with *Administrator* |
+| `moderation.report_cooldown` | `"5m"` | Wait between two reports of one reporter |
 | `moderation.warning_expire_after` | `""` | How long a warning counts, e.g. `"90d"`; empty = forever |
 | `[[moderation.warning_rules]]` | none | Punishments for warnings: `count`, optional `within`, `action` (`kick`/`mute`/`ban`), `duration`, `repeat` (see the comment in the config) |
 | `monitoring.channel_id` | – | Monitoring channel (lag, crashes, daily report, pinned status message) |
@@ -192,6 +196,7 @@ values are logged as errors and replaced by their default.
 | `/discord networkban`, `networktempban`, `networkunban` – the same on all servers | admins |
 | `/discord mute <player> <duration> <reason>`, `unmute`, `networkmute`, `networkunmute` | admins |
 | `/discord history <player> [page]` – moderation actions on a player | admins |
+| `/report <player> <reason>` – report a player to the staff | everyone |
 | `/discord warn <player> <reason>`, `networkwarn`, `unwarn <id> <reason>`, `warnings <player>` | admins |
 | `/discord case <id>`, `case reason <id> <reason>`, `case reactivate <id> <reason>` | admins |
 | `/discord rolewhitelist status` | admins |
@@ -208,6 +213,7 @@ Admins are operators of level 4 or players with the permission node
 | `/mc online`, `/mc status`, `/mc whois <name>`, `/mc playtime <player>` | everyone |
 | `/mc top <category>`, `/mc stats <player>` – leaderboards | everyone |
 | `/mc subscribe`, `/mc unsubscribe`, `/mc subscriptions` – DM notifications | everyone |
+| `/mc report <player> <reason> [message]` – report a player, optionally with a Discord message | everyone |
 | `/mc link <code>` – link with the code from the kick message | everyone |
 | `/mc unlink` | everyone |
 | `/mcadmin kick`, `kickall [include_operators]`, `ban [duration] [delete_messages] [all_servers]`, `unban [all_servers]`, `banlist [page]` – reason required except for `banlist` | members with *Administrator* |

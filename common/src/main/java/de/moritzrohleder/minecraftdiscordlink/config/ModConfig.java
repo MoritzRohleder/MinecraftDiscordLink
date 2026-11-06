@@ -266,9 +266,21 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
      * @param banSync   bans across Minecraft and Discord
      * @param muteSync  whether mutes are synchronized with Discord timeouts
      * @param warnings  the warnings and their rules
+     * @param reports   the reports of players
      */
     public record Moderation(boolean enabled, OptionalLong channelId, BanSync banSync, boolean muteSync,
-                             Warnings warnings) {
+                             Warnings warnings, Reports reports) {
+    }
+
+    /**
+     * Reports of players by players and Discord members.
+     *
+     * @param enabled        whether {@code /report} and {@code /mc report} are available
+     * @param channelId      the channel reports are sent to, empty for the moderation channel
+     * @param handlerRoleIds roles that may act on reports, empty for members with Administrator
+     * @param cooldown       how long a reporter has to wait between two reports
+     */
+    public record Reports(boolean enabled, OptionalLong channelId, List<Long> handlerRoleIds, Duration cooldown) {
     }
 
     /**
@@ -436,6 +448,7 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
      * @param crashTitle             title of a crash notice
      * @param muted                  note to a muted player who tries to write; {@code {until}}, {@code {reason}}
      * @param warned                 note to a warned player; {@code {reason}}, {@code {count}}
+     * @param reportSent             confirmation of a report in Minecraft; {@code {player}}
      */
     public record Messages(String join, String leave, String death, String advancement, String serverStart,
                            String serverStop, String kickNotLinked, String kickNotWhitelisted,
@@ -443,7 +456,7 @@ public record ModConfig(Server server, Discord discord, Chat chat, Console conso
                            String notifyServerStart, String notifyServerStop, String notifyMaintenanceOn,
                            String notifyMaintenanceOff, String notifyPlayerOnline, String lagWarningTitle,
                            String lagWarning, String lagOverTitle, String lagOver, String crashTitle,
-                           String muted, String warned) {
+                           String muted, String warned, String reportSent) {
     }
 
     /**

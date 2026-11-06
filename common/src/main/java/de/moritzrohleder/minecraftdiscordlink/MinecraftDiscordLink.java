@@ -9,6 +9,7 @@ import de.moritzrohleder.minecraftdiscordlink.data.StateStore;
 import de.moritzrohleder.minecraftdiscordlink.discord.AccountLinking;
 import de.moritzrohleder.minecraftdiscordlink.discord.ChatBridge;
 import de.moritzrohleder.minecraftdiscordlink.discord.DiscordBot;
+import de.moritzrohleder.minecraftdiscordlink.discord.Reports;
 import de.moritzrohleder.minecraftdiscordlink.discord.EmbedColors;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
 import de.moritzrohleder.minecraftdiscordlink.maintenance.Maintenance;
@@ -17,6 +18,7 @@ import de.moritzrohleder.minecraftdiscordlink.moderation.Moderation;
 import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationLog;
 import de.moritzrohleder.minecraftdiscordlink.moderation.MuteStore;
 import de.moritzrohleder.minecraftdiscordlink.moderation.WarningStore;
+import de.moritzrohleder.minecraftdiscordlink.reports.ReportStore;
 import de.moritzrohleder.minecraftdiscordlink.monitoring.ReportTracker;
 import de.moritzrohleder.minecraftdiscordlink.notifications.SubscriptionStore;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
@@ -125,7 +127,8 @@ public final class MinecraftDiscordLink {
                 ConsoleCapture.install();
             }
             bot = new DiscordBot(token, config, server, startTime, stats, linking, state, moderation, maintenance,
-                    report, new SubscriptionStore(dataDirectory), new ApplicationStore(dataDirectory));
+                    report, new SubscriptionStore(dataDirectory), new ApplicationStore(dataDirectory),
+                    new ReportStore(dataDirectory));
             bot.connect();
         });
     }
@@ -496,6 +499,15 @@ public final class MinecraftDiscordLink {
         if (started && moderation != null) {
             moderation.onVanillaKick(moderator, player, reason);
         }
+    }
+
+    /**
+     * Returns the reports.
+     *
+     * @return the reports, empty while the bot is not ready
+     */
+    public static Optional<Reports> reports() {
+        return bot != null ? bot.reports() : Optional.empty();
     }
 
     /**

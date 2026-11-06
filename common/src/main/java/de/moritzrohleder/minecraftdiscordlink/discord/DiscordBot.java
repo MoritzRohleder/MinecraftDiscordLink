@@ -2,6 +2,7 @@ package de.moritzrohleder.minecraftdiscordlink.discord;
 
 import de.moritzrohleder.minecraftdiscordlink.Constants;
 import de.moritzrohleder.minecraftdiscordlink.applications.ApplicationStore;
+import de.moritzrohleder.minecraftdiscordlink.reports.ReportStore;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
 import de.moritzrohleder.minecraftdiscordlink.console.ConsoleCapture;
@@ -99,6 +100,7 @@ public final class DiscordBot {
     private final ReportTracker report;
     private final SubscriptionStore subscriptions;
     private final ApplicationStore applicationStore;
+    private final ReportStore reportStore;
     private final ScheduledExecutorService executor;
 
     /** The bot, set as soon as it is built. */
@@ -125,6 +127,8 @@ public final class DiscordBot {
     private volatile BanSync banSync;
     /** The whitelist applications, set up with the guild features. */
     private volatile Applications applications;
+    /** The reports, set up with the guild features. */
+    private volatile Reports reports;
     /** Whether the bot is connected and ready. */
     private boolean ready;
     /** Whether the server has finished starting. */
@@ -145,10 +149,12 @@ public final class DiscordBot {
      * @param report        the numbers of the daily report
      * @param subscriptions the subscriptions of the notifications
      * @param applications  the stored whitelist applications
+     * @param reports       the stored reports
      */
     public DiscordBot(String token, ModConfig config, MinecraftServer server, Instant startTime, PlayerStats stats,
                       Linking linking, StateStore state, Moderation moderation, Maintenance maintenance,
-                      ReportTracker report, SubscriptionStore subscriptions, ApplicationStore applications) {
+                      ReportTracker report, SubscriptionStore subscriptions, ApplicationStore applications,
+                      ReportStore reports) {
         this.token = token;
         this.chatChannelId = config.chat().channelId();
         this.consoleChannelId = config.console().channelId();
@@ -162,6 +168,7 @@ public final class DiscordBot {
         this.report = report;
         this.subscriptions = subscriptions;
         this.applicationStore = applications;
+        this.reportStore = reports;
         this.executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, Constants.MOD_NAME + " Discord");
             thread.setDaemon(true);
@@ -294,6 +301,10 @@ public final class DiscordBot {
             jda.addEventListener(apps);
             applications = apps;
             apps.apply();
+            Reports playerReports = new Reports(jda, server, linking, moderation, reportStore, executor);
+            jda.addEventListener(playerReports);
+            commands.setReports(playerReports);
+            reports = playerReports;
         });
     }
 
@@ -447,6 +458,15 @@ public final class DiscordBot {
      */
     public Optional<DiscordModeration> moderation() {
         return Optional.ofNullable(banSync);
+    }
+
+    /**
+     * Returns the reports.
+     *
+     * @return the reports, empty while the bot is not ready or if no channel is available
+     */
+    public Optional<Reports> reports() {
+        return Optional.ofNullable(reports);
     }
 
     /**

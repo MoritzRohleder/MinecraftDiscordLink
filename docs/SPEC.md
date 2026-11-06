@@ -59,6 +59,7 @@ enabled = true       # the moderation commands; the log is always written
 ban_sync = false
 mute_sync = false    # mutes as Discord timeouts and vice versa
 warnings = true      # warnings and their rules
+reports = true       # /report and /mc report
 [features.maintenance]
 enabled = true
 [features.info]
@@ -95,6 +96,7 @@ maintenance_format = "🔧 Maintenance | {online}/{max} online | Last updated: {
 [texts.moderation]
 muted = "&cYou are muted until {until}. Reason: {reason}"
 warned = "&cYou were warned: {reason} &7(active warnings: {count})"
+report_sent = "&aThanks! Your report about {player} was sent to the staff."
 [texts.maintenance]
 # kick
 [texts.notifications]
@@ -136,6 +138,9 @@ linked_role = "auto" # "auto" (role "Linked Account"), a role ID or ""
 [moderation]
 channel_id = ""      # optional; the same on all servers for bans on all servers
 ban_sync_action = "ban"  # what a Minecraft ban does in Discord: "ban" or "kick"
+reports_channel_id = ""    # "" = the moderation channel
+report_role_ids = []       # roles that may act on reports; [] = members with Administrator
+report_cooldown = "5m"     # wait between two reports of one reporter, "0m" = none
 warning_expire_after = ""  # how long a warning counts, e.g. "90d"; "" = forever
 # One [[moderation.warning_rules]] entry per rule (none by default):
 #   count = 3, within = "4w" (optional), action = "kick"|"mute"|"ban",
@@ -201,6 +206,7 @@ The file is ordered: this server and the bot, then all switches
 | `/discord mute <player> <duration> <reason>` | admin | Mute a player for a time (at most 28 days) |
 | `/discord unmute <player> <reason>` | admin | Lift a mute |
 | `/discord networkmute <player> <duration> <reason>`, `networkunmute <player> <reason>` | admin | The same on all servers |
+| `/report <player> <reason>` | everyone | Report a player to the staff |
 | `/discord warn <player> <reason>`, `networkwarn <player> <reason>` | admin | Warn a player (on all servers); the warning rules may punish them |
 | `/discord unwarn <id> <reason>` | admin | Lift a warning; it stays in the history |
 | `/discord warnings <player>` | admin | The warnings of a player with their state |
@@ -230,6 +236,7 @@ Two top-level commands: `/mc` for everyone and `/mcadmin` for administrators.
 | `/mc stats <player>` | everyone | The player's value and rank in every leaderboard category |
 | `/mc subscribe [event] [player]` | everyone | Get a DM on a server event or when a player joins (exactly one of both) |
 | `/mc unsubscribe [event] [player]` | everyone | Stop a notification |
+| `/mc report <player> <reason> [message]` | everyone | Report a player to the staff, optionally with a Discord message (link or ID) |
 | `/mc subscriptions` | everyone | List the own notifications |
 | `/mc link <code>` | everyone | Complete link with a kick code |
 | `/mc unlink` | everyone | Remove own link |
@@ -601,6 +608,31 @@ Opt-in, only for linked accounts:
   stays local.
 - Stored in `minecraftdiscordlink/warnings.json`.
 
+### Reports (`features.moderation.reports`)
+
+- `/report <player> <reason>` in Minecraft and `/mc report <player> <reason>
+  [message]` in Discord send a report to `moderation.reports_channel_id`
+  (otherwise the moderation channel). `message` is a message link or the ID
+  of a message in the channel the command is used in.
+- Nobody can report themselves (in Discord: the linked player). Between two
+  reports a reporter waits `moderation.report_cooldown` (kept in memory).
+- The reporter gets `texts.moderation.report_sent` (Minecraft) or an answer
+  only they see (Discord). Online admins in Minecraft see
+  `[Report #3] Alex reported Steve: reason` (gold).
+- The report embed (orange, `🚩 Report #3: Steve`, NameMC link) shows the
+  reporter (Discord mention for Discord reports), where the reporter and the
+  reported player were (`overworld 12 64 -30`, if in Minecraft and online),
+  the reason and the reported message with author, text and link.
+- Buttons for members with a `moderation.report_role_ids` role (without
+  roles: *Administrator*): *Warn*, *Mute*, *Kick* and *Ban* open a form with
+  the reason (filled with the report's reason) and, for mute (required) and
+  ban (optional, empty = permanent), the duration. The action is a normal
+  moderation action by the staff member. *Done* and *Dismiss* close the report
+  without an action.
+- A closed report shows who handled it and what was done (green) or who
+  dismissed it (gray), and loses its buttons. Stored in
+  `minecraftdiscordlink/reports.json`, numbered from 1.
+
 ### Moderation actions by number
 
 - `/mcadmin case show <id>` and `/discord case <id>` show one action with all
@@ -778,6 +810,7 @@ Placeholder values are inserted as plain text.
 | `texts.applications.denied_dm` | DM to denied applicants | `{player}`, `{reason}` |
 | `texts.maintenance.kick` (*MC*) | kick during maintenance | `{reason}` |
 | `texts.moderation.muted` (*MC*) | note to a muted player who tries to write | `{until}`, `{reason}` |
+| `texts.moderation.report_sent` (*MC*) | confirmation of `/report` | `{player}` |
 | `texts.moderation.warned` (*MC*) | note to a warned player who is online | `{reason}`, `{count}` (active warnings) |
 | `texts.notifications.server_start`, `server_stop`, `maintenance_off` | DM | `{server}`, `{Server}` |
 | `texts.notifications.maintenance_on` | DM | `{server}`, `{Server}`, `{reason}` |
@@ -841,7 +874,7 @@ because both can change.
 }
 ```
 
-Further files: `moderation.log`, `moderation-history.json`, `applications.json`, `mutes.json`, `warnings.json`, `report.json`,
+Further files: `moderation.log`, `moderation-history.json`, `applications.json`, `mutes.json`, `warnings.json`, `reports.json`, `report.json`,
 `subscriptions.json` and `state.json` (sections 4b–4e).
 
 Pending link codes are kept in memory only and are lost on restart.

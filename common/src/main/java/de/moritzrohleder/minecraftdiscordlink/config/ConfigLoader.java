@@ -143,6 +143,8 @@ public final class ConfigLoader {
         entry("features.moderation.mute_sync", false, comment(
                 "Mutes as Discord timeouts for linked accounts and vice versa.",
                 "Needs the bot permissions \"Timeout Members\" and \"View Audit Log\"."));
+        entry("features.moderation.reports", true, comment(
+                "Reports of players: /report in Minecraft and /mc report in Discord, sent to the staff."));
         entry("features.moderation.warnings", true, comment(
                 "Warnings (/mcadmin warn, /discord warn) and the rules in [[moderation.warning_rules]]."));
 
@@ -246,6 +248,8 @@ public final class ConfigLoader {
         entry("texts.moderation.warned", "&cYou were warned: {reason} &7(active warnings: {count})",
                 comment("Note to a warned player who is online (Minecraft text).",
                         "Placeholders: {reason}, {count}"));
+        entry("texts.moderation.report_sent", "&aThanks! Your report about {player} was sent to the staff.",
+                comment("Confirmation of /report (Minecraft text). Placeholders: {player}"));
 
         section("texts.maintenance", comment("Maintenance mode."));
         entry("texts.maintenance.kick", String.join("\n",
@@ -377,6 +381,13 @@ public final class ConfigLoader {
         entry("moderation.ban_sync_action", "ban", comment(
                 "What a Minecraft ban does to the linked Discord account: \"ban\" or \"kick\" (removed from the",
                 "Discord server, but can come back with an invite)."));
+        entry("moderation.reports_channel_id", "", comment(
+                "ID of the channel reports are sent to. \"\" = the moderation channel."));
+        entry("moderation.report_role_ids", List.of(), comment(
+                "IDs of the roles that may act on reports (warn, mute, kick, ban, done, dismiss).",
+                "Empty = members with \"Administrator\"."));
+        entry("moderation.report_cooldown", "5m", comment(
+                "How long a player or member has to wait between two reports, e.g. 5m. \"0m\" = no wait."));
         entry("moderation.warning_expire_after", "", comment(
                 "How long a warning counts, e.g. 90d. \"\" = forever. Expired warnings stay in the history and can",
                 "be reactivated with /mcadmin case reactivate."));
@@ -667,7 +678,10 @@ public final class ConfigLoader {
                             new ModConfig.BanSync(bool("features.moderation.ban_sync"), discordAction()),
                             bool("features.moderation.mute_sync"),
                             new ModConfig.Warnings(bool("features.moderation.warnings"),
-                                    optionalDuration("moderation.warning_expire_after"), warningRules())),
+                                    optionalDuration("moderation.warning_expire_after"), warningRules()),
+                            new ModConfig.Reports(bool("features.moderation.reports"),
+                                    optionalChannel("moderation.reports_channel_id", "report channel"),
+                                    roleIds("moderation.report_role_ids"), duration("moderation.report_cooldown"))),
                     new ModConfig.Maintenance(bool("features.maintenance.enabled")),
                     new ModConfig.Info(bool("features.info.enabled")),
                     new ModConfig.Monitoring(
@@ -711,7 +725,8 @@ public final class ConfigLoader {
                             string("texts.monitoring.lag_over"),
                             string("texts.monitoring.crash_title"),
                             string("texts.moderation.muted"),
-                            string("texts.moderation.warned")));
+                            string("texts.moderation.warned"),
+                            string("texts.moderation.report_sent")));
         }
 
         /**

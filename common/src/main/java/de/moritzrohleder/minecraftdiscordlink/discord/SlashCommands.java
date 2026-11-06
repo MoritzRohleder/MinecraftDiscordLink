@@ -91,6 +91,8 @@ final class SlashCommands extends ListenerAdapter {
     private final Instant startTime;
     private final PlayerStats stats;
     private final Moderation moderation;
+    /** The reports, set once the bot has set them up. */
+    private volatile Reports reports;
     private final SubscriptionStore subscriptions;
     /** The leaderboard categories of the registered commands. */
     private volatile List<Leaderboards.Category> categories = List.of();
@@ -146,7 +148,12 @@ final class SlashCommands extends ListenerAdapter {
                         new SubcommandData("unsubscribe", "Stop a notification")
                                 .addOptions(eventOption(), new OptionData(OptionType.STRING, "player",
                                         "A Minecraft player", false)),
-                        new SubcommandData("subscriptions", "List your notifications"))
+                        new SubcommandData("subscriptions", "List your notifications"),
+                        new SubcommandData("report", "Report a Minecraft player to the staff")
+                                .addOption(OptionType.STRING, "player", "The Minecraft name", true)
+                                .addOption(OptionType.STRING, "reason", "What happened", true)
+                                .addOption(OptionType.STRING, "message",
+                                        "Link or ID of a Discord message to report", false))
                         .addSubcommands(leaderboards)),
                 withServerOption(Commands.slash("mcadmin", "Minecraft server administration")
                         .setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.ADMINISTRATOR))
@@ -337,6 +344,7 @@ final class SlashCommands extends ListenerAdapter {
             return config.maintenance().enabled();
         }
         return switch (command) {
+            case "mc report" -> config.moderation().enabled() && config.moderation().reports().enabled();
             case "mcadmin warn", "mcadmin unwarn", "mcadmin warnings", "mcadmin case reactivate" ->
                     config.moderation().enabled() && config.moderation().warnings().enabled();
             case "mc online", "mc status", "mc whois", "mc playtime" -> config.info().enabled();
@@ -426,6 +434,14 @@ final class SlashCommands extends ListenerAdapter {
             case "mcadmin features" -> reply(event, CommandEmbeds.features(Features.of(ConfigManager.get())));
             case "mc subscribe", "mc unsubscribe" -> subscribe(event, command.equals("mc subscribe"));
             case "mc subscriptions" -> listSubscriptions(event);
+            case "mc report" -> {
+                Reports current = reports;
+                if (current == null) {
+                    replyPrivately(event, CommandEmbeds.error("Reports are not available right now."));
+                } else {
+                    current.fromDiscord(event);
+                }
+            }
             case "mc top" -> top(event);
             case "mc stats" -> stats(event);
             case "mcadmin reload" -> deferred(event, onServerThread(() ->
@@ -681,6 +697,15 @@ final class SlashCommands extends ListenerAdapter {
     private static OptionData caseOption() {
         return new OptionData(OptionType.INTEGER, "id", "The number of the moderation action, e.g. 42", true)
                 .setMinValue(1);
+    }
+
+    /**
+     * Sets the reports for {@code /mc report}.
+     *
+     * @param reports the reports
+     */
+    void setReports(Reports reports) {
+        this.reports = reports;
     }
 
     /**

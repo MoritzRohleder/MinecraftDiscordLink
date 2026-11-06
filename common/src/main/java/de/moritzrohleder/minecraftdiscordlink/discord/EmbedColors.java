@@ -23,6 +23,8 @@ public final class EmbedColors {
     public static final Color BLURPLE = new Color(0x5865F2);
     /** Deaths. Almost black: Discord shows an embed with color 0 without a color bar. */
     public static final Color BLACK = new Color(0x010101);
+    /** Reports. */
+    public static final Color ORANGE = new Color(0xE67E22);
 
     private EmbedColors() {
     }

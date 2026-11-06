@@ -12,6 +12,7 @@ import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import de.moritzrohleder.minecraftdiscordlink.MinecraftDiscordLink;
 import de.moritzrohleder.minecraftdiscordlink.config.ConfigManager;
 import de.moritzrohleder.minecraftdiscordlink.config.ModConfig;
+import de.moritzrohleder.minecraftdiscordlink.discord.Reports;
 import de.moritzrohleder.minecraftdiscordlink.info.Features;
 import de.moritzrohleder.minecraftdiscordlink.info.InfoText;
 import de.moritzrohleder.minecraftdiscordlink.linking.Linking;
@@ -22,6 +23,7 @@ import de.moritzrohleder.minecraftdiscordlink.moderation.ModerationEntry;
 import de.moritzrohleder.minecraftdiscordlink.moderation.WarningStore;
 import de.moritzrohleder.minecraftdiscordlink.platform.Services;
 import de.moritzrohleder.minecraftdiscordlink.text.Durations;
+import de.moritzrohleder.minecraftdiscordlink.text.Messages;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -37,13 +39,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
- * The Minecraft command {@code /discord}.
+ * The Minecraft commands {@code /discord} and {@code /report <player> <reason>} (everyone).
  * <ul>
  *     <li>{@code /discord link <discordname>}: sends a link code to the Discord user by DM</li>
  *     <li>{@code /discord confirm <code>}: completes the link with the code</li>
@@ -88,6 +91,10 @@ public final class DiscordCommand {
      * @param dispatcher the server's command dispatcher
      */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        dispatcher.register(Commands.literal("report")
+                .then(Commands.argument("player", GameProfileArgument.gameProfile())
+                        .then(Commands.argument("reason", StringArgumentType.greedyString())
+                                .executes(DiscordCommand::report))));
         dispatcher.register(Commands.literal("discord")
                 .then(Commands.literal("link")
                         .then(Commands.argument("discordname", StringArgumentType.word())
@@ -460,6 +467,41 @@ public final class DiscordCommand {
             }
         }
         return changed;
+    }
+
+    /**
+     * Runs {@code /report <player> <reason>}: sends a report to the staff in Discord.
+     *
+     * @param context the command context
+     * @return 1 if the report was sent, 0 otherwise
+     * @throws CommandSyntaxException if the player argument is invalid
+     */
+    private static int report(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        ModConfig.Moderation config = ConfigManager.get().moderation();
+        if (switchedOff(context, config.enabled() && config.reports().enabled())) {
+            return 0;
+        }
+        CommandSourceStack source = context.getSource();
+        Collection<GameProfile> profiles = GameProfileArgument.getGameProfiles(context, "player");
+        if (profiles.size() != 1) {
+            source.sendFailure(Component.literal("Report one player at a time."));
+            return 0;
+        }
+        Optional<Reports> reports = MinecraftDiscordLink.reports();
+        if (reports.isEmpty()) {
+            source.sendFailure(Component.literal("Reports are not available right now."));
+            return 0;
+        }
+        GameProfile target = profiles.iterator().next();
+        Optional<String> error = reports.get().fromMinecraft(source, target,
+                StringArgumentType.getString(context, "reason"));
+        if (error.isPresent()) {
+            source.sendFailure(Component.literal(error.get()));
+            return 0;
+        }
+        source.sendSystemMessage(Messages.minecraft(ModConfig.Messages::reportSent,
+                Map.of("player", target.getName())));
+        return 1;
     }
 
     /**
